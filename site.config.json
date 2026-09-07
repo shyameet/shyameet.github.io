@@ -1,0 +1,11 @@
+{
+  "title": "Shyam",
+  "tagline": "Trading work, half-formed ideas, and whatever else the day handed me.",
+  "url": "https://shyameet.github.io",
+  "author": "Shyam",
+  "repo": "shyameet/shyameet.github.io",
+  "branch": "main",
+  "timezone": "Asia/Kolkata",
+  "perPage": 25,
+  "quickTags": ["trading", "idea", "random", "life", "daily"]
+}

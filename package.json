@@ -1,0 +1,12 @@
+{
+  "name": "shyameet-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node src/build.mjs",
+    "serve": "node src/build.mjs && node src/serve.mjs"
+  },
+  "dependencies": {
+    "marked": "^15.0.7"
+  }
+}
