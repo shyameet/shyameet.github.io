@@ -27,9 +27,23 @@ tags: [health, people, trading]
 
 ## Influence
 
-- [ ] Start putting what I learn out into the world — videos, teaching, my own thing in this space. Someone I follow does exactly this: her own startup alongside a channel where she teaches. I want that running before the year is out.
-- [ ] Go further on the prop firm partnerships. I have affiliate codes with Blue Guardian Futures and FundedNext already. Next: My Funded Futures, Tradeify, Lucid Trading, and the other good platforms.
+The model: someone I follow runs her own firm, is at IIT, teaches quant, runs a group and
+does live sessions, and has built a real following off it. Within months the prop firms
+and the companies will be approaching *her* for marketing. That is the shape of the thing
+I want — built on my own work. Earn from the trading, and let the teaching be a second
+income on top of it. And let people actually know what this field is.
+
+But in order:
+
+- [ ] Journal it first. Use Feynman on my own work, here, for a few days — until explaining it stops being hard.
+- [ ] Then the videos. Explaining what I do and how this field works, so somebody else can follow it.
+- [ ] First video out before the year ends.
+- [ ] Go further on the prop firm partnerships. Blue Guardian Futures and FundedNext already; next My Funded Futures, Tradeify, Lucid Trading, and the other good ones.
 - [ ] Not just the money out of it — better connections and real contacts in this space.
+
+Right now I cannot explain what is in my head even to my own founder. That is the real
+problem, and it is the same problem as learning to talk to anybody — so it gets solved
+the same way. Out loud, repeatedly, until it is easy.
 
 ## Reading
 
