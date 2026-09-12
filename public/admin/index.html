@@ -184,6 +184,16 @@
     border-radius: 3px; color: var(--ink); padding: .7rem .8rem;
     font-family: var(--mono); font-size: 14px; margin: .7rem 0;
   }
+  .diagh {
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--muted); font-weight: 500;
+    margin: 2rem 0 .4rem; border-top: 1px solid var(--rule); padding-top: 1.2rem;
+  }
+  .diag {
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 3px;
+    padding: .7rem .8rem; font-family: var(--mono); font-size: 11px;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0 0 .6rem;
+  }
   ol.steps { padding-left: 1.2rem; font-size: .95rem; color: var(--muted); line-height: 1.75; }
   ol.steps code { font-family: var(--mono); font-size: .82em; color: var(--ink); }
 
@@ -261,6 +271,12 @@
       <button class="primary" id="connect">Connect</button>
       <button class="ghost danger" id="forget">Forget token</button>
     </div>
+    <h3 class="diagh">Dictation diagnostics</h3>
+    <p class="note">If the mic misbehaves, tap Talk, speak a sentence, then come back here
+    and send me this.</p>
+    <pre id="diag" class="diag">tap refresh</pre>
+    <button class="ghost" id="diagrefresh">Refresh</button>
+
     <p class="note" style="margin-top:1.4rem">
       On your phone: open this page, then <b>Share → Add to Home Screen</b>. It opens
       like an app, straight into a blank page.
@@ -407,13 +423,21 @@
 
   /* ---------- dictation ----------
      Browsers end a recognition session on every meaningful pause, which is
-     useless for thinking out loud. So we track what the USER wants (wantOn) and
-     restart the recogniser every time it quietly ends, until they say stop. */
+     useless for thinking out loud, so we track what the USER wants (wantOn)
+     separately and keep going until they tap stop.
+
+     Each restart builds a FRESH recogniser. Safari refuses to restart an
+     instance that has already ended -- reusing one is why this dies silently
+     after the first pause on an iPhone. */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   var rec = null;
   var wantOn = false;
   var insertAt = 0;
   var wakeLock = null;
+  var recentEnds = [];
+  var diag = { support: !!SR, ios: IOS, starts: 0, ends: 0, results: 0, chars: 0, lastError: '', note: '' };
 
   function micHint(text, kind) {
     $('michint').textContent = text || '';
@@ -447,57 +471,102 @@
     var chunk = gap + text;
     el.value = before + chunk + v.slice(insertAt);
     insertAt += chunk.length;
+    diag.chars += chunk.length;
     autogrow();
     saveDraft();
   }
 
-  function startMic() {
-    if (!SR) return;
-    rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = CFG.speechLang || 'en-IN';
+  function buildRecogniser() {
+    var r = new SR();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = CFG.speechLang || 'en-IN';
 
-    rec.onresult = function (e) {
+    r.onresult = function (e) {
       var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
         var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) insertSpoken(t.trim());
+        if (e.results[i].isFinal) { diag.results++; insertSpoken(t.trim()); }
         else interim += t;
       }
       $('interim').textContent = interim;
+      if (interim || diag.results) micHint('Listening. Keep going.');
     };
 
-    rec.onerror = function (e) {
-      if (e.error === 'no-speech' || e.error === 'aborted') return; // normal, onend restarts
+    r.onerror = function (e) {
+      diag.lastError = e.error || 'unknown';
+      if (e.error === 'no-speech' || e.error === 'aborted') return;  // onend restarts
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         wantOn = false;
-        micHint('Microphone blocked. Allow it for this site in your browser settings.', 'err');
+        micHint('Microphone blocked. Allow it for this site, then tap Talk again.', 'err');
       } else if (e.error === 'network') {
-        micHint('Speech needs a connection. Your draft is safe.', 'err');
+        micHint('Speech needs a connection. Your words so far are saved.', 'err');
+      } else if (e.error === 'language-not-supported') {
+        wantOn = false;
+        micHint('This browser does not support ' + (CFG.speechLang || 'en-IN') + '.', 'err');
       } else {
         micHint(e.error, 'err');
       }
     };
 
-    rec.onend = function () {
-      if (wantOn) {
-        try { rec.start(); } catch (err) { /* already starting */ }
-      } else {
+    r.onend = function () {
+      diag.ends++;
+      if (!wantOn) { setMic(false); holdScreen(false); return; }
+
+      /* A healthy session ends often -- once per pause. A session that ends
+         over and over WITHOUT ever producing words is broken, and restarting
+         it forever would just burn battery and lie about listening. */
+      var now = Date.now();
+      recentEnds = recentEnds.filter(function (t) { return now - t < 12000; });
+      recentEnds.push(now);
+      if (recentEnds.length >= 5 && diag.results === 0) {
+        wantOn = false;
         setMic(false);
         holdScreen(false);
+        diag.note = 'gave up after ' + recentEnds.length + ' empty sessions';
+        micHint(IOS
+          ? 'Safari keeps dropping the mic. Use the mic key on your keyboard instead — it is better on iPhone anyway.'
+          : 'Dictation keeps dropping without hearing anything. Check the mic, or use your keyboard mic key.', 'err');
+        return;
       }
+
+      /* fresh object every time: Safari will not restart a finished one */
+      setTimeout(function () {
+        if (!wantOn) return;
+        try {
+          rec = buildRecogniser();
+          rec.start();
+          diag.starts++;
+        } catch (err) {
+          diag.lastError = 'restart: ' + err.message;
+          wantOn = false;
+          setMic(false);
+          holdScreen(false);
+          micHint('Dictation stopped. Tap Talk to start again.', 'err');
+        }
+      }, recentEnds.length > 2 ? 300 : 0);
     };
 
+    return r;
+  }
+
+  function startMic() {
+    if (!SR) return;
+    recentEnds = [];
     wantOn = true;
     var el = $('body');
     insertAt = (document.activeElement === el) ? el.selectionStart : el.value.length;
     try {
+      rec = buildRecogniser();
       rec.start();
+      diag.starts++;
       setMic(true);
-      micHint('Speak normally. It keeps listening through pauses.');
+      micHint('Listening. It keeps going through pauses.');
       holdScreen(true);
     } catch (err) {
+      diag.lastError = 'start: ' + err.message;
+      wantOn = false;
+      setMic(false);
       micHint(err.message, 'err');
     }
   }
@@ -519,11 +588,33 @@
     if (wantOn) insertAt = $('body').selectionStart;
   });
 
+  function renderDiag() {
+    var el = $('diag');
+    if (!el) return;
+    el.textContent = [
+      'browser   : ' + navigator.userAgent,
+      'speech API: ' + (diag.support ? 'present' : 'MISSING'),
+      'ios       : ' + diag.ios,
+      'language  : ' + (CFG.speechLang || 'en-IN'),
+      'starts    : ' + diag.starts,
+      'ends      : ' + diag.ends,
+      'phrases   : ' + diag.results,
+      'chars in  : ' + diag.chars,
+      'last error: ' + (diag.lastError || 'none'),
+      'note      : ' + (diag.note || '-')
+    ].join('\n');
+  }
+
   function initMic() {
-    if (SR) return;
-    $('mic').disabled = true;
-    $('mic').textContent = 'Use the mic on your keyboard';
-    micHint('This browser has no built-in dictation — the keyboard mic key still works.');
+    if (!SR) {
+      $('mic').disabled = true;
+      $('mic').textContent = 'Use the mic key on your keyboard';
+      micHint('This browser has no built-in dictation. The keyboard mic key still works.');
+      return;
+    }
+    if (IOS) {
+      micHint('On iPhone the keyboard mic key is often steadier than this button.');
+    }
   }
 
   /* ---------- sections ---------- */
@@ -772,10 +863,12 @@
       $('tab-' + k).setAttribute('aria-selected', String(k === which));
     });
     if (which === 'recent') loadRecent();
+    if (which === 'setup') renderDiag();
   }
   $('tab-new').addEventListener('click', function () { showTab('new'); });
   $('tab-recent').addEventListener('click', function () { showTab('recent'); });
   $('tab-setup').addEventListener('click', function () { showTab('setup'); });
+  $('diagrefresh').addEventListener('click', renderDiag);
 
   $('title').addEventListener('input', saveDraft);
   $('lesson').addEventListener('input', saveDraft);
