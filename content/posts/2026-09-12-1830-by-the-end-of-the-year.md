@@ -10,6 +10,7 @@ tags: [health, people, trading]
 - [ ] Six pack
 - [ ] Run ten kilometres without it being a struggle
 - [ ] Fix my posture, and get an inch or two of height out of it. I am 22, and I have read it can still happen.
+- [ ] A better face — cut the double chin, sharper features. Running, gym, cardio.
 
 ## Money
 
@@ -27,4 +28,4 @@ tags: [health, people, trading]
 ## Reading
 
 - [ ] Shiv Puran
-- [ ] The book about the greatest debater who ever lived — need to find the name again
+- [ ] Reminiscences of a Stock Operator — Jesse Livermore
