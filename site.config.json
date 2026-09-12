@@ -7,13 +7,19 @@
   "branch": "main",
   "timezone": "Asia/Kolkata",
   "latestOnHome": 15,
-  "quickTags": ["quant", "trading", "youtube", "people", "health"],
+  "quickTags": [
+    "quant",
+    "trading",
+    "youtube",
+    "people",
+    "health"
+  ],
   "sections": [
     {
       "id": "daytasks",
       "name": "Day Tasks",
       "blurb": "What has to happen today.",
-      "prompt": "One task per line. Say \"dash bracket\" or use the task button.",
+      "prompt": "Say each task, then tap + task line to turn them into checkboxes.",
       "tasks": true
     },
     {
@@ -72,5 +78,6 @@
       "blurb": "Unsorted. Videos, life, whatever the day handed me.",
       "prompt": "Whatever it is."
     }
-  ]
+  ],
+  "speechLang": "en-IN"
 }

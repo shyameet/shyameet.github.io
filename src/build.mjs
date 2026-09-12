@@ -412,7 +412,7 @@ copyDir(path.join(ROOT, 'public'), OUT);
    site.config.json stays the single place any of this is configured */
 write('admin/config.json', JSON.stringify({
   repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [],
-  url: CFG.url, sections: SECTIONS,
+  url: CFG.url, sections: SECTIONS, speechLang: CFG.speechLang || 'en-IN',
 }));
 
 fs.copyFileSync(path.join(ROOT, 'src', 'style.css'), path.join(OUT, 'style.css'));

@@ -42,8 +42,11 @@ visitor never sees a control that would fail.
 
 ## Posting
 
-**From the phone.** Open <https://shyameet.github.io/admin/>, pick a section, tap the
-mic on the keyboard and talk. Hit Publish. Add it to the home screen once and it opens
+**From the phone.** Open <https://shyameet.github.io/admin/>, pick a section, hit
+**Talk** and speak. Dictation is built into the editor via the Web Speech API and
+restarts itself on every pause, so thinking mid-sentence does not end the session.
+Language is `speechLang` in `site.config.json` (default `en-IN`). Where the browser
+has no speech support the button explains that the keyboard mic key still works. Hit Publish. Add it to the home screen once and it opens
 like an app. The draft saves to the phone as you speak, so losing signal costs nothing.
 
 **From the desk.** Drop a `.md` file into `content/posts/` and push. Same result. The
