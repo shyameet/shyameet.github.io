@@ -304,7 +304,9 @@ for (let i = 0; i < posts.length; i++) {
     ? '  <aside class="lesson"><b>' + esc((sec && sec.lessonLabel) || 'Instead') + '</b>'
       + '<span>' + esc(p.lesson) + '</span></aside>\n'
     : '';
-  const body = '<article class="post">\n'
+  /* data-file lets the browser find this post's source to tick a box off. Public
+     visitors have no token, so for them the checkboxes stay inert. */
+  const body = '<article class="post" data-file="content/posts/' + esc(p.file) + '">\n'
     + '  <div class="meta">'
     + (sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
     + esc(fmtDate(p.iso))

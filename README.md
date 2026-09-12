@@ -34,6 +34,12 @@ Sections marked `"tasks": true` count `- [ ]` / `- [x]` lines in the body and sh
 progress bar on the post and in the feed. The editor gets a button that inserts a task
 line, since you cannot dictate square brackets.
 
+Task checkboxes are **tappable on the live site**, but only for whoever holds the token.
+`/admin/` and the site share an origin, so any page can read the token out of local
+storage; if one is there, ticking a box rewrites the markdown and commits it. With no
+token the checkboxes stay `disabled`, which is how marked renders them anyway — so a
+visitor never sees a control that would fail.
+
 ## Posting
 
 **From the phone.** Open <https://shyameet.github.io/admin/>, pick a section, tap the

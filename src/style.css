@@ -392,6 +392,13 @@ h2.rule {
 }
 .prose li:has(> input[type="checkbox"]:checked) { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
 
+/* a plain bullet mixed into a checklist still needs to read as a list item */
+.prose ul:has(> li > input[type="checkbox"]) > li:not(:has(> input[type="checkbox"])) {
+  list-style: disc;
+  margin-left: 1.15rem;
+  padding: .34rem 0;
+}
+
 .progress {
   font-size: .66rem;
   text-transform: uppercase;
@@ -407,7 +414,24 @@ h2.rule {
   border-radius: 2px;
   overflow: hidden;
 }
-.progress .bar i { display: block; height: 100%; background: var(--done); }
+.progress .bar i { display: block; height: 100%; background: var(--done); transition: width .18s ease; }
+
+/* only ever visible to whoever holds the token, i.e. the owner on their phone */
+.tasksave {
+  font-family: var(--mono);
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--muted);
+  min-height: 1.1em;
+  margin-top: .2rem;
+}
+.tasksave.ok { color: var(--done); }
+.tasksave.err { color: var(--warn); text-transform: none; letter-spacing: 0; font-size: .74rem; }
+
+/* a tickable box should look tickable */
+.prose li > input[type="checkbox"]:not(:disabled) { cursor: pointer; }
+.prose li > input[type="checkbox"]:not(:disabled):hover { border-color: var(--accent); }
 
 /* ---------- the "what I'll do instead" callout ---------- */
 .lesson {

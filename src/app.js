@@ -15,6 +15,131 @@
     });
   }
 
+  /* ---------- tappable task lists ----------
+     The site and /admin/ share an origin, so a token pasted into the editor is
+     readable here too. If one exists this is the owner on their own device, and
+     ticking a box rewrites the markdown in the repo. Everyone else gets the
+     checkboxes exactly as marked renders them: disabled. */
+  (function () {
+    var article = document.querySelector('.post[data-file]');
+    if (!article) return;
+
+    var boxes = [].slice.call(article.querySelectorAll('.prose input[type="checkbox"]'));
+    if (!boxes.length) return;
+
+    var token;
+    try { token = localStorage.getItem('gh_token'); } catch (e) { token = null; }
+    if (!token) return;
+
+    var path = article.dataset.file;
+    var cfg = null;
+    var chain = Promise.resolve();   // one write at a time; each refetches the sha
+    var status = document.createElement('div');
+    status.className = 'tasksave';
+    var progress = article.querySelector('.progress');
+    (progress || article).insertAdjacentElement(progress ? 'afterend' : 'afterbegin', status);
+
+    function say(text, kind) {
+      status.textContent = text || '';
+      status.className = 'tasksave' + (kind ? ' ' + kind : '');
+    }
+
+    function b64decode(b64) {
+      var bin = atob(b64.replace(/\s/g, ''));
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    }
+    function b64encode(str) {
+      var bytes = new TextEncoder().encode(str);
+      var bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+
+    function gh(method, url, body) {
+      return fetch(url, {
+        method: method,
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (r) {
+        return r.text().then(function (t) {
+          var data = null;
+          try { data = t ? JSON.parse(t) : null; } catch (e) {}
+          if (!r.ok) throw new Error((data && data.message) || ('HTTP ' + r.status));
+          return data;
+        });
+      });
+    }
+
+    function config() {
+      if (cfg) return Promise.resolve(cfg);
+      return fetch('/admin/config.json').then(function (r) { return r.json(); })
+        .then(function (c) { cfg = c; return c; });
+    }
+
+    function refreshProgress() {
+      if (!progress) return;
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      var pct = Math.round((done / boxes.length) * 100);
+      progress.innerHTML = done + ' of ' + boxes.length + ' done'
+        + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%';
+    }
+
+    var TASK_LINE = /^(\s*[-*+]\s+\[)([ xX])(\])/;
+
+    function writeToggle(index, checked) {
+      return config().then(function (c) {
+        var base = 'https://api.github.com/repos/' + c.repo + '/contents/' + path;
+        return gh('GET', base + '?ref=' + c.branch).then(function (file) {
+          var lines = b64decode(file.content).split('\n');
+          var seen = -1;
+          for (var i = 0; i < lines.length; i++) {
+            if (!TASK_LINE.test(lines[i])) continue;
+            seen++;
+            if (seen !== index) continue;
+            lines[i] = lines[i].replace(TASK_LINE, function (m, a, _s, b) {
+              return a + (checked ? 'x' : ' ') + b;
+            });
+            return gh('PUT', base, {
+              message: (checked ? 'done: ' : 'undone: ')
+                + lines[i].replace(TASK_LINE, '').trim().slice(0, 60),
+              content: b64encode(lines.join('\n')),
+              branch: c.branch,
+              sha: file.sha
+            });
+          }
+          throw new Error('That task is no longer in the file — reload the page.');
+        });
+      });
+    }
+
+    boxes.forEach(function (box, index) {
+      box.disabled = false;
+      box.style.cursor = 'pointer';
+      box.addEventListener('change', function () {
+        var checked = box.checked;
+        box.disabled = true;
+        refreshProgress();
+        say('saving…');
+        chain = chain.then(function () {
+          return writeToggle(index, checked)
+            .then(function () { say('saved · live in a minute', 'ok'); })
+            .catch(function (err) {
+              box.checked = !checked;          // put it back the way it was
+              refreshProgress();
+              say(err.message, 'err');
+            })
+            .then(function () { box.disabled = false; });
+        });
+      });
+    });
+  })();
+
   /* ---------- search ---------- */
   var q = document.getElementById('q');
   var out = document.getElementById('results');
