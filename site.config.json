@@ -1,11 +1,62 @@
 {
   "title": "Shyam",
-  "tagline": "Trading work, half-formed ideas, and whatever else the day handed me.",
+  "tagline": "Spoken out loud, filed where I can find it again.",
   "url": "https://shyameet.github.io",
   "author": "Shyam",
   "repo": "shyameet/shyameet.github.io",
   "branch": "main",
   "timezone": "Asia/Kolkata",
-  "perPage": 25,
-  "quickTags": ["trading", "idea", "random", "life", "daily"]
+  "latestOnHome": 15,
+  "quickTags": ["quant", "trading", "youtube", "people", "health"],
+  "sections": [
+    {
+      "id": "daily",
+      "name": "Daily",
+      "blurb": "The schedule, and how the day actually went.",
+      "prompt": "What is today, and how did it go?"
+    },
+    {
+      "id": "goals",
+      "name": "Goals",
+      "blurb": "Anything pointed at where I am trying to get.",
+      "prompt": "What is the goal, and what moved today?"
+    },
+    {
+      "id": "feynman",
+      "name": "Feynman",
+      "blurb": "Learn it by explaining it back in plain words. Currently: quant.",
+      "prompt": "Explain it as if to someone who has never seen it."
+    },
+    {
+      "id": "wins",
+      "name": "Wins",
+      "blurb": "Things that went well. Worth re-reading on a bad day.",
+      "prompt": "What went well, and why did it work?"
+    },
+    {
+      "id": "mistakes",
+      "name": "Mistakes",
+      "blurb": "What went wrong, and what I will do instead.",
+      "prompt": "What went wrong?",
+      "lessonLabel": "What I will do instead"
+    },
+    {
+      "id": "speaking",
+      "name": "Speaking",
+      "blurb": "Spoken sessions. Thinking out loud, on the record.",
+      "prompt": "Just talk. Tidy it later."
+    },
+    {
+      "id": "vocabulary",
+      "name": "Vocabulary",
+      "blurb": "Words, phrases and openers to actually use out loud.",
+      "prompt": "The word or phrase, and where I would use it."
+    },
+    {
+      "id": "blabber",
+      "name": "Blabber",
+      "blurb": "Unsorted. Videos, life, whatever the day handed me.",
+      "prompt": "Whatever it is."
+    }
+  ]
 }

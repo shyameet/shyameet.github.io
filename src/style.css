@@ -111,6 +111,92 @@ main {
   flex: 1;
 }
 
+/* ---------- section strip ----------
+   Eight sections will not fit a phone header, so they get their own row that
+   scrolls sideways inside itself. The page body never scrolls horizontally. */
+.strip {
+  max-width: var(--measure);
+  width: 100%;
+  margin: 0 auto;
+  padding: .7rem 1.25rem 0;
+  display: flex;
+  gap: .4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.strip::-webkit-scrollbar { display: none; }
+.strip a {
+  flex: none;
+  font-size: .78rem;
+  color: var(--muted);
+  text-decoration: none;
+  padding: .25rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.strip a:hover { color: var(--accent); border-color: var(--accent); }
+.strip a.on { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* ---------- section board (home) ---------- */
+.board {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .6rem;
+  margin-bottom: 2.75rem;
+}
+.seccard {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding: .85rem .9rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  text-decoration: none;
+}
+.seccard:hover { border-color: var(--accent); }
+.seccard .nm { font-weight: 650; font-size: .95rem; letter-spacing: -.01em; }
+.seccard .bl { font-size: .76rem; color: var(--muted); line-height: 1.45; flex: 1; }
+.seccard .ct {
+  font-size: .7rem; color: var(--muted); letter-spacing: .05em;
+  text-transform: uppercase; font-variant-numeric: tabular-nums;
+}
+
+h2.rule {
+  font-size: .76rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: .4rem;
+  margin: 0 0 .5rem;
+}
+
+.secref { color: var(--accent) !important; text-decoration: none; font-weight: 600; }
+
+/* ---------- the "what I'll do instead" callout ---------- */
+.lesson {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  margin-top: 1.5rem;
+  padding: .8rem .95rem;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 5px 5px 0;
+}
+.lesson b {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--accent);
+}
+.lesson span { font-family: var(--serif); font-size: 1rem; }
+.lessonline { font-size: .86rem; color: var(--muted); margin: .5rem 0 0; }
+.lessonline b { color: var(--accent); font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; }
+
 footer.site {
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -266,8 +352,12 @@ footer.site a { color: var(--muted); }
 .month ul { list-style: none; padding: 0; margin: 0; }
 .month li { display: flex; gap: 0.8rem; padding: 0.3rem 0; align-items: baseline; }
 .month .d { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.8rem; flex: none; }
-.month li a { text-decoration: none; }
+.month li a { text-decoration: none; flex: 1; }
 .month li a:hover { color: var(--accent); }
+.month .sectag {
+  flex: none; font-size: .68rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
 
 /* ---------- search ---------- */
 #q {
@@ -289,6 +379,14 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 2px; }
   header.site { padding: 1rem; flex-wrap: wrap; gap: 0.5rem; }
   header.site nav { gap: 0.85rem; }
   main { padding: 1.5rem 1rem 2.5rem; }
+  .strip { padding: .7rem 1rem 0; }
   .post h1 { font-size: 1.5rem; }
   .prose { font-size: 1.04rem; }
+}
+
+@media (max-width: 400px) {
+  /* two columns of blurb text get too narrow to read below this */
+  .board { grid-template-columns: 1fr; }
+  .seccard { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: .2rem .5rem; }
+  .seccard .bl { flex-basis: 100%; }
 }

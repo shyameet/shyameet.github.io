@@ -46,11 +46,13 @@
     var title = (p.t || '').toLowerCase();
     var text = p.x.toLowerCase();
     var tags = p.g.join(' ').toLowerCase();
+    var section = (p.s || '').toLowerCase();
     var total = 0;
     for (var i = 0; i < terms.length; i++) {
       var t = terms[i];
       var hit = 0;
       if (title.indexOf(t) >= 0) hit += 10;
+      if (section.indexOf(t) >= 0) hit += 8; // "mistakes june" should work
       if (tags.indexOf(t) >= 0) hit += 6;
       if (text.indexOf(t) >= 0) hit += 2;
       if (!hit) return 0; // every term must appear somewhere
@@ -78,7 +80,9 @@
         ? '<h2 class="pt"><a href="' + p.u + '">' + esc(p.t) + '</a></h2>'
         : '<h2 class="pt untitled"><a href="' + p.u + '">' + esc(p.x.slice(0, 80)) + '</a></h2>';
       return '<article class="card">'
-        + '<div class="meta"><a href="' + p.u + '">' + esc(p.d) + '</a></div>'
+        + '<div class="meta">'
+        + (p.s ? '<span class="secref">' + esc(p.s) + '</span> <span class="sep">·</span> ' : '')
+        + '<a href="' + p.u + '">' + esc(p.d) + '</a></div>'
         + head
         + '<p class="ex">' + snippet(p.x, terms[0]) + '</p>'
         + (p.g.length ? '<div class="tags">' + p.g.map(function (t) {

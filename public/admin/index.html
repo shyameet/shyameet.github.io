@@ -66,6 +66,25 @@
   #body:focus { outline: none; }
   #body::placeholder { color: var(--muted); }
 
+  /* eight sections, four to a row -- every one reachable with one thumb */
+  .secpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; margin-bottom: .9rem; }
+  .secpick button {
+    background: var(--bg-soft); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 6px; padding: .55rem .2rem; font-size: .74rem; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .secpick button[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: #1a1a1a; font-weight: 700;
+  }
+
+  .lessonin {
+    width: 100%; background: rgba(233,113,50,.12);
+    border: 1px solid var(--accent); border-radius: 6px;
+    color: var(--ink); padding: .65rem .8rem; margin-top: .6rem;
+  }
+  .lessonin::placeholder { color: var(--accent); opacity: .8; }
+  .lessonin:focus { outline: none; }
+
   .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: .9rem 0; }
   .chip {
     font-size: .78rem; color: var(--muted); background: var(--bg-soft);
@@ -136,8 +155,10 @@
   <!-- ---------- compose ---------- -->
   <section class="view" id="view-new">
     <div id="msg"></div>
+    <div class="secpick" id="secpick"></div>
     <input id="title" placeholder="Title — optional" autocomplete="off">
-    <textarea id="body" placeholder="Write. Markdown works. Drafts save themselves as you type, even offline."></textarea>
+    <textarea id="body" placeholder="Tap the mic on your keyboard and just talk."></textarea>
+    <input id="lesson" class="lessonin" placeholder="What I will do instead" autocomplete="off" hidden>
     <div class="chips" id="chips"></div>
     <div class="bar">
       <span class="info" id="info">Draft saved locally</span>
@@ -182,9 +203,9 @@
 (function () {
   'use strict';
 
-  var CFG = { repo: '', branch: 'main', quickTags: [], url: '' };
-  var LS = { token: 'gh_token', draft: 'draft_v1' };
-  var state = { tags: [], editing: null, busy: false };
+  var CFG = { repo: '', branch: 'main', quickTags: [], url: '', sections: [] };
+  var LS = { token: 'gh_token', draft: 'draft_v1', lastSection: 'last_section' };
+  var state = { tags: [], editing: null, busy: false, section: '' };
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -265,8 +286,8 @@
     saveTimer = setTimeout(function () {
       try {
         localStorage.setItem(LS.draft, JSON.stringify({
-          title: $('title').value, body: $('body').value,
-          tags: state.tags, editing: state.editing
+          title: $('title').value, body: $('body').value, lesson: $('lesson').value,
+          tags: state.tags, editing: state.editing, section: state.section
         }));
       } catch (e) {}
       updateInfo();
@@ -278,16 +299,20 @@
       if (!d) return;
       $('title').value = d.title || '';
       $('body').value = d.body || '';
+      $('lesson').value = d.lesson || '';
       state.tags = d.tags || [];
       state.editing = d.editing || null;
+      if (d.section) state.section = d.section;
     } catch (e) {}
   }
   function clearDraft() {
     try { localStorage.removeItem(LS.draft); } catch (e) {}
     $('title').value = '';
     $('body').value = '';
+    $('lesson').value = '';
     state.tags = [];
     state.editing = null;
+    renderSections();
     renderChips();
     autogrow();
     updateInfo();
@@ -295,7 +320,10 @@
 
   function updateInfo() {
     var words = $('body').value.trim() ? $('body').value.trim().split(/\s+/).length : 0;
-    var label = state.editing ? 'Editing ' + state.editing.name : 'Draft saved locally';
+    var sec = currentSection();
+    var label = state.editing
+      ? 'Editing ' + state.editing.name
+      : (sec ? sec.name : 'Draft') + ' · saved locally';
     $('info').textContent = label + ' · ' + words + ' word' + (words === 1 ? '' : 's');
     $('publish').textContent = state.editing ? 'Update' : 'Publish';
   }
@@ -305,6 +333,42 @@
     el.style.height = 'auto';
     el.style.height = Math.max(el.scrollHeight, window.innerHeight * 0.45) + 'px';
   }
+
+  /* ---------- sections ---------- */
+  function currentSection() {
+    for (var i = 0; i < CFG.sections.length; i++) {
+      if (CFG.sections[i].id === state.section) return CFG.sections[i];
+    }
+    return null;
+  }
+
+  function renderSections() {
+    $('secpick').innerHTML = CFG.sections.map(function (s) {
+      return '<button type="button" data-sec="' + s.id + '" aria-pressed="'
+        + (s.id === state.section) + '">' + s.name + '</button>';
+    }).join('');
+
+    var sec = currentSection();
+    $('body').placeholder = (sec && sec.prompt)
+      || 'Tap the mic on your keyboard and just talk.';
+
+    /* Mistakes carries a second field, because "what I would do instead" is the
+       part that stops it happening twice. */
+    var wantsLesson = !!(sec && sec.lessonLabel);
+    $('lesson').hidden = !wantsLesson;
+    if (wantsLesson) $('lesson').placeholder = sec.lessonLabel;
+    else $('lesson').value = '';
+  }
+
+  $('secpick').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-sec]');
+    if (!b) return;
+    state.section = b.dataset.sec;
+    try { localStorage.setItem(LS.lastSection, state.section); } catch (err) {}
+    renderSections();
+    updateInfo();  /* immediately, not after saveDraft's debounce */
+    saveDraft();
+  });
 
   /* ---------- tags ---------- */
   function renderChips() {
@@ -334,9 +398,12 @@
   /* ---------- publish ---------- */
   function buildMarkdown(iso) {
     var title = $('title').value.trim();
+    var lesson = $('lesson').hidden ? '' : $('lesson').value.trim();
     var fm = ['---'];
     if (title) fm.push('title: "' + title.replace(/"/g, '\\"') + '"');
     fm.push('date: ' + iso);
+    fm.push('section: ' + (state.section || 'blabber'));
+    if (lesson) fm.push('lesson: "' + lesson.replace(/"/g, '\\"') + '"');
     if (state.tags.length) fm.push('tags: [' + state.tags.join(', ') + ']');
     fm.push('---', '');
     return fm.join('\n') + $('body').value.trim() + '\n';
@@ -375,7 +442,8 @@
         + '-' + pad(now.getHours()) + pad(now.getMinutes()) + '-' + stem + '.md';
       path = 'content/posts/' + name;
       payload = {
-        message: 'post: ' + ($('title').value.trim() || firstWords(body, 8)),
+        message: (state.section || 'blabber') + ': '
+          + ($('title').value.trim() || firstWords(body, 8)),
         content: b64encode(content),
         branch: CFG.branch
       };
@@ -445,13 +513,20 @@
         var t = head.match(/^title:\s*"?(.*?)"?\s*$/m);
         var dt = head.match(/^date:\s*(.+)$/m);
         var tg = head.match(/^tags:\s*\[(.*)\]\s*$/m);
+        var sc = head.match(/^section:\s*(.+)$/m);
+        var ls = head.match(/^lesson:\s*"?(.*?)"?\s*$/m);
         $('title').value = t ? t[1] : '';
         $('body').value = rest.trim();
         state.tags = tg ? tg[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
+        state.section = sc ? sc[1].trim() : state.section;
         state.editing = {
           path: file.path, sha: file.sha, name: b.dataset.name,
           iso: dt ? dt[1].trim() : localIso(new Date())
         };
+        renderSections();
+        /* set the lesson AFTER renderSections, which clears it for sections that
+           do not use one */
+        if (ls) $('lesson').value = ls[1];
         renderChips(); autogrow(); saveDraft(); showTab('new');
         say($('msg'), 'ok', 'Editing an existing post. Publishing overwrites it.');
       })
@@ -494,6 +569,7 @@
   $('tab-setup').addEventListener('click', function () { showTab('setup'); });
 
   $('title').addEventListener('input', saveDraft);
+  $('lesson').addEventListener('input', saveDraft);
   $('body').addEventListener('input', function () { autogrow(); saveDraft(); });
 
   /* ---------- boot ---------- */
@@ -503,7 +579,13 @@
     .catch(function () {})
     .then(function () {
       $('repo-name').textContent = CFG.repo || 'this repo';
+      /* default to whatever section was used last -- most days run in streaks */
+      try { state.section = localStorage.getItem(LS.lastSection) || ''; } catch (e) {}
+      if (!state.section && CFG.sections.length) {
+        state.section = CFG.sections[CFG.sections.length - 1].id;
+      }
       loadDraft();
+      renderSections();
       renderChips();
       autogrow();
       updateInfo();

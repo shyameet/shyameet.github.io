@@ -1,5 +1,7 @@
 /* Static generator for the journal.
    Design notes:
+   - Every post belongs to exactly one SECTION (daily, goals, feynman, wins,
+     mistakes, speaking, vocabulary, blabber). Tags stay, but they are secondary.
    - Dates are formatted from the LITERAL clock time in the frontmatter, never via
      Date#toLocale*. The build runs on a UTC runner; converting would shift a
      00:30 IST post back a day. Date objects are used ONLY for sorting and RSS.
@@ -14,6 +16,10 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 const OUT = path.join(ROOT, 'dist');
 const CFG = JSON.parse(fs.readFileSync(path.join(ROOT, 'site.config.json'), 'utf8'));
+
+const SECTIONS = CFG.sections || [];
+const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
+const FALLBACK = SECTIONS.length ? SECTIONS[SECTIONS.length - 1].id : 'blabber';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -71,6 +77,11 @@ function fmtDate(iso, withTime = true) {
   return s;
 }
 
+const shortDate = (iso) => {
+  const p = clockParts(iso);
+  return p ? p.d + ' ' + MONTHS[p.mo - 1] : '';
+};
+
 const monthKey = (iso) => {
   const p = clockParts(iso);
   return p ? p.y + '-' + String(p.mo).padStart(2, '0') : '0000-00';
@@ -108,8 +119,10 @@ const posts = fs.readdirSync(POSTS_DIR)
     const slug = data.slug || slugify(title) || file.replace(/\.md$/, '');
     const tags = (Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []))
       .map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+    const section = SECTION_BY_ID[String(data.section || '').toLowerCase()] ? String(data.section).toLowerCase() : FALLBACK;
     return {
-      file, title, iso, tags, body, text, slug,
+      file, title, iso, tags, body, text, slug, section,
+      lesson: (data.lesson || '').trim(),
       draft: data.draft === true,
       url: '/posts/' + slug + '/',
       ts: new Date(iso).getTime() || 0,
@@ -121,8 +134,19 @@ const posts = fs.readdirSync(POSTS_DIR)
   .filter((p) => !p.draft)
   .sort((a, b) => b.ts - a.ts);
 
+const bySection = {};
+for (const s of SECTIONS) bySection[s.id] = [];
+for (const p of posts) (bySection[p.section] ||= []).push(p);
+
 /* ---------- page shell ---------- */
-function shell({ title, desc, body, canonical, extraHead = '' }) {
+function sectionStrip(activeId) {
+  return '<nav class="strip" aria-label="Sections">'
+    + SECTIONS.map((s) => '<a href="/s/' + s.id + '/"' + (s.id === activeId ? ' class="on" aria-current="page"' : '') + '>'
+      + esc(s.name) + '</a>').join('')
+    + '</nav>';
+}
+
+function shell({ title, desc, body, canonical, activeId = '' }) {
   const t = title ? title + ' · ' + CFG.title : CFG.title;
   const d = desc || CFG.tagline;
   return '<!doctype html>\n<html lang="en">\n<head>\n'
@@ -141,21 +165,24 @@ function shell({ title, desc, body, canonical, extraHead = '' }) {
     + '<meta name="theme-color" content="#262626">\n'
     + '<link rel="stylesheet" href="/style.css">\n'
     + '<script>(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}})();</script>\n'
-    + extraHead
     + '</head>\n<body>\n'
     + '<header class="site">\n'
     + '  <a class="brand" href="/">' + esc(CFG.title) + '</a>\n'
     + '  <nav>\n'
     + '    <a href="/archive/">Archive</a>\n'
     + '    <a href="/search/">Search</a>\n'
-    + '    <a href="/feed.xml">RSS</a>\n'
+    + '    <a href="/admin/">Write</a>\n'
     + '    <button id="themetoggle" type="button" aria-label="Toggle theme">◐</button>\n'
     + '  </nav>\n'
-    + '</header>\n<main>\n' + body + '\n</main>\n'
+    + '</header>\n'
+    + sectionStrip(activeId) + '\n'
+    + '<main>\n' + body + '\n</main>\n'
     + '<footer class="site">\n'
     + '  <span>' + esc(CFG.author) + '</span>\n'
     + '  <span class="sep">·</span>\n'
     + '  <a href="/archive/">' + posts.length + ' post' + (posts.length === 1 ? '' : 's') + '</a>\n'
+    + '  <span class="sep">·</span>\n'
+    + '  <a href="/feed.xml">RSS</a>\n'
     + '</footer>\n'
     + '<script src="/app.js"></script>\n'
     + '</body>\n</html>\n';
@@ -168,14 +195,18 @@ const tagList = (tags) => tags.length
 
 const readTime = (p) => (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min' : '');
 
-function feedItem(p) {
+function feedItem(p, showSection = true) {
+  const sec = SECTION_BY_ID[p.section];
   const heading = p.title
     ? '<h2 class="pt"><a href="' + p.url + '">' + esc(p.title) + '</a></h2>'
     : '<h2 class="pt untitled"><a href="' + p.url + '">' + esc(p.excerpt.slice(0, 90) || 'Untitled') + '</a></h2>';
   return '<article class="card">\n'
-    + '  <div class="meta"><a href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + readTime(p) + '</div>\n'
+    + '  <div class="meta">'
+    + (showSection && sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
+    + '<a href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + readTime(p) + '</div>\n'
     + '  ' + heading + '\n'
     + (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')
+    + (p.lesson ? '  <p class="lessonline"><b>Instead →</b> ' + esc(p.lesson) + '</p>\n' : '')
     + '  ' + tagList(p.tags) + '\n'
     + '</article>';
 }
@@ -189,42 +220,85 @@ const write = (rel, content) => {
   fs.writeFileSync(f, content);
 };
 
-/* home + pagination */
-const per = CFG.perPage || 25;
-const pageCount = Math.max(1, Math.ceil(posts.length / per));
-for (let i = 0; i < pageCount; i++) {
-  const slice = posts.slice(i * per, (i + 1) * per);
-  const nav = '<nav class="pager">'
-    + (i > 0 ? '<a href="' + (i === 1 ? '/' : '/page/' + i + '/') + '">← newer</a>' : '<span></span>')
-    + (i < pageCount - 1 ? '<a href="/page/' + (i + 2) + '/">older →</a>' : '<span></span>')
-    + '</nav>';
-  const body = '<p class="tagline">' + (i === 0 ? esc(CFG.tagline) : 'Page ' + (i + 1)) + '</p>\n'
+/* home: the section board, then whatever is newest across all of them */
+const board = '<div class="board">'
+  + SECTIONS.map((s) => {
+    const ps = bySection[s.id] || [];
+    const last = ps.length ? shortDate(ps[0].iso) : '—';
+    return '<a class="seccard" href="/s/' + s.id + '/">'
+      + '<span class="nm">' + esc(s.name) + '</span>'
+      + '<span class="bl">' + esc(s.blurb) + '</span>'
+      + '<span class="ct">' + ps.length + ' · ' + esc(last) + '</span>'
+      + '</a>';
+  }).join('')
+  + '</div>';
+
+const latest = posts.slice(0, CFG.latestOnHome || 15);
+write('index.html', shell({
+  canonical: '/',
+  body: '<p class="tagline">' + esc(CFG.tagline) + '</p>\n'
+    + board + '\n'
+    + '<h2 class="rule">Latest</h2>\n'
     + '<div class="feed">'
-    + (slice.map(feedItem).join('\n') || '<p class="empty">Nothing here yet. Go write something.</p>')
+    + (latest.map((p) => feedItem(p)).join('\n') || '<p class="empty">Nothing here yet. Go say something.</p>')
     + '</div>\n'
-    + (pageCount > 1 ? nav : '');
-  write(i === 0 ? 'index.html' : 'page/' + (i + 1) + '/index.html',
-    shell({ body, canonical: i === 0 ? '/' : '/page/' + (i + 1) + '/' }));
+    + (posts.length > latest.length ? '<nav class="pager"><span></span><a href="/archive/">everything in the archive →</a></nav>' : ''),
+}));
+
+/* section pages */
+for (const s of SECTIONS) {
+  const ps = bySection[s.id] || [];
+  write('s/' + s.id + '/index.html', shell({
+    title: s.name,
+    desc: s.blurb,
+    canonical: '/s/' + s.id + '/',
+    activeId: s.id,
+    body: '<h1 class="pagetitle">' + esc(s.name) + '</h1>\n'
+      + '<p class="tagline">' + esc(s.blurb) + '</p>\n'
+      + '<div class="feed">'
+      + (ps.map((p) => feedItem(p, false)).join('\n')
+        || '<p class="empty">Nothing filed here yet. <a href="/admin/">Add the first one</a>.</p>')
+      + '</div>',
+  }));
 }
 
 /* posts */
 for (let i = 0; i < posts.length; i++) {
   const p = posts[i];
-  const prev = posts[i + 1];
-  const next = posts[i - 1];
+  const sec = SECTION_BY_ID[p.section];
+  /* prev/next stay inside the same section -- reading one section end to end is
+     the point of having sections at all */
+  const sibs = bySection[p.section] || [];
+  const at = sibs.indexOf(p);
+  const prev = sibs[at + 1];
+  const next = sibs[at - 1];
   const label = (q) => esc((q.title || fmtDate(q.iso, false)).slice(0, 40));
+  const lessonBlock = p.lesson
+    ? '  <aside class="lesson"><b>' + esc((sec && sec.lessonLabel) || 'Instead') + '</b>'
+      + '<span>' + esc(p.lesson) + '</span></aside>\n'
+    : '';
   const body = '<article class="post">\n'
-    + '  <div class="meta">' + esc(fmtDate(p.iso)) + (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min read' : '') + '</div>\n'
+    + '  <div class="meta">'
+    + (sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
+    + esc(fmtDate(p.iso))
+    + (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min read' : '')
+    + '</div>\n'
     + (p.title ? '  <h1>' + esc(p.title) + '</h1>\n' : '')
     + '  <div class="prose">' + p.html + '</div>\n'
+    + lessonBlock
     + '  ' + tagList(p.tags) + '\n'
     + '</article>\n'
     + '<nav class="pager">'
     + (prev ? '<a href="' + prev.url + '">← ' + label(prev) + '</a>' : '<span></span>')
     + (next ? '<a href="' + next.url + '">' + label(next) + ' →</a>' : '<span></span>')
     + '</nav>';
-  write('posts/' + p.slug + '/index.html',
-    shell({ title: p.title || fmtDate(p.iso, false), desc: p.excerpt, body, canonical: p.url }));
+  write('posts/' + p.slug + '/index.html', shell({
+    title: p.title || fmtDate(p.iso, false),
+    desc: p.excerpt,
+    canonical: p.url,
+    activeId: p.section,
+    body,
+  }));
 }
 
 /* tags */
@@ -236,7 +310,7 @@ for (const [t, ps] of Object.entries(byTag)) {
     canonical: '/tags/' + t + '/',
     body: '<h1 class="pagetitle">#' + esc(t) + '</h1>'
       + '<p class="tagline">' + ps.length + ' post' + (ps.length === 1 ? '' : 's') + '</p>\n'
-      + '<div class="feed">' + ps.map(feedItem).join('\n') + '</div>',
+      + '<div class="feed">' + ps.map((p) => feedItem(p)).join('\n') + '</div>',
   }));
 }
 
@@ -248,12 +322,16 @@ const cloud = Object.keys(byTag).length
       .map(([t, ps]) => '<a class="tag" href="/tags/' + esc(t) + '/">' + esc(t) + ' <span class="n">' + ps.length + '</span></a>').join('')
     + '</div>'
   : '';
-const archiveBody = '<h1 class="pagetitle">Archive</h1>\n' + cloud + '\n'
+const archiveBody = '<h1 class="pagetitle">Archive</h1>\n'
+  + '<p class="tagline">Everything, newest first.</p>\n' + cloud + '\n'
   + Object.keys(byMonth).sort().reverse().map((k) => '<section class="month">\n'
     + '  <h2>' + esc(monthLabel(k)) + '</h2>\n'
-    + '  <ul>' + byMonth[k].map((p) => '<li><span class="d">'
-      + String(clockParts(p.iso).d).padStart(2, '0') + '</span><a href="' + p.url + '">'
-      + esc(p.title || p.excerpt.slice(0, 70) || 'Untitled') + '</a></li>').join('') + '</ul>\n'
+    + '  <ul>' + byMonth[k].map((p) => {
+      const sec = SECTION_BY_ID[p.section];
+      return '<li><span class="d">' + String(clockParts(p.iso).d).padStart(2, '0') + '</span>'
+        + '<a href="' + p.url + '">' + esc(p.title || p.excerpt.slice(0, 70) || 'Untitled') + '</a>'
+        + (sec ? '<span class="sectag">' + esc(sec.name) + '</span>' : '') + '</li>';
+    }).join('') + '</ul>\n'
     + '</section>').join('\n');
 write('archive/index.html', shell({ title: 'Archive', body: archiveBody, canonical: '/archive/' }));
 
@@ -262,11 +340,14 @@ write('search/index.html', shell({
   title: 'Search',
   canonical: '/search/',
   body: '<h1 class="pagetitle">Search</h1>\n'
-    + '<input id="q" type="search" placeholder="Type to search every post…" autocomplete="off" autofocus>\n'
+    + '<p class="tagline">Every word of every post. Section names work too.</p>\n'
+    + '<input id="q" type="search" placeholder="Type to search…" autocomplete="off" autofocus>\n'
     + '<div id="results" class="feed"></div>',
 }));
 write('search.json', JSON.stringify(posts.map((p) => ({
-  t: p.title, u: p.url, d: fmtDate(p.iso, false), g: p.tags, x: p.text.slice(0, 1200),
+  t: p.title, u: p.url, d: fmtDate(p.iso, false), g: p.tags,
+  s: (SECTION_BY_ID[p.section] || {}).name || '',
+  x: p.text.slice(0, 1200),
 }))));
 
 /* rss */
@@ -274,6 +355,7 @@ const rssItems = posts.slice(0, 50).map((p) => '  <item>\n'
   + '    <title>' + esc(p.title || fmtDate(p.iso, false)) + '</title>\n'
   + '    <link>' + esc(CFG.url + p.url) + '</link>\n'
   + '    <guid isPermaLink="true">' + esc(CFG.url + p.url) + '</guid>\n'
+  + '    <category>' + esc((SECTION_BY_ID[p.section] || {}).name || '') + '</category>\n'
   + '    <pubDate>' + new Date(p.ts).toUTCString() + '</pubDate>\n'
   + '    <description>' + esc(p.excerpt) + '</description>\n'
   + '  </item>').join('\n');
@@ -296,10 +378,11 @@ function copyDir(src, dst) {
 }
 copyDir(path.join(ROOT, 'public'), OUT);
 
-/* the editor reads the repo coordinates from here, so site.config.json stays
-   the single place any of this is configured */
+/* the editor reads the repo coordinates and the section list from here, so
+   site.config.json stays the single place any of this is configured */
 write('admin/config.json', JSON.stringify({
-  repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [], url: CFG.url,
+  repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [],
+  url: CFG.url, sections: SECTIONS,
 }));
 
 fs.copyFileSync(path.join(ROOT, 'src', 'style.css'), path.join(OUT, 'style.css'));
@@ -310,5 +393,6 @@ write('404.html', shell({
   body: '<h1 class="pagetitle">Not found</h1><p class="tagline">That page does not exist. <a href="/">Back home</a>.</p>',
 }));
 
-console.log('built ' + posts.length + ' posts -> ' + pageCount + ' feed page(s), '
-  + Object.keys(byTag).length + ' tags');
+console.log('built ' + posts.length + ' posts across '
+  + SECTIONS.filter((s) => (bySection[s.id] || []).length).length + '/' + SECTIONS.length
+  + ' sections, ' + Object.keys(byTag).length + ' tags');
