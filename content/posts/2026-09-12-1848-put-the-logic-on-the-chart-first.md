@@ -38,3 +38,22 @@ doing it.
 So the chart is where this starts, not where it finishes. The visual tells you the logic
 is *doing what you think it is doing*. It tells you nothing about whether it will keep
 working. For that you need the other metrics.
+
+## The monster
+
+And even once you have an edge — even when the metrics say it is real — you do not let
+it out.
+
+Call the edge a monster. It is yours, and it is still dangerous. It stays in the lab.
+You do not turn it loose just because it looked good.
+
+Before it leaves, you need to know three things about it:
+
+- **What it eats.** The conditions it needs to survive. Which regime, which volatility,
+  which hours. Feed it the wrong market and it dies.
+- **How much it kills.** What it takes off you when it is wrong. Not the average — the
+  worst.
+- **How much it helps.** What it actually gives back, after everything it costs.
+
+An edge you have not measured on all three is not an edge. It is an animal you have not
+looked at properly.

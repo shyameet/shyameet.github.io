@@ -25,6 +25,12 @@ tags: [health, people, trading]
 
 - [ ] Be able to talk to anyone easily and confidently — a senior official, a police officer, a waiter, someone I have just met, girls. All of them, without having to work up to it.
 
+## Influence
+
+- [ ] Start putting what I learn out into the world — videos, teaching, my own thing in this space. Someone I follow does exactly this: her own startup alongside a channel where she teaches. I want that running before the year is out.
+- [ ] Go further on the prop firm partnerships. I have affiliate codes with Blue Guardian Futures and FundedNext already. Next: My Funded Futures, Tradeify, Lucid Trading, and the other good platforms.
+- [ ] Not just the money out of it — better connections and real contacts in this space.
+
 ## Reading
 
 - [ ] Shiv Puran
