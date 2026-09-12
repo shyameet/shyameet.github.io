@@ -10,6 +10,20 @@
   "quickTags": ["quant", "trading", "youtube", "people", "health"],
   "sections": [
     {
+      "id": "daytasks",
+      "name": "Day Tasks",
+      "blurb": "What has to happen today.",
+      "prompt": "One task per line. Say \"dash bracket\" or use the task button.",
+      "tasks": true
+    },
+    {
+      "id": "weektasks",
+      "name": "Week Tasks",
+      "blurb": "The week's list. Worth re-reading on Sunday.",
+      "prompt": "The handful of things that make this week count.",
+      "tasks": true
+    },
+    {
       "id": "daily",
       "name": "Daily",
       "blurb": "The schedule, and how the day actually went.",

@@ -91,6 +91,21 @@ const monthLabel = (k) => {
   return MONTHS[+parts[1] - 1] + ' ' + parts[0];
 };
 
+/* "- [ ] thing" / "- [x] thing" -- counted so a task post can show its own
+   progress without anyone maintaining a tally by hand */
+function countTasks(md) {
+  const open = (md.match(/^\s*[-*]\s+\[ \]\s+/gm) || []).length;
+  const done = (md.match(/^\s*[-*]\s+\[[xX]\]\s+/gm) || []).length;
+  return { open, done, total: open + done };
+}
+
+function progressBar(t) {
+  if (!t.total) return '';
+  const pct = Math.round((t.done / t.total) * 100);
+  return '<div class="progress">' + t.done + ' of ' + t.total + ' done'
+    + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%</div>';
+}
+
 function plainText(md) {
   return md
     .replace(/```[\s\S]*?```/g, ' ')
@@ -98,6 +113,8 @@ function plainText(md) {
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^>\s?/gm, '')
     .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*+]\s+\[[ xX]\]\s*/gm, '')  /* task markers */
+    .replace(/^\s*[-*+]\s+/gm, '')              /* list bullets */
     .replace(/[*_`~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -129,6 +146,7 @@ const posts = fs.readdirSync(POSTS_DIR)
       words: text ? text.split(/\s+/).length : 0,
       excerpt: text.slice(0, 240) + (text.length > 240 ? '…' : ''),
       html: marked.parse(body),
+      tasks: countTasks(body),
     };
   })
   .filter((p) => !p.draft)
@@ -162,7 +180,12 @@ function shell({ title, desc, body, canonical, activeId = '' }) {
     + '<link rel="icon" href="/icon.svg" type="image/svg+xml">\n'
     + '<link rel="apple-touch-icon" href="/icon-180.png">\n'
     + '<link rel="manifest" href="/manifest.webmanifest">\n'
-    + '<meta name="theme-color" content="#262626">\n'
+    + '<meta name="theme-color" content="#faf7f0">\n'
+    + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+    + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    + 'family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400'
+    + '&family=IBM+Plex+Mono:wght@400;500&display=swap">\n'
     + '<link rel="stylesheet" href="/style.css">\n'
     + '<script>(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}})();</script>\n'
     + '</head>\n<body>\n'
@@ -205,7 +228,8 @@ function feedItem(p, showSection = true) {
     + (showSection && sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
     + '<a href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + readTime(p) + '</div>\n'
     + '  ' + heading + '\n'
-    + (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')
+    + (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n'
+      : (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : ''))
     + (p.lesson ? '  <p class="lessonline"><b>Instead →</b> ' + esc(p.lesson) + '</p>\n' : '')
     + '  ' + tagList(p.tags) + '\n'
     + '</article>';
@@ -220,23 +244,26 @@ const write = (rel, content) => {
   fs.writeFileSync(f, content);
 };
 
-/* home: the section board, then whatever is newest across all of them */
-const board = '<div class="board">'
+/* home: a table of contents, the way a notebook has one -- then what is newest */
+const board = '<nav class="contents">'
   + SECTIONS.map((s) => {
     const ps = bySection[s.id] || [];
-    const last = ps.length ? shortDate(ps[0].iso) : '—';
-    return '<a class="seccard" href="/s/' + s.id + '/">'
-      + '<span class="nm">' + esc(s.name) + '</span>'
-      + '<span class="bl">' + esc(s.blurb) + '</span>'
-      + '<span class="ct">' + ps.length + ' · ' + esc(last) + '</span>'
+    const count = ps.length
+      ? ps.length + ' · ' + esc(shortDate(ps[0].iso))
+      : '<span class="empty-dot">empty</span>';
+    return '<a href="/s/' + s.id + '/">'
+      + '<span class="n">' + esc(s.name) + '</span>'
+      + '<span class="c">' + count + '</span>'
+      + '<span class="b">' + esc(s.blurb) + '</span>'
       + '</a>';
   }).join('')
-  + '</div>';
+  + '</nav>';
 
 const latest = posts.slice(0, CFG.latestOnHome || 15);
 write('index.html', shell({
   canonical: '/',
-  body: '<p class="tagline">' + esc(CFG.tagline) + '</p>\n'
+  body: '<div class="masthead"><h1>' + esc(CFG.title) + '</h1>'
+    + '<p class="sub">' + esc(CFG.tagline) + '</p></div>\n'
     + board + '\n'
     + '<h2 class="rule">Latest</h2>\n'
     + '<div class="feed">'
@@ -284,6 +311,7 @@ for (let i = 0; i < posts.length; i++) {
     + (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min read' : '')
     + '</div>\n'
     + (p.title ? '  <h1>' + esc(p.title) + '</h1>\n' : '')
+    + (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n' : '')
     + '  <div class="prose">' + p.html + '</div>\n'
     + lessonBlock
     + '  ' + tagList(p.tags) + '\n'

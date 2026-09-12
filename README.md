@@ -12,6 +12,8 @@ Fixed on purpose. Inventing a category every time is how you stop posting by Thu
 
 | Section | For |
 |---|---|
+| **Day Tasks** | What has to happen today (counts its own checkboxes) |
+| **Week Tasks** | The week's list, re-read on Sunday |
 | **Daily** | The schedule, and how the day actually went |
 | **Goals** | Anything pointed at where I am trying to get |
 | **Feynman** | Learn it by explaining it back in plain words |
@@ -27,6 +29,10 @@ existing posts, so change `name` and leave `id` alone.
 
 **Mistakes** carries a second field (`lessonLabel`), which renders as a callout at the
 end of the post. The lesson is the part that stops it happening twice.
+
+Sections marked `"tasks": true` count `- [ ]` / `- [x]` lines in the body and show a
+progress bar on the post and in the feed. The editor gets a button that inserts a task
+line, since you cannot dictate square brackets.
 
 ## Posting
 

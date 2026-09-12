@@ -8,136 +8,169 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="manifest" href="/admin/manifest.webmanifest">
-<meta name="theme-color" content="#262626">
+<meta name="theme-color" content="#faf7f0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root {
-    --bg: #262626; --bg-soft: #2f2f2e; --line: #3d3c3a;
-    --ink: #e8e6e1; --muted: #a5a29b; --accent: #e97132;
-    --ok: #3fbf7f; --bad: #e8604c;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace;
-    color-scheme: dark;
+    --paper: #faf7f0; --paper-2: #f2eee3; --rule: #e0d9c9; --rule-2: #cec5b0;
+    --ink: #1e1c19; --muted: #6f6a61; --accent: #2b4f6b; --warn: #9c3d2e;
+    --ok: #5a7d52; --bad: #9c3d2e;
+    --serif: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #161512; --paper-2: #1f1d19; --rule: #322e28; --rule-2: #454036;
+      --ink: #ece6d9; --muted: #968f80; --accent: #8ab6d0; --warn: #d9705c;
+      --ok: #8fae85; --bad: #d9705c;
+      color-scheme: dark;
+    }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: var(--sans); font-size: 16px; line-height: 1.5;
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--serif); font-size: 17px; line-height: 1.55;
     display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
 
   header {
-    display: flex; align-items: center; gap: .75rem;
-    padding: .7rem .9rem; border-bottom: 1px solid var(--line); flex: none;
+    display: flex; align-items: baseline; gap: .9rem;
+    padding: .9rem 1rem .7rem; border-bottom: 1px solid var(--rule); flex: none;
   }
-  header .title { font-weight: 700; border-left: 3px solid var(--accent); padding-left: .55rem; }
+  header .title { font-weight: 600; font-size: 1.15rem; letter-spacing: -.02em; }
   header .spacer { flex: 1; }
   .tabbtn {
-    background: none; border: none; color: var(--muted);
-    font: inherit; font-size: .88rem; cursor: pointer; padding: .2rem .1rem;
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .09em; padding: .2rem 0;
   }
-  .tabbtn[aria-selected="true"] { color: var(--accent); }
-  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
+  .tabbtn[aria-selected="true"] { color: var(--accent); border-bottom: 2px solid var(--accent); }
+  #dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
   #dot.on { background: var(--ok); }
 
-  main { flex: 1; overflow-y: auto; padding: .9rem; }
+  main { flex: 1; overflow-y: auto; padding: 1rem; }
   .view[hidden] { display: none; }
   /* full-height column so the publish bar drops to the bottom of a short page
      (margin-top:auto) and still follows a long one (position:sticky) */
   #view-new:not([hidden]) { display: flex; flex-direction: column; min-height: 100%; }
 
-  input, textarea, button, select { font-family: inherit; font-size: 16px; }
+  input, textarea, button, select { font-family: inherit; font-size: 17px; }
+
+  /* ten sections, four to a row -- every one reachable with one thumb */
+  .secpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; margin-bottom: 1rem; }
+  .secpick button {
+    background: none; border: 1px solid var(--rule-2); color: var(--muted);
+    border-radius: 3px; padding: .5rem .15rem; cursor: pointer;
+    font-family: var(--mono); font-size: .6rem; text-transform: uppercase;
+    letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .secpick button[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: var(--paper); font-weight: 500;
+  }
 
   #title {
-    width: 100%; background: transparent; border: none; color: var(--ink);
-    font-size: 1.3rem; font-weight: 650; letter-spacing: -.02em;
-    padding: .35rem 0; margin-bottom: .2rem;
+    width: 100%; background: none; border: none; color: var(--ink);
+    font-size: 1.45rem; font-weight: 500; letter-spacing: -.025em;
+    padding: .3rem 0; margin-bottom: .1rem;
   }
   #title::placeholder { color: var(--muted); font-weight: 400; }
   #title:focus { outline: none; }
 
   #body {
-    width: 100%; min-height: 45vh; background: transparent; border: none;
-    color: var(--ink); line-height: 1.65; padding: .35rem 0; resize: none;
+    width: 100%; min-height: 42vh; background: none; border: none;
+    color: var(--ink); font-size: 1.05rem; line-height: 1.65;
+    padding: .3rem 0; resize: none;
   }
   #body:focus { outline: none; }
-  #body::placeholder { color: var(--muted); }
+  #body::placeholder { color: var(--muted); font-style: italic; }
 
-  /* eight sections, four to a row -- every one reachable with one thumb */
-  .secpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; margin-bottom: .9rem; }
-  .secpick button {
-    background: var(--bg-soft); border: 1px solid var(--line); color: var(--muted);
-    border-radius: 6px; padding: .55rem .2rem; font-size: .74rem; cursor: pointer;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  #tasktools { margin: .5rem 0 0; }
+  #tasktools button {
+    background: none; border: 1px dashed var(--rule-2); color: var(--muted);
+    border-radius: 3px; padding: .35rem .8rem; cursor: pointer;
+    font-family: var(--mono); font-size: .64rem; text-transform: uppercase; letter-spacing: .07em;
   }
-  .secpick button[aria-pressed="true"] {
-    background: var(--accent); border-color: var(--accent); color: #1a1a1a; font-weight: 700;
-  }
+  #tasktools button:hover { color: var(--accent); border-color: var(--accent); }
 
   .lessonin {
-    width: 100%; background: rgba(233,113,50,.12);
-    border: 1px solid var(--accent); border-radius: 6px;
-    color: var(--ink); padding: .65rem .8rem; margin-top: .6rem;
+    width: 100%; background: none;
+    border: none; border-left: 2px solid var(--warn);
+    color: var(--ink); padding: .55rem .8rem; margin-top: .9rem; font-size: 1rem;
   }
-  .lessonin::placeholder { color: var(--accent); opacity: .8; }
-  .lessonin:focus { outline: none; }
+  .lessonin::placeholder { color: var(--warn); opacity: .75; font-style: italic; }
+  .lessonin:focus { outline: none; background: rgba(156,61,46,.06); }
 
-  .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: .9rem 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
   .chip {
-    font-size: .78rem; color: var(--muted); background: var(--bg-soft);
-    border: 1px solid var(--line); border-radius: 999px;
-    padding: .28rem .7rem; cursor: pointer; user-select: none;
+    font-family: var(--mono); font-size: .62rem; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); background: none; border: none;
+    border-bottom: 1px solid var(--rule-2); padding: 0 0 2px; cursor: pointer;
   }
-  .chip[aria-pressed="true"] { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); font-weight: 500; }
   .chip.add { border-style: dashed; }
 
   .bar {
-    position: sticky; bottom: 0; display: flex; align-items: center; gap: .75rem;
-    background: var(--bg); border-top: 1px solid var(--line);
-    padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom));
-    margin: auto -.9rem -.9rem; /* top:auto drops it to the bottom of a short page */
+    position: sticky; bottom: 0; display: flex; align-items: center; gap: .7rem;
+    background: var(--paper); border-top: 1px solid var(--rule);
+    padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom));
+    margin: auto -1rem -1rem; /* top:auto drops it to the bottom of a short page */
   }
-  .bar .info { flex: 1; font-size: .76rem; color: var(--muted); min-width: 0; }
-  .bar .info b { color: var(--ink); font-weight: 600; }
+  .bar .info {
+    flex: 1; min-width: 0; font-family: var(--mono); font-size: .62rem;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .07em;
+  }
 
   button.primary {
-    background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px;
-    font-weight: 700; padding: .65rem 1.3rem; cursor: pointer;
+    background: var(--accent); color: var(--paper); border: none; border-radius: 3px;
+    font-family: var(--mono); font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .09em; font-weight: 500; padding: .7rem 1.2rem; cursor: pointer;
   }
-  button.primary:disabled { opacity: .45; cursor: default; }
+  button.primary:disabled { opacity: .4; cursor: default; }
   button.ghost {
-    background: none; color: var(--muted); border: 1px solid var(--line);
-    border-radius: 6px; padding: .6rem .9rem; cursor: pointer; font-size: .84rem;
+    background: none; color: var(--muted); border: 1px solid var(--rule-2);
+    border-radius: 3px; padding: .65rem .85rem; cursor: pointer;
+    font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .07em;
   }
   button.ghost.danger:hover { color: var(--bad); border-color: var(--bad); }
 
-  .note { font-size: .84rem; color: var(--muted); }
+  .note { font-size: .92rem; color: var(--muted); }
   .note a { color: var(--accent); }
-  .msg { padding: .7rem .85rem; border-radius: 6px; font-size: .86rem; margin-bottom: .9rem; }
-  .msg.err { background: rgba(232,96,76,.13); border: 1px solid var(--bad); color: var(--ink); }
-  .msg.ok { background: rgba(63,191,127,.12); border: 1px solid var(--ok); color: var(--ink); }
+  .msg { padding: .7rem .9rem; font-size: .93rem; margin-bottom: 1rem; border-left: 2px solid; }
+  .msg.err { background: rgba(156,61,46,.07); border-color: var(--bad); }
+  .msg.ok { background: rgba(90,125,82,.09); border-color: var(--ok); }
   .msg a { color: var(--accent); }
 
   #token {
-    width: 100%; background: var(--bg-soft); border: 1px solid var(--line);
-    border-radius: 6px; color: var(--ink); padding: .7rem .8rem;
-    font-family: var(--mono); font-size: 14px; margin: .6rem 0;
+    width: 100%; background: var(--paper-2); border: 1px solid var(--rule-2);
+    border-radius: 3px; color: var(--ink); padding: .7rem .8rem;
+    font-family: var(--mono); font-size: 14px; margin: .7rem 0;
   }
-  ol.steps { padding-left: 1.2rem; font-size: .88rem; color: var(--muted); line-height: 1.7; }
-  ol.steps code { font-family: var(--mono); font-size: .85em; color: var(--ink); background: var(--bg-soft); padding: .1em .35em; border-radius: 3px; }
+  ol.steps { padding-left: 1.2rem; font-size: .95rem; color: var(--muted); line-height: 1.75; }
+  ol.steps code { font-family: var(--mono); font-size: .82em; color: var(--ink); }
 
   ul.posts { list-style: none; padding: 0; margin: 0; }
   ul.posts li {
-    display: flex; align-items: center; gap: .7rem;
-    padding: .75rem 0; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: .8rem;
+    padding: .8rem 0; border-bottom: 1px solid var(--rule);
   }
   ul.posts .who { flex: 1; min-width: 0; }
   ul.posts .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  ul.posts .dt { font-size: .74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-  ul.posts button { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 5px; padding: .35rem .7rem; font-size: .8rem; cursor: pointer; }
+  ul.posts .dt {
+    font-family: var(--mono); font-size: .62rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .07em;
+  }
+  ul.posts button {
+    background: none; border: 1px solid var(--rule-2); color: var(--muted);
+    border-radius: 3px; padding: .35rem .75rem; cursor: pointer;
+    font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing: .07em;
+  }
 </style>
 </head>
 <body>
@@ -158,6 +191,7 @@
     <div class="secpick" id="secpick"></div>
     <input id="title" placeholder="Title — optional" autocomplete="off">
     <textarea id="body" placeholder="Tap the mic on your keyboard and just talk."></textarea>
+    <div id="tasktools" hidden><button type="button" id="addtask">+ task line</button></div>
     <input id="lesson" class="lessonin" placeholder="What I will do instead" autocomplete="off" hidden>
     <div class="chips" id="chips"></div>
     <div class="bar">
@@ -358,7 +392,25 @@
     $('lesson').hidden = !wantsLesson;
     if (wantsLesson) $('lesson').placeholder = sec.lessonLabel;
     else $('lesson').value = '';
+
+    $('tasktools').hidden = !(sec && sec.tasks);
   }
+
+  /* Insert a checklist line at the caret. Dictation cannot say "- [ ]", so the
+     button is the only sane way to start one on a phone. */
+  $('addtask').addEventListener('click', function () {
+    var el = $('body');
+    var at = el.selectionStart;
+    var before = el.value.slice(0, at);
+    var after = el.value.slice(at);
+    var lead = (before === '' || /\n$/.test(before)) ? '' : '\n';
+    var insert = lead + '- [ ] ';
+    el.value = before + insert + after;
+    el.focus();
+    el.selectionStart = el.selectionEnd = at + insert.length;
+    autogrow();
+    saveDraft();
+  });
 
   $('secpick').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-sec]');
