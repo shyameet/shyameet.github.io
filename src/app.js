@@ -21,28 +21,18 @@
      ticking a box rewrites the markdown in the repo. Everyone else gets the
      checkboxes exactly as marked renders them: disabled. */
   (function () {
-    var article = document.querySelector('.post[data-file]');
-    if (!article) return;
-
-    var boxes = [].slice.call(article.querySelectorAll('.prose input[type="checkbox"]'));
-    if (!boxes.length) return;
+    /* Any block that names its source file can be ticked -- a post page, and
+       every card in a section listing. Checking a day off should not require
+       opening it. */
+    var blocks = [].slice.call(document.querySelectorAll('[data-file]'));
+    if (!blocks.length) return;
 
     var token;
     try { token = localStorage.getItem('gh_token'); } catch (e) { token = null; }
     if (!token) return;
 
-    var path = article.dataset.file;
     var cfg = null;
     var chain = Promise.resolve();   // one write at a time; each refetches the sha
-    var status = document.createElement('div');
-    status.className = 'tasksave';
-    var progress = article.querySelector('.progress');
-    (progress || article).insertAdjacentElement(progress ? 'afterend' : 'afterbegin', status);
-
-    function say(text, kind) {
-      status.textContent = text || '';
-      status.className = 'tasksave' + (kind ? ' ' + kind : '');
-    }
 
     function b64decode(b64) {
       var bin = atob(b64.replace(/\s/g, ''));
@@ -82,17 +72,9 @@
         .then(function (c) { cfg = c; return c; });
     }
 
-    function refreshProgress() {
-      if (!progress) return;
-      var done = boxes.filter(function (b) { return b.checked; }).length;
-      var pct = Math.round((done / boxes.length) * 100);
-      progress.innerHTML = done + ' of ' + boxes.length + ' done'
-        + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%';
-    }
-
     var TASK_LINE = /^(\s*[-*+]\s+\[)([ xX])(\])/;
 
-    function writeToggle(index, checked) {
+    function writeToggle(path, index, checked) {
       return config().then(function (c) {
         var base = 'https://api.github.com/repos/' + c.repo + '/contents/' + path;
         return gh('GET', base + '?ref=' + c.branch).then(function (file) {
@@ -118,23 +100,47 @@
       });
     }
 
-    boxes.forEach(function (box, index) {
-      box.disabled = false;
-      box.style.cursor = 'pointer';
-      box.addEventListener('change', function () {
-        var checked = box.checked;
-        box.disabled = true;
-        refreshProgress();
-        say('saving…');
-        chain = chain.then(function () {
-          return writeToggle(index, checked)
-            .then(function () { say('saved · live in a minute', 'ok'); })
-            .catch(function (err) {
-              box.checked = !checked;          // put it back the way it was
-              refreshProgress();
-              say(err.message, 'err');
-            })
-            .then(function () { box.disabled = false; });
+    blocks.forEach(function (block) {
+      var boxes = [].slice.call(block.querySelectorAll('input[type="checkbox"]'));
+      if (!boxes.length) return;
+
+      var path = block.dataset.file;
+      var progress = block.querySelector('.progress');
+      var status = document.createElement('div');
+      status.className = 'tasksave';
+      (progress || block).insertAdjacentElement(progress ? 'afterend' : 'beforeend', status);
+
+      function say(text, kind) {
+        status.textContent = text || '';
+        status.className = 'tasksave' + (kind ? ' ' + kind : '');
+      }
+
+      function refreshProgress() {
+        if (!progress) return;
+        var done = boxes.filter(function (b) { return b.checked; }).length;
+        var pct = Math.round((done / boxes.length) * 100);
+        progress.innerHTML = done + ' of ' + boxes.length + ' done'
+          + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%';
+      }
+
+      boxes.forEach(function (box, index) {
+        box.disabled = false;
+        box.style.cursor = 'pointer';
+        box.addEventListener('change', function () {
+          var checked = box.checked;
+          box.disabled = true;
+          refreshProgress();
+          say('saving…');
+          chain = chain.then(function () {
+            return writeToggle(path, index, checked)
+              .then(function () { say('saved · live in a minute', 'ok'); })
+              .catch(function (err) {
+                box.checked = !checked;          // put it back the way it was
+                refreshProgress();
+                say(err.message, 'err');
+              })
+              .then(function () { box.disabled = false; });
+          });
         });
       });
     });

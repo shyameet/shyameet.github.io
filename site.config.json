@@ -18,9 +18,10 @@
     {
       "id": "daytasks",
       "name": "Day Tasks",
-      "blurb": "What has to happen today.",
-      "prompt": "Say each task, then tap + task line to turn them into checkboxes.",
-      "tasks": true
+      "blurb": "One page per day. The routine is already on it — just tick.",
+      "prompt": "The routine is filled in. Say anything else that has to happen today.",
+      "tasks": true,
+      "routine": true
     },
     {
       "id": "weektasks",
@@ -79,5 +80,12 @@
       "prompt": "Whatever it is."
     }
   ],
-  "speechLang": "en-IN"
+  "speechLang": "en-IN",
+  "routine": [
+    "Face exercises",
+    "Gym",
+    "Walk Rocco",
+    "Reading",
+    "Stretching"
+  ]
 }

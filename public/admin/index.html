@@ -236,7 +236,7 @@
     <p id="interim" class="interim"></p>
     <button type="button" id="mic" class="mic">Talk</button>
     <p id="michint" class="michint"></p>
-    <div id="tasktools" hidden><button type="button" id="addtask">+ task line</button></div>
+    <div id="tasktools" hidden><button type="button" id="addtask">+ task line</button> <button type="button" id="addroutine" hidden>+ routine</button></div>
     <input id="lesson" class="lessonin" placeholder="What I will do instead" autocomplete="off" hidden>
     <div class="chips" id="chips"></div>
     <div class="bar">
@@ -288,7 +288,7 @@
 (function () {
   'use strict';
 
-  var CFG = { repo: '', branch: 'main', quickTags: [], url: '', sections: [], speechLang: 'en-IN' };
+  var CFG = { repo: '', branch: 'main', quickTags: [], url: '', sections: [], speechLang: 'en-IN', routine: [] };
   var LS = { token: 'gh_token', draft: 'draft_v1', lastSection: 'last_section' };
   var state = { tags: [], editing: null, busy: false, section: '' };
 
@@ -642,7 +642,31 @@
     else $('lesson').value = '';
 
     $('tasktools').hidden = !(sec && sec.tasks);
+    $('addroutine').hidden = !(sec && sec.routine && CFG.routine.length);
+
+    /* A day page is worth nothing if you have to dictate the same five things
+       every morning, so a blank one fills itself in. */
+    if (sec && sec.routine && !state.editing && !$('body').value.trim()) {
+      $('body').value = routineMarkdown();
+      autogrow();
+      saveDraft();
+    }
   }
+
+  var NL = String.fromCharCode(10);
+
+  function routineMarkdown() {
+    return CFG.routine.map(function (t) { return '- [ ] ' + t; }).join(NL) + NL;
+  }
+
+  $('addroutine').addEventListener('click', function () {
+    var el = $('body');
+    var v = el.value.replace(/\s+$/, '');
+    el.value = (v ? v + NL : '') + routineMarkdown();
+    autogrow();
+    saveDraft();
+    el.focus();
+  });
 
   /* Insert a checklist line at the caret. Dictation cannot say "- [ ]", so the
      button is the only sane way to start one on a phone. */

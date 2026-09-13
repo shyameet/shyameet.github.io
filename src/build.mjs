@@ -82,6 +82,18 @@ const shortDate = (iso) => {
   return p ? p.d + ' ' + MONTHS[p.mo - 1] : '';
 };
 
+/* "Saturday 12 September" -- the heading a day of tasks gets, so the list reads
+   like a page in a diary rather than a blog post with a date on it */
+const FULLDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const FULLMONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+function fullDate(iso) {
+  const p = clockParts(iso);
+  if (!p) return String(iso);
+  const dow = FULLDAYS[new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay()];
+  return dow + ' ' + p.d + ' ' + FULLMONTHS[p.mo - 1];
+}
+
 const monthKey = (iso) => {
   const p = clockParts(iso);
   return p ? p.y + '-' + String(p.mo).padStart(2, '0') : '0000-00';
@@ -104,6 +116,22 @@ function progressBar(t) {
   const pct = Math.round((t.done / t.total) * 100);
   return '<div class="progress">' + t.done + ' of ' + t.total + ' done'
     + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%</div>';
+}
+
+/* The tasks themselves, rendered into the listing. A list you have to click
+   into to read is a list you stop checking. Built from the markdown rather
+   than scraped out of the rendered post so the index order is guaranteed to
+   match the source order the toggler rewrites. */
+function taskListHtml(md) {
+  const items = [];
+  for (const line of md.split('\n')) {
+    const m = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/);
+    if (m) items.push({ done: m[1] !== ' ', text: m[2] });
+  }
+  if (!items.length) return '';
+  return '<ul class="tasks">' + items.map((i) => '<li><input type="checkbox" disabled'
+    + (i.done ? ' checked' : '') + '>' + marked.parseInline(i.text) + '</li>').join('')
+    + '</ul>';
 }
 
 function plainText(md) {
@@ -133,10 +161,17 @@ const posts = fs.readdirSync(POSTS_DIR)
     const iso = data.date || (fileDate ? fileDate + 'T00:00' : '1970-01-01T00:00');
     const title = (data.title || '').trim();
     const text = plainText(body);
-    const slug = data.slug || slugify(title) || file.replace(/\.md$/, '');
     const tags = (Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []))
       .map((t) => String(t).toLowerCase().trim()).filter(Boolean);
     const section = SECTION_BY_ID[String(data.section || '').toLowerCase()] ? String(data.section).toLowerCase() : FALLBACK;
+    /* An untitled day page is identified by its day, not by its filename --
+       /posts/daytasks-2026-09-12/ rather than the timestamped source name. */
+    const dateSlug = (clockParts(iso)
+      ? section + '-' + String(clockParts(iso).y) + '-'
+        + String(clockParts(iso).mo).padStart(2, '0') + '-'
+        + String(clockParts(iso).d).padStart(2, '0')
+      : '');
+    const slug = data.slug || slugify(title) || dateSlug || file.replace(/\.md$/, '');
     return {
       file, title, iso, tags, body, text, slug, section,
       lesson: (data.lesson || '').trim(),
@@ -151,6 +186,20 @@ const posts = fs.readdirSync(POSTS_DIR)
   })
   .filter((p) => !p.draft)
   .sort((a, b) => b.ts - a.ts);
+
+/* Two posts that slugify the same -- same title, or two untitled ones on one
+   day -- would otherwise write to the same directory and one would vanish
+   without a word. Oldest keeps the clean slug; later ones get suffixed. */
+const seenSlugs = new Set();
+for (const p of [...posts].reverse()) {
+  let slug = p.slug;
+  let n = 1;
+  while (seenSlugs.has(slug)) slug = p.slug + '-' + (++n);
+  if (slug !== p.slug) console.log('  slug clash: ' + p.file + ' -> ' + slug);
+  seenSlugs.add(slug);
+  p.slug = slug;
+  p.url = '/posts/' + slug + '/';
+}
 
 const bySection = {};
 for (const s of SECTIONS) bySection[s.id] = [];
@@ -220,16 +269,27 @@ const readTime = (p) => (p.words > 400 ? ' <span class="sep">·</span> ' + Math.
 
 function feedItem(p, showSection = true) {
   const sec = SECTION_BY_ID[p.section];
-  const heading = p.title
-    ? '<h2 class="pt"><a href="' + p.url + '">' + esc(p.title) + '</a></h2>'
+  const isTaskCard = !!(sec && sec.tasks && p.tasks.total);
+
+  /* A day of tasks is headed by its day, not by a made-up title. */
+  const headText = p.title || (isTaskCard ? fullDate(p.iso) : '');
+  const heading = headText
+    ? '<h2 class="pt"><a href="' + p.url + '">' + esc(headText) + '</a></h2>'
     : '<h2 class="pt untitled"><a href="' + p.url + '">' + esc(p.excerpt.slice(0, 90) || 'Untitled') + '</a></h2>';
-  return '<article class="card">\n'
-    + '  <div class="meta">'
-    + (showSection && sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
-    + '<a href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + readTime(p) + '</div>\n'
+
+  const metaBits = [];
+  if (showSection && sec) metaBits.push('<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a>');
+  metaBits.push('<a href="' + p.url + '">'
+    + esc(isTaskCard ? fmtDate(p.iso, false) : fmtDate(p.iso)) + '</a>' + readTime(p));
+
+  return '<article class="card' + (isTaskCard ? ' taskcard' : '') + '"'
+    + (isTaskCard ? ' data-file="content/posts/' + esc(p.file) + '"' : '') + '>\n'
+    + '  <div class="meta">' + metaBits.join(' <span class="sep">·</span> ') + '</div>\n'
     + '  ' + heading + '\n'
-    + (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n'
-      : (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : ''))
+    + (isTaskCard
+      ? '  ' + progressBar(p.tasks) + '\n  ' + taskListHtml(p.body) + '\n'
+      : (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n'
+        : (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')))
     + (p.lesson ? '  <p class="lessonline"><b>Instead →</b> ' + esc(p.lesson) + '</p>\n' : '')
     + '  ' + tagList(p.tags) + '\n'
     + '</article>';
@@ -312,7 +372,9 @@ for (let i = 0; i < posts.length; i++) {
     + esc(fmtDate(p.iso))
     + (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min read' : '')
     + '</div>\n'
-    + (p.title ? '  <h1>' + esc(p.title) + '</h1>\n' : '')
+    + (p.title
+      ? '  <h1>' + esc(p.title) + '</h1>\n'
+      : (sec && sec.tasks ? '  <h1>' + esc(fullDate(p.iso)) + '</h1>\n' : ''))
     + (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n' : '')
     + '  <div class="prose">' + p.html + '</div>\n'
     + lessonBlock
@@ -413,6 +475,7 @@ copyDir(path.join(ROOT, 'public'), OUT);
 write('admin/config.json', JSON.stringify({
   repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [],
   url: CFG.url, sections: SECTIONS, speechLang: CFG.speechLang || 'en-IN',
+  routine: CFG.routine || [],
 }));
 
 fs.copyFileSync(path.join(ROOT, 'src', 'style.css'), path.join(OUT, 'style.css'));

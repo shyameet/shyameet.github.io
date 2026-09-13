@@ -399,6 +399,43 @@ h2.rule {
   padding: .34rem 0;
 }
 
+/* ---------- a day of tasks, in the listing ----------
+   Same checkbox treatment as inside a post, so ticking one from the section
+   page feels identical to ticking it from the day itself. */
+.taskcard .pt { font-size: 1.25rem; margin-bottom: .35rem; }
+ul.tasks { list-style: none; padding: 0; margin: .7rem 0 0; }
+ul.tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  padding: .34rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 1rem;
+}
+ul.tasks li:last-child { border-bottom: none; }
+ul.tasks input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  width: .85rem; height: .85rem;
+  border: 1.5px solid var(--rule-2);
+  border-radius: 2px;
+  position: relative;
+  top: .12rem;
+}
+ul.tasks input[type="checkbox"]:checked { background: var(--done); border-color: var(--done); }
+ul.tasks input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: .23rem; top: .04rem;
+  width: .22rem; height: .45rem;
+  border: solid var(--paper);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(43deg);
+}
+ul.tasks input[type="checkbox"]:not(:disabled) { cursor: pointer; }
+ul.tasks input[type="checkbox"]:not(:disabled):hover { border-color: var(--accent); }
+ul.tasks li:has(input:checked) { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+
 .progress {
   font-size: .66rem;
   text-transform: uppercase;
@@ -456,6 +493,38 @@ h2.rule {
 .lessonline b {
   font-family: var(--mono); font-style: normal; color: var(--warn);
   font-size: .64rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 500;
+}
+
+/* ---------- as spoken ----------
+   The raw transcript, kept with the post. Folded away so the page still reads
+   cleanly, but there so the edit is checkable against what was actually said —
+   and so there is a record of how the speaking sounded in month one. */
+.asspoken {
+  margin: 2.5rem 0 0;
+  border-top: 1px solid var(--rule);
+  padding-top: 1.2rem;
+}
+.asspoken summary {
+  font-family: var(--mono);
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+.asspoken summary::-webkit-details-marker { display: none; }
+.asspoken summary::before { content: "▸ "; }
+.asspoken[open] summary::before { content: "▾ "; }
+.asspoken summary:hover { color: var(--accent); }
+.asspoken .raw {
+  margin: 1rem 0 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--rule-2);
+  color: var(--muted);
+  font-size: .95rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
 }
 
 /* ---------- pager ---------- */
