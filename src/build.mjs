@@ -21,6 +21,12 @@ const SECTIONS = CFG.sections || [];
 const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
 const FALLBACK = SECTIONS.length ? SECTIONS[SECTIONS.length - 1].id : 'blabber';
 
+/* No personal name on this site by design (2026-09-13) -- the tagline carries
+   the identity instead. Text that technically cannot be blank (browser tab,
+   RSS reader title, og:title) falls back to it. Setting CFG.title back to a
+   real value brings the old name-led header/masthead straight back. */
+const SITE_NAME = CFG.title || CFG.tagline;
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -240,7 +246,7 @@ function sectionStrip(activeId) {
 }
 
 function shell({ title, desc, body, canonical, activeId = '' }) {
-  const t = title ? title + ' · ' + CFG.title : CFG.title;
+  const t = title ? title + ' · ' + SITE_NAME : SITE_NAME;
   const d = desc || CFG.tagline;
   return '<!doctype html>\n<html lang="en">\n<head>\n'
     + '<meta charset="utf-8">\n'
@@ -251,7 +257,7 @@ function shell({ title, desc, body, canonical, activeId = '' }) {
     + '<meta property="og:description" content="' + esc(d) + '">\n'
     + '<meta property="og:type" content="website">\n'
     + (canonical ? '<link rel="canonical" href="' + esc(CFG.url + canonical) + '">\n' : '')
-    + '<link rel="alternate" type="application/rss+xml" title="' + esc(CFG.title) + '" href="/feed.xml">\n'
+    + '<link rel="alternate" type="application/rss+xml" title="' + esc(SITE_NAME) + '" href="/feed.xml">\n'
     + '<link rel="icon" href="/icon.svg" type="image/svg+xml">\n'
     + '<link rel="apple-touch-icon" href="/icon-180.png">\n'
     + '<link rel="manifest" href="/manifest.webmanifest">\n'
@@ -265,7 +271,9 @@ function shell({ title, desc, body, canonical, activeId = '' }) {
     + '<script>(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}})();</script>\n'
     + '</head>\n<body>\n'
     + '<header class="site">\n'
-    + '  <a class="brand" href="/">' + esc(CFG.title) + '</a>\n'
+    /* "Home" is navigation, not an identity -- keeps the flex layout (brand
+       left, nav right) intact without needing a name to show there. */
+    + '  <a class="brand" href="/">' + (CFG.title ? esc(CFG.title) : 'Home') + '</a>\n'
     + '  <nav>\n'
     + '    <a href="/archive/">Archive</a>\n'
     + '    <a href="/search/">Search</a>\n'
@@ -276,8 +284,7 @@ function shell({ title, desc, body, canonical, activeId = '' }) {
     + sectionStrip(activeId) + '\n'
     + '<main>\n' + body + '\n</main>\n'
     + '<footer class="site">\n'
-    + '  <span>' + esc(CFG.author) + '</span>\n'
-    + '  <span class="sep">·</span>\n'
+    + (CFG.author ? '  <span>' + esc(CFG.author) + '</span>\n  <span class="sep">·</span>\n' : '')
     + '  <a href="/archive/">' + posts.length + ' post' + (posts.length === 1 ? '' : 's') + '</a>\n'
     + '  <span class="sep">·</span>\n'
     + '  <a href="/feed.xml">RSS</a>\n'
@@ -345,11 +352,17 @@ const board = '<nav class="contents">'
   }).join('')
   + '</nav>';
 
+/* With no name to lead on, the tagline itself becomes the h1 -- one line,
+   not the name followed by a restatement of it underneath. */
+const masthead = CFG.title
+  ? '<div class="masthead"><h1>' + esc(CFG.title) + '</h1>'
+    + '<p class="sub">' + esc(CFG.tagline) + '</p></div>\n'
+  : '<div class="masthead"><h1 class="taglineh1">' + esc(CFG.tagline) + '</h1></div>\n';
+
 const latest = posts.slice(0, CFG.latestOnHome || 15);
 write('index.html', shell({
   canonical: '/',
-  body: '<div class="masthead"><h1>' + esc(CFG.title) + '</h1>'
-    + '<p class="sub">' + esc(CFG.tagline) + '</p></div>\n'
+  body: masthead
     + board + '\n'
     + '<h2 class="rule">Latest</h2>\n'
     + '<div class="feed">'
@@ -539,7 +552,7 @@ const rssItems = posts.slice(0, 50).map((p) => '  <item>\n'
   + '  </item>').join('\n');
 write('feed.xml', '<?xml version="1.0" encoding="UTF-8"?>\n'
   + '<rss version="2.0"><channel>\n'
-  + '  <title>' + esc(CFG.title) + '</title>\n'
+  + '  <title>' + esc(SITE_NAME) + '</title>\n'
   + '  <link>' + esc(CFG.url) + '</link>\n'
   + '  <description>' + esc(CFG.tagline) + '</description>\n'
   + rssItems + '\n</channel></rss>\n');

@@ -189,6 +189,20 @@ footer.site a:hover { color: var(--accent); }
   max-width: 26rem;
 }
 
+/* When there is no site name, the tagline itself becomes the h1 -- a sentence
+   reads badly at name-sized 2.9rem/line-height:1, so it gets its own scale
+   while keeping the italic-serif voice it always had as the subordinate line. */
+.masthead h1.taglineh1 {
+  font-size: 1.7rem;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 26rem;
+  margin: 0;
+}
+
 /* ---------- contents page ----------
    A table of contents, the way a notebook has one. Name and blurb left,
    count and last-written right, hairline between. */
@@ -640,6 +654,7 @@ mark { background: var(--accent-soft); color: var(--ink); }
   main { padding: 2rem 1.15rem 3rem; }
   footer.site { padding: 1.2rem 1.15rem 2rem; }
   .masthead h1 { font-size: 2.3rem; }
+  .masthead h1.taglineh1 { font-size: 1.45rem; }
   .pagetitle { font-size: 1.75rem; }
   .post h1 { font-size: 1.8rem; }
   .pt { font-size: 1.28rem; }
