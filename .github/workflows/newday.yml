@@ -1,0 +1,44 @@
+name: new day
+
+on:
+  schedule:
+    # 23:30 UTC = 05:00 IST, so the page is waiting before he is awake
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  newday:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: make
+        run: |
+          node src/newday.mjs
+          if [ -n "$(git status --porcelain content/posts)" ]; then
+            echo "created=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "created=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.make.outputs.created == 'yes'
+        run: |
+          git config user.name  "day pages"
+          git config user.email "noreply@github.com"
+          git add content/posts
+          git commit -m "daytasks: $(date -u -d '+5 hours 30 minutes' +%A\ %-d\ %B)"
+          git push
+
+      # A push made with GITHUB_TOKEN does not trigger other workflows, so the
+      # site would never rebuild. Kick the deploy explicitly.
+      - if: steps.make.outputs.created == 'yes'
+        run: gh workflow run "build & deploy" --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
