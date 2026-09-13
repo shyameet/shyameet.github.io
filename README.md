@@ -40,6 +40,11 @@ storage; if one is there, ticking a box rewrites the markdown and commits it. Wi
 token the checkboxes stay `disabled`, which is how marked renders them anyway — so a
 visitor never sees a control that would fail.
 
+**Word sprint**, under the Speaking section: `wordSprint: true` on a section shows a
+New word / countdown / Talk panel, drawn from `public/admin/words.json` via a
+shuffle bag in local storage (no repeat until the list has gone round once). Timer
+expiry auto-stops the mic and pre-fills a title and a `sprint` tag.
+
 ## Posting
 
 **From the phone.** Open <https://shyameet.github.io/admin/>, pick a section, hit

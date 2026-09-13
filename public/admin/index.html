@@ -123,6 +123,37 @@
   }
   .michint.err { color: var(--warn); text-transform: none; letter-spacing: 0; font-size: .78rem; }
 
+  /* Word-sprint: a random word, a countdown, the mic already listening --
+     the pick-a-word-speak-two-minutes drill, run on the same dictation
+     pipeline as Talk. */
+  #sprint {
+    margin: .9rem 0 0; padding: .9rem;
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 4px;
+  }
+  .sprintopts { display: flex; justify-content: center; gap: .4rem; margin-bottom: .7rem; }
+  .sprintopts button {
+    background: none; border: 1px solid var(--rule-2); color: var(--muted);
+    border-radius: 3px; padding: .3rem .7rem; cursor: pointer;
+    font-family: var(--mono); font-size: .64rem; text-transform: uppercase; letter-spacing: .06em;
+  }
+  .sprintopts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+  .sprintword {
+    font-family: var(--serif); font-size: 1.5rem; font-weight: 600;
+    text-align: center; min-height: 1.3em; margin: 0 0 .3rem;
+  }
+  .sprinttimer {
+    font-family: var(--mono); font-size: 1.4rem; text-align: center; color: var(--muted);
+    letter-spacing: .04em; margin: 0 0 .7rem; font-variant-numeric: tabular-nums;
+  }
+  .sprinttimer.hot { color: var(--warn); }
+  .sprintbtn {
+    width: 100%; background: none; color: var(--accent); border: 1.5px solid var(--accent);
+    border-radius: 4px; padding: .75rem 1rem; cursor: pointer;
+    font-family: var(--mono); font-size: .74rem; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .1em;
+  }
+  .sprintbtn[data-running="1"] { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+
   #tasktools { margin: .5rem 0 0; }
   #tasktools button {
     background: none; border: 1px dashed var(--rule-2); color: var(--muted);
@@ -236,6 +267,15 @@
     <p id="interim" class="interim"></p>
     <button type="button" id="mic" class="mic">Talk</button>
     <p id="michint" class="michint"></p>
+    <div id="sprint" hidden>
+      <div class="sprintopts" id="sprintopts">
+        <button type="button" data-dur="120" aria-pressed="true">2 min</button>
+        <button type="button" data-dur="180" aria-pressed="false">3 min</button>
+      </div>
+      <p id="sprintword" class="sprintword"></p>
+      <p id="sprinttimer" class="sprinttimer"></p>
+      <button type="button" id="sprintbtn" class="sprintbtn">New word — speak</button>
+    </div>
     <div id="tasktools" hidden><button type="button" id="addtask">+ task line</button> <button type="button" id="addroutine" hidden>+ routine</button></div>
     <input id="lesson" class="lessonin" placeholder="What I will do instead" autocomplete="off" hidden>
     <div class="chips" id="chips"></div>
@@ -399,6 +439,8 @@
     state.editing = null;
     insertAt = 0;
     if (wantOn) stopMic();
+    if (sprinting) endSprint(false);
+    $('sprintword').textContent = '';
     renderSections();
     renderChips();
     autogrow();
@@ -617,6 +659,96 @@
     }
   }
 
+  /* ---------- word sprint ----------
+     Pick a random word, run a fixed countdown, and start Talk on it -- the
+     pick-a-word-and-speak-for-two-minutes drill. Draws from a shuffle bag in
+     localStorage so no word repeats until the whole list has been used once. */
+  var WORDS = [];
+  var sprinting = false;
+  var sprintTimer = null;
+  var sprintLeft = 0;
+  var sprintDuration = 120;
+
+  function loadWordBag() {
+    var bag;
+    try { bag = JSON.parse(localStorage.getItem('sprint_bag') || '[]'); } catch (e) { bag = []; }
+    if (!bag.length && WORDS.length) {
+      bag = WORDS.slice();
+      for (var i = bag.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+      }
+    }
+    return bag;
+  }
+
+  function nextWord() {
+    var bag = loadWordBag();
+    var word = bag.pop() || '…';
+    try { localStorage.setItem('sprint_bag', JSON.stringify(bag)); } catch (e) {}
+    return word;
+  }
+
+  function fmtClock(s) {
+    var m = Math.floor(s / 60);
+    return m + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function sprintTick() {
+    sprintLeft--;
+    $('sprinttimer').textContent = fmtClock(Math.max(sprintLeft, 0));
+    $('sprinttimer').classList.toggle('hot', sprintLeft > 0 && sprintLeft <= 10);
+    if (sprintLeft <= 0) endSprint(true);
+  }
+
+  function endSprint(completed) {
+    sprinting = false;
+    clearInterval(sprintTimer);
+    sprintTimer = null;
+    $('sprintbtn').textContent = 'New word — speak';
+    $('sprintbtn').dataset.running = '0';
+    if (wantOn) stopMic();
+    if (completed) micHint('Time. Read it back, then Publish.', 'ok');
+  }
+
+  function startSprint() {
+    if (wantOn) stopMic();
+    var word = nextWord();
+    $('sprintword').textContent = word;
+    if (!$('title').value.trim()) {
+      $('title').value = 'Word: ' + word.charAt(0).toUpperCase() + word.slice(1);
+    }
+    if (state.tags.indexOf('sprint') < 0) state.tags.push('sprint');
+    renderChips();
+    saveDraft();
+
+    sprinting = true;
+    sprintLeft = sprintDuration;
+    $('sprinttimer').textContent = fmtClock(sprintLeft);
+    $('sprinttimer').classList.remove('hot');
+    $('sprintbtn').textContent = 'Stop';
+    $('sprintbtn').dataset.running = '1';
+    clearInterval(sprintTimer);
+    sprintTimer = setInterval(sprintTick, 1000);
+
+    if (SR) startMic();
+    else micHint('No built-in dictation here — use the keyboard mic and just talk on the word.', 'err');
+  }
+
+  $('sprintbtn').addEventListener('click', function () {
+    if (sprinting) endSprint(false); else startSprint();
+  });
+
+  $('sprintopts').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-dur]');
+    if (!b || sprinting) return;
+    sprintDuration = +b.dataset.dur;
+    try { localStorage.setItem('sprint_duration', String(sprintDuration)); } catch (err) {}
+    [].slice.call($('sprintopts').querySelectorAll('button')).forEach(function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+  });
+
   /* ---------- sections ---------- */
   function currentSection() {
     for (var i = 0; i < CFG.sections.length; i++) {
@@ -644,6 +776,10 @@
     $('tasktools').hidden = !(sec && sec.tasks);
     $('addroutine').hidden = !(sec && sec.routine
       && routineList(sec.routine === 'weekly' ? 'weeklyRoutine' : 'routine').length);
+
+    var wantsSprint = !!(sec && sec.wordSprint);
+    $('sprint').hidden = !wantsSprint;
+    if (!wantsSprint && sprinting) endSprint(false);
 
     /* A day page is worth nothing if you have to dictate the same five things
        every morning, so a blank one fills itself in. */
@@ -907,6 +1043,19 @@
   $('body').addEventListener('input', function () { autogrow(); saveDraft(); });
 
   /* ---------- boot ---------- */
+  fetch('/admin/words.json')
+    .then(function (r) { return r.json(); })
+    .then(function (w) { WORDS = Array.isArray(w) ? w : []; })
+    .catch(function () {});
+
+  try {
+    var savedDur = +localStorage.getItem('sprint_duration');
+    if (savedDur === 120 || savedDur === 180) sprintDuration = savedDur;
+  } catch (e) {}
+  [].slice.call($('sprintopts').querySelectorAll('button')).forEach(function (b) {
+    b.setAttribute('aria-pressed', String(+b.dataset.dur === sprintDuration));
+  });
+
   fetch('/admin/config.json')
     .then(function (r) { return r.json(); })
     .then(function (c) { CFG = Object.assign(CFG, c); })

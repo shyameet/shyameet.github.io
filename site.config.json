@@ -66,7 +66,8 @@
       "id": "speaking",
       "name": "Speaking",
       "blurb": "Spoken sessions. Thinking out loud, on the record.",
-      "prompt": "Just talk. Tidy it later."
+      "prompt": "Just talk. Or hit New word below and speak on whatever it gives you.",
+      "wordSprint": true
     },
     {
       "id": "vocabulary",
@@ -98,6 +99,10 @@
     },
     {
       "name": "Stretching"
+    },
+    {
+      "name": "Walk (at least an hour)",
+      "target": 7
     }
   ],
   "weeklyRoutine": [

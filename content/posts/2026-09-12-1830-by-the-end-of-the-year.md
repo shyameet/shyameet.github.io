@@ -16,6 +16,23 @@ tags: [health, people, trading]
 
 - [ ] Ten payouts by year end — one from each of the ten platform accounts. Or $10k in payouts total, whichever comes first.
 
+## Trading reach
+
+Right now the whole focus is one thing: make the futures bot robust. Everything else
+waits on that. If it holds up, there is no reason it cannot be replicated across the
+other venues — that is the plan, in order, not five things started at once:
+
+- [ ] Futures bot robust and running smoothly — the current, only focus
+- [ ] Once robust, replicate it on Forex
+- [ ] Replicate it on Crypto
+- [ ] Replicate it on Indian markets
+- [ ] Replicate it on prediction markets
+- [ ] Running on live capital, not just prop-firm funded accounts
+
+All of it before the year is out. That is four months to cover a wide range of markets —
+worth saying plainly that it is ambitious. Futures first. The rest is a copy job once the
+first one actually holds.
+
 ## Doing
 
 - [ ] A solo trip somewhere far, on my own. A trek, or even just my village — the point is going alone.
