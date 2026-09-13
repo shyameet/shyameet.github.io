@@ -642,7 +642,8 @@
     else $('lesson').value = '';
 
     $('tasktools').hidden = !(sec && sec.tasks);
-    $('addroutine').hidden = !(sec && sec.routine && CFG.routine.length);
+    $('addroutine').hidden = !(sec && sec.routine
+      && routineList(sec.routine === 'weekly' ? 'weeklyRoutine' : 'routine').length);
 
     /* A day page is worth nothing if you have to dictate the same five things
        every morning, so a blank one fills itself in. */
@@ -655,8 +656,15 @@
 
   var NL = String.fromCharCode(10);
 
+  /* routine items are "Gym" or { name: "Gym", target: 5 } */
+  function routineList(which) {
+    return (CFG[which] || []).map(function (t) { return (t && t.name) ? t.name : t; });
+  }
+
   function routineMarkdown() {
-    return CFG.routine.map(function (t) { return '- [ ] ' + t; }).join(NL) + NL;
+    var sec = currentSection();
+    var which = (sec && sec.routine === 'weekly') ? 'weeklyRoutine' : 'routine';
+    return routineList(which).map(function (t) { return '- [ ] ' + t; }).join(NL) + NL;
   }
 
   $('addroutine').addEventListener('click', function () {

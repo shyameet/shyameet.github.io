@@ -134,6 +134,32 @@ function taskListHtml(md) {
     + '</ul>';
 }
 
+/* Routine items are either "Gym" or { name: "Gym", target: 5 }. */
+const ROUTINE = (CFG.routine || []).map((r) => (typeof r === 'string' ? { name: r } : r));
+
+/* Monday-based week key, so a week reads Mon..Sun the way a week actually does. */
+function weekStart(iso) {
+  const p = clockParts(iso);
+  if (!p) return null;
+  const d = new Date(Date.UTC(p.y, p.mo - 1, p.d));
+  const dow = d.getUTCDay();                       // 0 = Sunday
+  const back = CFG.weekStartsMonday === false ? dow : (dow + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - back);
+  return d;
+}
+const ymd = (d) => d.toISOString().slice(0, 10);
+
+/* Which routine items got ticked on a given day page. Matched on the task text
+   so a day page can carry extra one-off tasks without confusing the tally. */
+function doneNames(md) {
+  const done = new Set();
+  for (const line of md.split('\n')) {
+    const m = line.match(/^\s*[-*+]\s+\[[xX]\]\s+(.*)$/);
+    if (m) done.add(m[1].trim().toLowerCase());
+  }
+  return done;
+}
+
 function plainText(md) {
   return md
     .replace(/```[\s\S]*?```/g, ' ')
@@ -332,6 +358,65 @@ write('index.html', shell({
     + (posts.length > latest.length ? '<nav class="pager"><span></span><a href="/archive/">everything in the archive →</a></nav>' : ''),
 }));
 
+/* ---------- this week's scoreboard ----------
+   Built from the day pages themselves, so it cannot disagree with them. Shows
+   the week Mon..Sun: what was done, what was missed, and how far off target.
+   The site cannot nag, so the miss has to be visible the moment the page opens. */
+function scoreboard() {
+  const days = (bySection.daytasks || []);
+  if (!days.length || !ROUTINE.length) return '';
+
+  const start = weekStart(days[0].iso);            // week of the most recent day page
+  if (!start) return '';
+  const startKey = ymd(start);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+
+  /* one slot per weekday, holding that day's page if it exists */
+  const slots = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = ymd(d);
+    const page = days.find((p) => {
+      const c = clockParts(p.iso);
+      return c && key === c.y + '-' + String(c.mo).padStart(2, '0') + '-' + String(c.d).padStart(2, '0');
+    });
+    slots.push({ key, page, done: page ? doneNames(page.body) : null });
+  }
+
+  const rows = ROUTINE.map((item) => {
+    const want = item.name.trim().toLowerCase();
+    const marks = slots.map((s) => {
+      if (!s.page) return '<i class="no"></i>';               // no page for that day yet
+      return s.done.has(want) ? '<i class="yes"></i>' : '<i class="miss"></i>';
+    }).join('');
+    const count = slots.filter((s) => s.done && s.done.has(want)).length;
+    const target = item.target;
+    const met = target ? count >= target : null;
+    const tally = target ? count + ' / ' + target : String(count);
+    const note = target
+      ? (met ? 'done' : (target - count) + ' to go')
+      : count + (count === 1 ? ' day' : ' days');
+    return '<li class="' + (met === false ? 'short' : (met ? 'met' : '')) + '">'
+      + '<span class="n">' + esc(item.name) + '</span>'
+      + '<span class="dots">' + marks + '</span>'
+      + '<span class="tally">' + esc(tally) + '</span>'
+      + '<span class="note">' + esc(note) + '</span>'
+      + '</li>';
+  }).join('');
+
+  const label = shortDate(startKey + 'T00:00') + ' – ' + shortDate(ymd(end) + 'T00:00');
+  return '<section class="scoreboard">\n'
+    + '  <h2 class="rule">This week · ' + esc(label) + '</h2>\n'
+    /* same grid and same dot widths as the rows, so the letters sit over them */
+    + '  <div class="wkhead"><span></span><span class="dots">'
+    + ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => '<i>' + d + '</i>').join('')
+    + '</span><span></span></div>\n'
+    + '  <ul class="score">' + rows + '</ul>\n'
+    + '</section>';
+}
+
 /* section pages */
 for (const s of SECTIONS) {
   const ps = bySection[s.id] || [];
@@ -342,6 +427,7 @@ for (const s of SECTIONS) {
     activeId: s.id,
     body: '<h1 class="pagetitle">' + esc(s.name) + '</h1>\n'
       + '<p class="tagline">' + esc(s.blurb) + '</p>\n'
+      + (s.id === 'daytasks' ? scoreboard() + '\n' : '')
       + '<div class="feed">'
       + (ps.map((p) => feedItem(p, false)).join('\n')
         || '<p class="empty">Nothing filed here yet. <a href="/admin/">Add the first one</a>.</p>')

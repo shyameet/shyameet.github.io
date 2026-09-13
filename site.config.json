@@ -27,8 +27,9 @@
       "id": "weektasks",
       "name": "Week Tasks",
       "blurb": "The week's list. Worth re-reading on Sunday.",
-      "prompt": "The handful of things that make this week count.",
-      "tasks": true
+      "prompt": "The repeating ones are filled in. Say what else has to happen this week.",
+      "tasks": true,
+      "routine": "weekly"
     },
     {
       "id": "daily",
@@ -82,10 +83,25 @@
   ],
   "speechLang": "en-IN",
   "routine": [
-    "Face exercises",
-    "Gym",
-    "Walk Rocco",
-    "Reading",
-    "Stretching"
-  ]
+    {
+      "name": "Face exercises"
+    },
+    {
+      "name": "Gym",
+      "target": 5
+    },
+    {
+      "name": "Walk Rocco"
+    },
+    {
+      "name": "Reading"
+    },
+    {
+      "name": "Stretching"
+    }
+  ],
+  "weeklyRoutine": [
+    "Mandir"
+  ],
+  "weekStartsMonday": true
 }
