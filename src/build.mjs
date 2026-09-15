@@ -187,7 +187,15 @@ fs.mkdirSync(POSTS_DIR, { recursive: true });
 const posts = fs.readdirSync(POSTS_DIR)
   .filter((f) => f.endsWith('.md'))
   .map((file) => {
-    const raw = fs.readFileSync(path.join(POSTS_DIR, file), 'utf8');
+    /* Normalized to LF once, here, for every function downstream. Git's
+       core.autocrlf on this machine writes CRLF into the working tree, and a
+       line ending in \r silently breaks any regex capturing "rest of line"
+       with (.*)$  -- \r is a line terminator in JS regex, so . can't consume
+       it and $ won't match past it. doneNames() and taskListHtml() both hit
+       this: doneNames returned an empty set for a correctly-ticked box, and
+       taskListHtml rendered zero items for a six-item list. Fixing it once
+       here beats re-deriving \r?-tolerance in every regex that touches body. */
+    const raw = fs.readFileSync(path.join(POSTS_DIR, file), 'utf8').replace(/\r\n/g, '\n');
     const { data, body } = parseFront(raw);
     const fileDate = (file.match(/^(\d{4}-\d{2}-\d{2})/) || [])[1];
     const iso = data.date || (fileDate ? fileDate + 'T00:00' : '1970-01-01T00:00');
