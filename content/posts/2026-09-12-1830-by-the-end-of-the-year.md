@@ -36,7 +36,7 @@ first one actually holds.
 ## Doing
 
 - [ ] A solo trip somewhere far, on my own. A trek, or even just my village — the point is going alone.
-- [ ] Learn to drive properly
+- [ ] Learn to drive properly — *update 17 Sep: leaving the driving school. Getting the license through it, but learning to actually drive from my father's friend and from Rahul instead — real judgment on the road, not ten more days of classroom eating my schedule.*
 
 ## Talking
 
