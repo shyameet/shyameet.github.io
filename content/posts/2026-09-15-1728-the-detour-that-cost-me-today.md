@@ -1,6 +1,7 @@
 ---
 title: "The detour that cost me today"
 date: 2026-09-15T17:28:00+05:30
+day: 2026-09-14
 section: mistakes
 lesson: "When the plan is done, go home. Finding dinner for two other people at the end of an already-long day is not my job to volunteer for."
 tags: [health]

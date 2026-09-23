@@ -1,6 +1,7 @@
 ---
 title: "Noticed the difference from a year ago"
 date: 2026-09-15T17:26:00+05:30
+day: 2026-09-14
 section: mistakes
 lesson: "This is the six-pack, the posture and the confident-talking goals already on the list — not a new problem, just fresh proof the old ones still matter."
 tags: [health, people]

@@ -10,10 +10,10 @@ Live at **https://shyameet.github.io**
 
 | Page | What it is |
 |---|---|
-| **Today** (`/`) | The date, the day's deity and mantra, the week as rings, today's habits (tappable), focus so far, this week's list, the latest entries |
+| **Today** (`/`) | The date, the day's deity and mantra, the week as rings, today's habits (tappable), yesterday's folded underneath, focus so far, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
-| **Journal** (`/journal/`) | The ten sections as tiles, and the latest entries |
+| **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
 | **Darshan** (`/darshan/`) | All seven medallions, one per weekday |
 | **Write** (`/admin/`) | The phone editor |
 
@@ -51,8 +51,15 @@ Checkboxes and habit circles are **tappable on the live site**, but only for who
 the token. `/admin/` and the site share an origin, so any page can read the token out of
 local storage; if one is there, ticking rewrites the markdown and commits it. Each box
 carries its task's text, and the write finds the line **by that text**, not by position —
-so it still hits the right line after the page was edited elsewhere. With no token the
-boxes stay `disabled`, so a visitor never sees a control that would fail.
+so it still hits the right line after the page was edited elsewhere.
+
+The pages are static, a tick takes a minute or two to rebuild the site, and Pages lets a
+browser keep a page for ten minutes — so the HTML is often older than the truth. For the
+owner, every page with ticks therefore reads the **live files from the GitHub API** and
+shows what they say, and each tick is also remembered locally for half an hour so the next
+page shows it at once. Without a token a tap explains itself instead of doing nothing:
+"This browser isn't connected", linking to `/admin/#setup`. (On an iPhone every Home
+Screen app keeps its own storage, so each one is connected once.)
 
 **Word sprint**, under the Speaking section: `wordSprint: true` on a section shows a
 New word / countdown / Talk panel, drawn from `public/admin/words.json` via a shuffle bag

@@ -1,6 +1,7 @@
 ---
 title: "Kept my word to Rahul again"
 date: 2026-09-15T17:22:00+05:30
+day: 2026-09-14
 section: wins
 tags: [trading]
 ---

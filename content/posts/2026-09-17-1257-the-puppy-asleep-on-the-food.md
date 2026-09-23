@@ -1,6 +1,7 @@
 ---
 title: "The puppy asleep on the food"
 date: 2026-09-17T12:57:00+05:30
+day: 2026-09-16
 section: wins
 tags: [people]
 ---

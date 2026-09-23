@@ -1,6 +1,7 @@
 ---
 title: "Skipped the gym twice in one day"
 date: 2026-09-17T12:59:00+05:30
+day: 2026-09-16
 section: mistakes
 lesson: "If the morning session gets skipped, treat the evening slot as fixed, not optional. \"I'll go later\" is how both get skipped."
 tags: [health]

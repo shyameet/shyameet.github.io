@@ -429,19 +429,56 @@ const readTime = (p) => (p.words > 400 ? '<span>' + Math.ceil(p.words / 220) + '
 const aboutDay = (p) => (p.day && p.day !== keyOf(p.iso)
   ? '<span class="about">about ' + esc(fullDate(p.day)) + '</span>' : '');
 
-function entryCard(p, showSection = true) {
-  const head = p.title
-    ? '<h3 class="etitle"><a href="' + p.url + '">' + esc(p.title) + '</a></h3>'
-    : '<h3 class="etitle untitled"><a href="' + p.url + '">' + esc(p.excerpt.slice(0, 110) || 'Untitled') + '</a></h3>';
-  return '<article class="entry">\n'
-    + '  <div class="emeta">' + (showSection ? secChip(p.section) : '')
-    + '<a class="when" href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + aboutDay(p) + readTime(p) + '</div>\n'
-    + '  ' + head + '\n'
-    + (p.title && p.excerpt ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')
-    + (p.lesson ? '  <p class="lessonline"><b>Instead</b> ' + esc(p.lesson) + '</p>\n' : '')
-    + (p.tags.length ? '  ' + tagList(p.tags) + '\n' : '')
-    + '</article>';
+/* ---------- the journal as a diary ----------
+   One quiet row per entry -- a dot in its section's colour, the title, one
+   line under it -- grouped under the day the entry is ABOUT. Cards with chips,
+   excerpts, lessons and tags all at once read as a jumble; the post page is
+   where the detail lives. */
+const SEC_ORDER = Object.fromEntries(SECTIONS.map((s, i) => [s.id, i]));
+
+function relDay(k) {
+  if (k === TODAY) return 'Today';
+  if (k === addDays(TODAY, -1)) return 'Yesterday';
+  return '';
 }
+
+function entryRow(p, { showSection = true, showDate = false, excerpt = false } = {}) {
+  const sec = SECTION_BY_ID[p.section];
+  const name = p.title || (p.excerpt.length > 90 ? p.excerpt.slice(0, 88) + '…' : p.excerpt) || 'Untitled';
+  const meta = [];
+  if (showSection && sec) meta.push('<b>' + esc(sec.name) + '</b>');
+  if (showDate) meta.push(esc(shortDate(p.day)));
+  const line = p.lesson
+    ? '<span class="eline">Instead: ' + esc(p.lesson) + '</span>'
+    : (excerpt && p.title && p.excerpt ? '<span class="eline">' + esc(p.excerpt) + '</span>' : '');
+  return '<a class="erow sec-' + esc(p.section) + '" href="' + p.url + '">'
+    + '<span class="edot"></span>'
+    + '<span class="ebody"><span class="ename' + (p.title ? '' : ' untitled') + '">' + esc(name) + '</span>'
+    + (meta.length ? '<span class="emeta2">' + meta.join(' · ') + '</span>' : '')
+    + line + '</span></a>';
+}
+
+/* within a day: the Daily story first, then goals, wins, mistakes... */
+const byDiaryOrder = (a, b) => (SEC_ORDER[a.section] - SEC_ORDER[b.section]) || (a.ts - b.ts);
+
+function dayGroups(list, opts = {}) {
+  const groups = new Map();
+  for (const p of list) (groups.get(p.day) || groups.set(p.day, []).get(p.day)).push(p);
+  return [...groups.keys()].sort().reverse().map((k) => {
+    const rel = relDay(k);
+    return '<section class="dgroup"><h3 class="dghead">' + (rel ? '<b>' + rel + '</b>' : '')
+      + '<span>' + esc(fullDate(k)) + '</span></h3>'
+      + '<div class="rows">' + groups.get(k).sort(byDiaryOrder).map((p) => entryRow(p, opts)).join('') + '</div></section>';
+  }).join('');
+}
+
+/* the newest N days that have any writing */
+function recentDays(list, n) {
+  const days = [...new Set(list.map((p) => p.day))].sort().reverse().slice(0, n);
+  return list.filter((p) => days.includes(p.day));
+}
+
+const rowList = (list, opts) => '<div class="rows">' + list.map((p) => entryRow(p, opts)).join('') + '</div>';
 
 /* a day (or week) of tasks, as a card whose boxes can be ticked in place */
 function taskCard(p, heading, { link = true, cls = '' } = {}) {
@@ -453,6 +490,20 @@ function taskCard(p, heading, { link = true, cls = '' } = {}) {
     + '  <div class="bar"><i data-bar style="width:' + Math.round(pct * 100) + '%"></i></div>\n'
     + '  ' + habitList(p.body) + '\n'
     + '</section>';
+}
+
+/* Yesterday, folded under today: the morning is when the evening's ticks get
+   remembered, so they should be one tap away rather than a page away. */
+function yesterdayCard(p) {
+  const t = p.tasks;
+  const pct = t.total ? t.done / t.total : 0;
+  return '<details class="card taskcard yday" data-file="content/posts/' + esc(p.file) + '">\n'
+    + '  <summary class="cardhead"><h3>Yesterday <span class="muted">· ' + esc(fullDate(p.iso)) + '</span></h3>'
+    + '<span class="count" data-count>' + t.done + ' / ' + t.total + '</span></summary>\n'
+    + '  <div class="bar"><i data-bar style="width:' + Math.round(pct * 100) + '%"></i></div>\n'
+    + '  ' + habitList(p.body) + '\n'
+    + '  <p class="muted small"><a href="' + p.url + '">Open the whole day →</a></p>\n'
+    + '</details>';
 }
 
 function medal(k, size = '') {
@@ -479,7 +530,8 @@ function weekStrip(k) {
     const inner = '<span class="wl">' + WEEK_LETTERS[i] + '</span>'
       + '<span class="wr">' + ring(pct, 44, 3.6) + '<span class="wn">' + +key.slice(8) + '</span></span>';
     return page
-      ? '<a class="' + cls + '" href="' + page.url + '" title="' + esc(fullDate(key)) + ' — ' + t.done + ' of ' + t.total + '">' + inner + '</a>'
+      ? '<a class="' + cls + '" href="' + page.url + '" data-ring="content/posts/' + esc(page.file) + '"'
+        + ' title="' + esc(fullDate(key)) + ' — ' + t.done + ' of ' + t.total + '">' + inner + '</a>'
       : '<span class="' + cls + '">' + inner + '</span>';
   }).join('') + '</nav>';
 }
@@ -511,7 +563,7 @@ function habitGrid(k) {
       ? (count >= target ? 'done' : (target - count) + ' to go')
       : (st ? st + ' day' + (st === 1 ? '' : 's') + ' in a row' : '');
     return '<div class="hg-row"><span class="hg-name">' + esc(item.name) + '<small>' + esc(sub) + '</small></span>'
-      + cells + '<span class="hg-sum">' + sum + '</span></div>';
+      + cells + '<span class="hg-sum" data-target="' + (target || '') + '">' + sum + '</span></div>';
   }).join('');
   const focusRow = '<div class="hg-row hg-focus"><span class="hg-name">Focus<small>hours, from the timer</small></span>'
     + keys.map((key) => {
@@ -601,7 +653,7 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
   const page = DAY_PAGES.get(k);
   const d = deityFor(k);
   const week = WEEK_PAGES.find((p) => weekStartKey(keyOf(p.iso)) === weekStartKey(k));
-  const latest = journal.slice(0, 6);
+  const yday = DAY_PAGES.get(addDays(k, -1));
   const body = '<section class="hero">\n'
     + '  <div class="herotext">\n'
     + '    <p class="kicker">' + esc(VAAR[weekdayOf(k)]) + ' <span lang="hi">' + VAAR_DEVA[weekdayOf(k)] + '</span></p>\n'
@@ -614,10 +666,11 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
     + (page
       ? taskCard(page, 'Today', { link: false, cls: 'today' })
       : '<section class="card"><p class="muted">Today\'s page appears at 5am. <a href="/admin/">Make it now</a> — pick Day Tasks and the routine fills itself in.</p></section>')
-    + '\n' + focusCard(k) + '\n'
+    + '\n' + (yday ? yesterdayCard(yday) + '\n' : '')
+    + focusCard(k) + '\n'
     + (week ? taskCard(week, 'This week') + '\n' : '')
-    + '<div class="rowhead"><h2>From the journal</h2><a href="/journal/">All sections →</a></div>\n'
-    + '<div class="entries">' + (latest.map((p) => entryCard(p)).join('\n') || '<p class="muted">Nothing written yet.</p>') + '</div>\n'
+    + '<div class="rowhead"><h2>Journal</h2><a href="/journal/">Everything →</a></div>\n'
+    + (journal.length ? dayGroups(recentDays(journal, 3)) : '<p class="muted">Nothing written yet.</p>') + '\n'
     + focusEmbed();
   write('index.html', shell({
     canonical: '/', nav: 'today', cls: 'home',
@@ -635,7 +688,7 @@ write('habits/index.html', shell({
     + '<div class="rowhead"><h2>Last four weeks</h2></div>\n'
     + '<section class="card heats">' + heatmaps(TODAY)
     + '<p class="legend"><i class="yes"></i> done <i class="no"></i> missed <i class="off"></i> not tracked</p></section>\n'
-    + '<div class="rowhead"><h2>Every day</h2><a href="/s/daytasks/">All day pages →</a></div>\n'
+    + '<div class="rowhead"><h2>Every day</h2><span><a href="/s/weektasks/">Week lists</a> · <a href="/s/daytasks/">All days →</a></span></div>\n'
     + '<div class="stack">' + (bySection.daytasks || []).slice(0, 7).map((p) => taskCard(p, fullDate(p.iso))).join('\n') + '</div>',
 }));
 
@@ -690,23 +743,17 @@ write('focus/index.html', shell({
     + focusEmbed(),
 }));
 
-/* ---------- journal ---------- */
+/* ---------- journal: a diary, newest day first ---------- */
 {
-  const tiles = SECTIONS.map((s) => {
-    const ps = bySection[s.id] || [];
-    return '<a class="tile sec-' + s.id + '" href="/s/' + s.id + '/">'
-      + '<span class="tname">' + esc(s.name) + '</span>'
-      + '<span class="tcount">' + ps.length + '</span>'
-      + '<span class="tblurb">' + esc(s.blurb) + '</span>'
-      + '<span class="tlast">' + (ps.length ? 'last ' + esc(shortDate(ps[0].iso)) : 'empty') + '</span>'
-      + '</a>';
-  }).join('');
+  const chips = SECTIONS.filter((s) => !s.tasks).map((s) => '<a class="chip sec-' + s.id + '" href="/s/' + s.id + '/">'
+    + esc(s.name) + ' <b>' + (bySection[s.id] || []).length + '</b></a>').join('');
+  const shown = recentDays(journal, 14);
   write('journal/index.html', shell({
     title: 'Journal', canonical: '/journal/', nav: 'journal',
-    body: '<div class="pagehead"><h1>Journal</h1><p class="muted">Ten fixed sections. Everything said out loud lands in one of them.</p></div>\n'
-      + '<nav class="tiles">' + tiles + '</nav>\n'
-      + '<div class="rowhead"><h2>Latest</h2><a href="/archive/">Archive →</a></div>\n'
-      + '<div class="entries">' + journal.slice(0, 20).map((p) => entryCard(p)).join('\n') + '</div>',
+    body: '<div class="pagehead"><h1>Journal</h1><p class="muted">Everything written, under the day it is about.</p></div>\n'
+      + '<nav class="secchips" aria-label="Sections">' + chips + '</nav>\n'
+      + dayGroups(shown) + '\n'
+      + (journal.length > shown.length ? '<p class="more"><a href="/archive/">Older days are in the archive →</a></p>' : ''),
   }));
 }
 
@@ -728,9 +775,10 @@ write('darshan/index.html', shell({
 /* ---------- section pages ---------- */
 for (const s of SECTIONS) {
   const ps = bySection[s.id] || [];
+  /* one section read end to end: the date and a line of each, newest first */
   const list = s.tasks
     ? '<div class="stack">' + ps.map((p) => taskCard(p, p.title || fullDate(p.iso))).join('\n') + '</div>'
-    : '<div class="entries">' + ps.map((p) => entryCard(p, false)).join('\n') + '</div>';
+    : rowList(ps, { showSection: false, showDate: true, excerpt: true });
   write('s/' + s.id + '/index.html', shell({
     title: s.name, desc: s.blurb, canonical: '/s/' + s.id + '/',
     nav: s.tasks ? 'habits' : 'journal',
@@ -777,8 +825,8 @@ for (const p of posts) {
       + (f && f.sec ? fmtDur(f.sec) + ' · ' + f.n + ' block' + (f.n === 1 ? '' : 's') : 'none logged') + '</span></div>'
       + focusTimeline(k) + '</section>\n'
       + (notes ? '<section class="card prose">' + marked.parse(notes) + '</section>\n' : '')
-      + (about.length ? '<div class="rowhead"><h2>Written about this day</h2></div><div class="entries">'
-        + about.map((q) => entryCard(q)).join('\n') + '</div>\n' : '')
+      + (about.length ? '<div class="rowhead"><h2>Written about this day</h2></div>'
+        + rowList(about.sort(byDiaryOrder)) + '\n' : '')
       + '</article>\n' + pager;
   } else if (sec && sec.tasks) {
     body = '<div class="pagehead"><p class="kicker">' + secChip(p.section) + '</p><h1>' + esc(p.title || fullDate(p.iso)) + '</h1>'
@@ -818,7 +866,7 @@ for (const [t, ps] of Object.entries(byTag)) {
   write('tags/' + t + '/index.html', shell({
     title: '#' + t, canonical: '/tags/' + t + '/', nav: 'journal',
     body: '<div class="pagehead"><h1>#' + esc(t) + '</h1><p class="muted">' + ps.length + ' entr' + (ps.length === 1 ? 'y' : 'ies') + '</p></div>\n'
-      + '<div class="entries">' + ps.map((p) => entryCard(p)).join('\n') + '</div>',
+      + rowList(ps, { showDate: true }),
   }));
 }
 
@@ -849,7 +897,7 @@ write('search/index.html', shell({
   title: 'Search', canonical: '/search/',
   body: '<div class="pagehead"><h1>Search</h1><p class="muted">Every word of every entry. Section names work too.</p></div>\n'
     + '<input id="q" type="search" placeholder="Type to search…" autocomplete="off" autofocus>\n'
-    + '<div id="results" class="entries"></div>',
+    + '<div id="results"></div>',
 }));
 write('search.json', JSON.stringify(posts.map((p) => ({
   t: p.title || (isTaskSection(p.section) ? fullDate(p.iso) : ''), u: p.url, d: fmtDate(p.iso, false), g: p.tags,

@@ -16,240 +16,234 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  /* same sandalwood / Kashi-night palette as the site (src/style.css);
-     "mono" is the label face here, and it is the site's sans now */
+  /* The same sandalwood / Kashi-night look as the site (src/style.css):
+     cards, round buttons, one colour per section. Speaking is the main way
+     in, so Talk is the biggest thing on the screen. */
   :root {
-    --paper: #f6efe2; --paper-2: #fffaf2; --rule: #e9dcc5; --rule-2: #d6c3a3;
-    --ink: #2a2118; --muted: #86745e; --accent: #c65a1e; --warn: #b3432f;
+    --paper: #f6efe2; --paper-2: #fffaf2; --well: #f0e6d3; --rule: #e9dcc5; --rule-2: #d6c3a3;
+    --ink: #2a2118; --ink-2: #4d4031; --muted: #86745e; --accent: #c65a1e; --warn: #b3432f;
     --ok: #4d7c38; --bad: #b3432f;
+    --shadow: 0 1px 0 rgba(80, 50, 10, .03), 0 10px 26px -18px rgba(80, 50, 10, .35);
     --serif: "Newsreader", Georgia, serif;
-    --mono: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --deva: "Tiro Devanagari Sanskrit", "Nirmala UI", serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #10111a; --paper-2: #181a27; --rule: #2a2d42; --rule-2: #3b3f5a;
-      --ink: #f1e9d8; --muted: #9c96aa; --accent: #f08b4c; --warn: #e57a63;
+      --paper: #10111a; --paper-2: #181a27; --well: #222437; --rule: #2a2d42; --rule-2: #3b3f5a;
+      --ink: #f1e9d8; --ink-2: #d6cdbb; --muted: #9c96aa; --accent: #f08b4c; --warn: #e57a63;
       --ok: #8cc275; --bad: #e57a63;
+      --shadow: 0 1px 0 rgba(0, 0, 0, .2), 0 12px 28px -20px rgba(0, 0, 0, .8);
       color-scheme: dark;
     }
   }
-  header .home {
-    font-family: "Tiro Devanagari Sanskrit", "Nirmala UI", serif; font-size: 1.35rem; line-height: 1;
-    color: var(--accent); text-decoration: none; margin-right: -.2rem;
+  .sec-daytasks { --sc: #c65a1e; }  .sec-weektasks { --sc: #b06d10; }
+  .sec-daily { --sc: #4659a8; }     .sec-goals { --sc: #9a6a04; }
+  .sec-feynman { --sc: #17766f; }   .sec-wins { --sc: #3f7a2e; }
+  .sec-mistakes { --sc: #b23b2a; }  .sec-speaking { --sc: #7a47ab; }
+  .sec-vocabulary { --sc: #2b6aa2; } .sec-blabber { --sc: #7a6a55; }
+  @media (prefers-color-scheme: dark) {
+    .sec-daytasks { --sc: #f08b4c; }  .sec-weektasks { --sc: #e6a64a; }
+    .sec-daily { --sc: #93a5f5; }     .sec-goals { --sc: #e3bb57; }
+    .sec-feynman { --sc: #5cc7bb; }   .sec-wins { --sc: #8cc275; }
+    .sec-mistakes { --sc: #ec8672; }  .sec-speaking { --sc: #bc95ea; }
+    .sec-vocabulary { --sc: #7fb3e6; } .sec-blabber { --sc: #bfae94; }
   }
+
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* the script hides whole controls with the hidden attribute; a display rule
+     further down (#tasktools is flex) must never win over it */
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--paper); color: var(--ink);
-    font-family: var(--serif); font-size: 17px; line-height: 1.55;
+    font-family: var(--sans); font-size: 16px; line-height: 1.5;
     display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
+  a { color: var(--accent); }
 
   header {
-    display: flex; align-items: baseline; gap: .9rem;
-    padding: .9rem 1rem .7rem; border-bottom: 1px solid var(--rule); flex: none;
+    display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 10px 14px; background: var(--paper);
   }
-  header .title { font-weight: 600; font-size: 1.15rem; letter-spacing: -.02em; }
+  header .home {
+    font-family: var(--deva); font-size: 24px; line-height: 1; color: var(--accent); text-decoration: none;
+    width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  header .title { font-family: var(--serif); font-weight: 500; font-size: 22px; letter-spacing: -.02em; }
   header .spacer { flex: 1; }
+  .tabs { display: flex; gap: 2px; padding: 3px; border-radius: 99px; background: var(--well); }
   .tabbtn {
-    background: none; border: none; color: var(--muted); cursor: pointer;
-    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
-    letter-spacing: .09em; padding: .2rem 0;
+    border: 0; background: none; color: var(--muted); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 8px 12px; border-radius: 99px;
   }
-  .tabbtn[aria-selected="true"] { color: var(--accent); border-bottom: 2px solid var(--accent); }
-  #dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
+  .tabbtn[aria-selected="true"] { background: var(--paper-2); color: var(--ink); box-shadow: var(--shadow); }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
   #dot.on { background: var(--ok); }
 
-  main { flex: 1; overflow-y: auto; padding: 1rem; }
+  main { flex: 1; overflow-y: auto; padding: 4px 14px 14px; }
   .view[hidden] { display: none; }
   /* full-height column so the publish bar drops to the bottom of a short page
      (margin-top:auto) and still follows a long one (position:sticky) */
   #view-new:not([hidden]) { display: flex; flex-direction: column; min-height: 100%; }
 
-  input, textarea, button, select { font-family: inherit; font-size: 17px; }
+  input, textarea, button, select { font-family: inherit; font-size: 16px; }
 
-  /* ten sections, four to a row -- every one reachable with one thumb */
-  .secpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; margin-bottom: 1rem; }
+  /* ten sections as coloured chips -- every one reachable with one thumb */
+  .secpick { display: flex; flex-wrap: wrap; gap: 7px; margin: 4px 0 12px; }
   .secpick button {
-    background: none; border: 1px solid var(--rule-2); color: var(--muted);
-    border-radius: 3px; padding: .5rem .15rem; cursor: pointer;
-    font-family: var(--mono); font-size: .6rem; text-transform: uppercase;
-    letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border: 1.5px solid color-mix(in srgb, var(--sc, var(--muted)) 35%, transparent);
+    background: color-mix(in srgb, var(--sc, var(--muted)) 9%, transparent);
+    color: var(--sc, var(--muted)); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 9px 12px; border-radius: 99px;
   }
-  .secpick button[aria-pressed="true"] {
-    background: var(--accent); border-color: var(--accent); color: var(--paper); font-weight: 500;
-  }
+  .secpick button[aria-pressed="true"] { background: var(--sc); border-color: var(--sc); color: #fff; }
 
+  .compose {
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 18px;
+    box-shadow: var(--shadow); padding: 14px 16px 6px;
+  }
   #title {
     width: 100%; background: none; border: none; color: var(--ink);
-    font-size: 1.45rem; font-weight: 500; letter-spacing: -.025em;
-    padding: .3rem 0; margin-bottom: .1rem;
+    font-family: var(--serif); font-size: 24px; font-weight: 500; letter-spacing: -.02em;
+    padding: 2px 0 6px; border-bottom: 1px solid var(--rule);
   }
   #title::placeholder { color: var(--muted); font-weight: 400; }
   #title:focus { outline: none; }
-
   #body {
-    width: 100%; min-height: 42vh; background: none; border: none;
-    color: var(--ink); font-size: 1.05rem; line-height: 1.65;
-    padding: .3rem 0; resize: none;
+    width: 100%; min-height: 38vh; background: none; border: none;
+    color: var(--ink); font-family: var(--serif); font-size: 18.5px; line-height: 1.65;
+    padding: 10px 0; resize: none;
   }
   #body:focus { outline: none; }
   #body::placeholder { color: var(--muted); font-style: italic; }
+  /* what the recogniser thinks it heard but has not committed yet */
+  .interim { margin: 0 0 6px; min-height: 1.3em; color: var(--muted); font-family: var(--serif); font-style: italic; font-size: 16px; }
 
-  /* Speaking is the primary way in, so the mic is the biggest control on the
-     screen -- bigger than Publish. */
   .mic {
-    width: 100%;
-    background: var(--accent); color: var(--paper);
-    border: none; border-radius: 4px; padding: .95rem 1rem; cursor: pointer;
-    font-family: var(--mono); font-size: .78rem; font-weight: 500;
-    text-transform: uppercase; letter-spacing: .12em;
+    width: 100%; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--accent); color: #fff; border: none; border-radius: 99px;
+    padding: 17px 20px; cursor: pointer; font: 700 17px/1 var(--sans);
+    box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+  .mic::before {
+    content: ""; width: 20px; height: 20px; flex: none; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Crect x='9' y='2.8' width='6' height='11.4' rx='3'/%3E%3Cpath d='M5.6 11.2a6.4 6.4 0 0 0 12.8 0M12 17.6v3.6'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Crect x='9' y='2.8' width='6' height='11.4' rx='3'/%3E%3Cpath d='M5.6 11.2a6.4 6.4 0 0 0 12.8 0M12 17.6v3.6'/%3E%3C/svg%3E") center / contain no-repeat;
   }
   .mic[data-on="1"] { background: var(--warn); }
   .mic[data-on="1"]::before {
-    content: ""; display: inline-block; width: .5rem; height: .5rem;
-    border-radius: 50%; background: var(--paper);
-    margin-right: .55rem; vertical-align: middle;
+    -webkit-mask: none; mask: none; width: 10px; height: 10px; border-radius: 50%;
     animation: pulse 1.1s ease-in-out infinite;
   }
-  .mic:disabled { opacity: .4; cursor: default; }
+  .mic:disabled { opacity: .45; cursor: default; box-shadow: none; }
   @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
   @media (prefers-reduced-motion: reduce) { .mic[data-on="1"]::before { animation: none } }
+  .michint { margin: 8px 2px 0; min-height: 1em; font-size: 12.5px; color: var(--muted); text-align: center; }
+  .michint.err { color: var(--warn); font-size: 13.5px; }
+  .michint.ok { color: var(--ok); }
 
-  /* what the recogniser thinks it heard but has not committed yet */
-  .interim {
-    margin: 0 0 .5rem; min-height: 1.4em;
-    color: var(--muted); font-style: italic; font-size: 1rem; line-height: 1.5;
-  }
-  .michint {
-    margin: .45rem 0 0; min-height: 1em;
-    font-family: var(--mono); font-size: .62rem; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .07em;
-  }
-  .michint.err { color: var(--warn); text-transform: none; letter-spacing: 0; font-size: .78rem; }
-
-  /* Word-sprint: a random word, a countdown, the mic already listening --
-     the pick-a-word-speak-two-minutes drill, run on the same dictation
-     pipeline as Talk. */
+  /* Word sprint: a random word, a countdown, the mic already listening */
   #sprint {
-    margin: .9rem 0 0; padding: .9rem;
-    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 4px;
+    margin: 12px 0 0; padding: 14px; text-align: center;
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 18px; box-shadow: var(--shadow);
   }
-  .sprintopts { display: flex; justify-content: center; gap: .4rem; margin-bottom: .7rem; }
+  .sprintopts { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
   .sprintopts button {
-    background: none; border: 1px solid var(--rule-2); color: var(--muted);
-    border-radius: 3px; padding: .3rem .7rem; cursor: pointer;
-    font-family: var(--mono); font-size: .64rem; text-transform: uppercase; letter-spacing: .06em;
+    border: 1.5px solid var(--rule-2); background: none; color: var(--muted); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 8px 12px; border-radius: 99px;
   }
-  .sprintopts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--paper); }
-  .sprintword {
-    font-family: var(--serif); font-size: 1.5rem; font-weight: 600;
-    text-align: center; min-height: 1.3em; margin: 0 0 .3rem;
-  }
-  .sprinttimer {
-    font-family: var(--mono); font-size: 1.4rem; text-align: center; color: var(--muted);
-    letter-spacing: .04em; margin: 0 0 .7rem; font-variant-numeric: tabular-nums;
-  }
+  .sprintopts button[aria-pressed="true"] { background: #7a47ab; border-color: #7a47ab; color: #fff; }
+  .sprintword { font-family: var(--serif); font-size: 28px; font-weight: 500; min-height: 1.2em; margin: 0 0 2px; }
+  .sprinttimer { font-size: 26px; font-weight: 700; color: var(--muted); margin: 0 0 10px; font-variant-numeric: tabular-nums; }
   .sprinttimer.hot { color: var(--warn); }
   .sprintbtn {
-    width: 100%; background: none; color: var(--accent); border: 1.5px solid var(--accent);
-    border-radius: 4px; padding: .75rem 1rem; cursor: pointer;
-    font-family: var(--mono); font-size: .74rem; font-weight: 500;
-    text-transform: uppercase; letter-spacing: .1em;
+    width: 100%; background: none; color: #7a47ab; border: 1.5px solid #7a47ab;
+    border-radius: 99px; padding: 13px 16px; cursor: pointer; font: 700 15px/1 var(--sans);
   }
-  .sprintbtn[data-running="1"] { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .sprintbtn[data-running="1"] { background: var(--warn); border-color: var(--warn); color: #fff; }
 
-  #tasktools { margin: .5rem 0 0; }
+  #tasktools { margin: 12px 0 0; display: flex; gap: 8px; }
   #tasktools button {
-    background: none; border: 1px dashed var(--rule-2); color: var(--muted);
-    border-radius: 3px; padding: .35rem .8rem; cursor: pointer;
-    font-family: var(--mono); font-size: .64rem; text-transform: uppercase; letter-spacing: .07em;
+    background: none; border: 1.5px dashed var(--rule-2); color: var(--muted); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 9px 14px; border-radius: 99px;
   }
   #tasktools button:hover { color: var(--accent); border-color: var(--accent); }
 
   .lessonin {
-    width: 100%; background: none;
-    border: none; border-left: 2px solid var(--warn);
-    color: var(--ink); padding: .55rem .8rem; margin-top: .9rem; font-size: 1rem;
+    width: 100%; margin-top: 12px; padding: 12px 14px; font-size: 16px;
+    background: color-mix(in srgb, var(--warn) 7%, var(--paper-2)); color: var(--ink);
+    border: 0; border-left: 3px solid var(--warn); border-radius: 4px 14px 14px 4px;
   }
-  .lessonin::placeholder { color: var(--warn); opacity: .75; font-style: italic; }
-  .lessonin:focus { outline: none; background: rgba(156,61,46,.06); }
+  .lessonin::placeholder { color: var(--warn); opacity: .8; font-style: italic; }
+  .lessonin:focus { outline: none; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
   .chip {
-    font-family: var(--mono); font-size: .62rem; text-transform: uppercase;
-    letter-spacing: .08em; color: var(--muted); background: none; border: none;
-    border-bottom: 1px solid var(--rule-2); padding: 0 0 2px; cursor: pointer;
+    border: 1.5px solid var(--rule-2); background: none; color: var(--muted); cursor: pointer;
+    font: 600 13px/1 var(--sans); padding: 7px 11px; border-radius: 99px;
   }
-  .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); font-weight: 500; }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
   .chip.add { border-style: dashed; }
 
   .bar {
-    position: sticky; bottom: 0; display: flex; align-items: center; gap: .7rem;
-    background: var(--paper); border-top: 1px solid var(--rule);
-    padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom));
-    margin: auto -1rem -1rem; /* top:auto drops it to the bottom of a short page */
+    position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--rule);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    margin: auto -14px -14px; /* top:auto drops it to the bottom of a short page */
   }
-  .bar .info {
-    flex: 1; min-width: 0; font-family: var(--mono); font-size: .62rem;
-    color: var(--muted); text-transform: uppercase; letter-spacing: .07em;
-  }
+  .bar .info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   button.primary {
-    background: var(--accent); color: var(--paper); border: none; border-radius: 3px;
-    font-family: var(--mono); font-size: .72rem; text-transform: uppercase;
-    letter-spacing: .09em; font-weight: 500; padding: .7rem 1.2rem; cursor: pointer;
+    background: var(--accent); color: #fff; border: none; border-radius: 99px;
+    font: 700 15px/1 var(--sans); padding: 13px 20px; cursor: pointer;
   }
-  button.primary:disabled { opacity: .4; cursor: default; }
+  button.primary:disabled { opacity: .45; cursor: default; }
   button.ghost {
-    background: none; color: var(--muted); border: 1px solid var(--rule-2);
-    border-radius: 3px; padding: .65rem .85rem; cursor: pointer;
-    font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .07em;
+    background: none; color: var(--muted); border: 1.5px solid var(--rule-2); border-radius: 99px;
+    font: 700 14px/1 var(--sans); padding: 12px 15px; cursor: pointer;
   }
   button.ghost.danger:hover { color: var(--bad); border-color: var(--bad); }
 
-  .note { font-size: .92rem; color: var(--muted); }
+  .note { font-size: 15px; color: var(--muted); }
   .note a { color: var(--accent); }
-  .msg { padding: .7rem .9rem; font-size: .93rem; margin-bottom: 1rem; border-left: 2px solid; }
-  .msg.err { background: rgba(156,61,46,.07); border-color: var(--bad); }
-  .msg.ok { background: rgba(90,125,82,.09); border-color: var(--ok); }
-  .msg a { color: var(--accent); }
+  .msg { padding: 12px 14px; font-size: 14.5px; margin-bottom: 12px; border-radius: 14px; }
+  .msg.err { background: color-mix(in srgb, var(--bad) 10%, transparent); color: var(--ink); }
+  .msg.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ink); }
+  .msg a { color: var(--accent); font-weight: 700; }
 
+  .card {
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 18px;
+    box-shadow: var(--shadow); padding: 16px; margin: 0 0 14px;
+  }
   #token {
-    width: 100%; background: var(--paper-2); border: 1px solid var(--rule-2);
-    border-radius: 3px; color: var(--ink); padding: .7rem .8rem;
-    font-family: var(--mono); font-size: 14px; margin: .7rem 0;
+    width: 100%; background: var(--paper); border: 1.5px solid var(--rule-2);
+    border-radius: 12px; color: var(--ink); padding: 12px 14px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; margin: 10px 0;
   }
-  .diagh {
-    font-family: var(--mono); font-size: .66rem; text-transform: uppercase;
-    letter-spacing: .09em; color: var(--muted); font-weight: 500;
-    margin: 2rem 0 .4rem; border-top: 1px solid var(--rule); padding-top: 1.2rem;
-  }
+  .diagh { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
   .diag {
-    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 3px;
-    padding: .7rem .8rem; font-family: var(--mono); font-size: 11px;
-    line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0 0 .6rem;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 12px;
+    padding: 10px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0 0 10px;
   }
-  ol.steps { padding-left: 1.2rem; font-size: .95rem; color: var(--muted); line-height: 1.75; }
-  ol.steps code { font-family: var(--mono); font-size: .82em; color: var(--ink); }
+  ol.steps { padding-left: 1.2rem; font-size: 15px; color: var(--ink-2); line-height: 1.8; }
+  ol.steps code { font-size: .85em; color: var(--ink); }
 
   ul.posts { list-style: none; padding: 0; margin: 0; }
-  ul.posts li {
-    display: flex; align-items: center; gap: .8rem;
-    padding: .8rem 0; border-bottom: 1px solid var(--rule);
-  }
+  ul.posts li { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-top: 1px solid var(--rule); }
+  ul.posts li:first-child { border-top: 0; }
   ul.posts .who { flex: 1; min-width: 0; }
-  ul.posts .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  ul.posts .dt {
-    font-family: var(--mono); font-size: .62rem; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .07em;
-  }
+  ul.posts .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); font-size: 17px; }
+  ul.posts .dt { font-size: 12px; color: var(--muted); }
   ul.posts button {
-    background: none; border: 1px solid var(--rule-2); color: var(--muted);
-    border-radius: 3px; padding: .35rem .75rem; cursor: pointer;
-    font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing: .07em;
+    background: none; border: 1.5px solid var(--rule-2); color: var(--ink-2); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 8px 13px; border-radius: 99px;
   }
 </style>
 </head>
@@ -259,9 +253,11 @@
   <a class="home" href="/" title="Back to Today" lang="sa">ॐ</a>
   <span class="title">Write</span>
   <span class="spacer"></span>
-  <button class="tabbtn" id="tab-new" aria-selected="true">New</button>
-  <button class="tabbtn" id="tab-recent" aria-selected="false">Recent</button>
-  <button class="tabbtn" id="tab-setup" aria-selected="false">⚙</button>
+  <div class="tabs">
+    <button class="tabbtn" id="tab-new" aria-selected="true">New</button>
+    <button class="tabbtn" id="tab-recent" aria-selected="false">Recent</button>
+    <button class="tabbtn" id="tab-setup" aria-selected="false" aria-label="Setup">⚙</button>
+  </div>
   <span id="dot" title="not connected"></span>
 </header>
 
@@ -270,9 +266,11 @@
   <section class="view" id="view-new">
     <div id="msg"></div>
     <div class="secpick" id="secpick"></div>
-    <input id="title" placeholder="Title — optional" autocomplete="off">
-    <textarea id="body" placeholder="Hit Talk and start speaking."></textarea>
-    <p id="interim" class="interim"></p>
+    <div class="compose">
+      <input id="title" placeholder="Title — optional" autocomplete="off">
+      <textarea id="body" placeholder="Hit Talk and start speaking."></textarea>
+      <p id="interim" class="interim"></p>
+    </div>
     <button type="button" id="mic" class="mic">Talk</button>
     <p id="michint" class="michint"></p>
     <div id="sprint" hidden>
@@ -297,13 +295,14 @@
   <!-- ---------- recent ---------- -->
   <section class="view" id="view-recent" hidden>
     <p class="note" id="recent-note">Loading…</p>
-    <ul class="posts" id="recent-list"></ul>
+    <div class="card"><ul class="posts" id="recent-list"></ul></div>
   </section>
 
   <!-- ---------- setup ---------- -->
   <section class="view" id="view-setup" hidden>
     <div id="setup-msg"></div>
-    <p class="note">
+    <div class="card">
+    <p class="note" style="margin-top:0">
       This editor talks straight to GitHub from your phone. The token is stored only in
       this browser's local storage — it is never in the site's code and never sent anywhere
       except <code>api.github.com</code>.
@@ -319,11 +318,14 @@
       <button class="primary" id="connect">Connect</button>
       <button class="ghost danger" id="forget">Forget token</button>
     </div>
+    </div>
+    <div class="card">
     <h3 class="diagh">Dictation diagnostics</h3>
     <p class="note">If the mic misbehaves, tap Talk, speak a sentence, then come back here
     and send me this.</p>
     <pre id="diag" class="diag">tap refresh</pre>
     <button class="ghost" id="diagrefresh">Refresh</button>
+    </div>
 
     <p class="note" style="margin-top:1.4rem">
       On your phone: open this page, then <b>Share → Add to Home Screen</b>. It opens
@@ -767,7 +769,7 @@
 
   function renderSections() {
     $('secpick').innerHTML = CFG.sections.map(function (s) {
-      return '<button type="button" data-sec="' + s.id + '" aria-pressed="'
+      return '<button type="button" class="sec-' + s.id + '" data-sec="' + s.id + '" aria-pressed="'
         + (s.id === state.section) + '">' + s.name + '</button>';
     }).join('');
 
@@ -1021,7 +1023,8 @@
         if (!r.permissions || !r.permissions.push) throw new Error('Token can read ' + CFG.repo + ' but cannot write to it. Give it Contents: Read and write.');
         $('token').value = '';
         setConnected(true);
-        say($('setup-msg'), 'ok', 'Connected to ' + r.full_name + '. You can start writing.');
+        say($('setup-msg'), 'ok', 'Connected to ' + r.full_name + '. This browser can now write, tick habits and save focus blocks. '
+          + '<a href="/">Back to Today →</a>');
       })
       .catch(function (e) { setConnected(false); setToken(''); say($('setup-msg'), 'err', e.message); });
   });
@@ -1081,12 +1084,19 @@
       renderChips();
       autogrow();
       updateInfo();
-      if (getToken()) {
+      if (location.hash === '#setup') {
+        showTab('setup');
+      } else if (getToken()) {
         gh('GET', '/repos/' + CFG.repo)
           .then(function () { setConnected(true); })
           .catch(function () { setConnected(false); });
       } else {
         showTab('setup');
+      }
+      if (location.hash === '#setup' && getToken()) {
+        gh('GET', '/repos/' + CFG.repo)
+          .then(function () { setConnected(true); say($('setup-msg'), 'ok', 'This browser is already connected. <a href="/">Back to Today →</a>'); })
+          .catch(function () { setConnected(false); });
       }
     });
 })();

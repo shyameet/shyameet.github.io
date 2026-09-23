@@ -1,6 +1,7 @@
 ---
 title: "A volume filter for entries — and why it didn't work"
 date: 2026-09-15T17:23:00+05:30
+day: 2026-09-14
 section: feynman
 tags: [quant, trading]
 ---

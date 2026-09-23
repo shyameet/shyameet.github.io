@@ -1,6 +1,7 @@
 ---
 title: "Noticed him three times before I acted"
 date: 2026-09-15T17:25:00+05:30
+day: 2026-09-14
 section: mistakes
 lesson: "Act on the first read, not the third. Waiting only gives the other person more room, and gives me more time to talk myself out of it."
 tags: [people]

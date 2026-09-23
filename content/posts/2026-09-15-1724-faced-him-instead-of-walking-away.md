@@ -1,6 +1,7 @@
 ---
 title: "Faced him instead of walking away"
 date: 2026-09-15T17:24:00+05:30
+day: 2026-09-14
 section: wins
 tags: [people]
 ---

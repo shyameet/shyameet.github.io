@@ -312,26 +312,49 @@ ul.habits li:has(input:checked) .hn { color: var(--muted); }
 .btn.big { padding: 16px 26px; font-size: 16.5px; min-width: 140px; }
 .btn:disabled { opacity: .45; cursor: default; }
 
-/* ---------- journal entries ---------- */
-.entries { display: flex; flex-direction: column; gap: 10px; }
-.entry {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 14px 16px 15px; box-shadow: var(--shadow);
+/* ---------- the journal: quiet rows under day headings ---------- */
+.dgroup + .dgroup { margin-top: 20px; }
+.dghead {
+  display: flex; align-items: baseline; gap: 8px; margin: 0 4px 8px;
+  font-size: 13px; font-weight: 700; color: var(--muted);
 }
+.dghead b { color: var(--accent); font-weight: 700; }
+.rows {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.erow {
+  display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px;
+  color: var(--ink); text-decoration: none;
+}
+.erow + .erow { border-top: 1px solid var(--line); }
+.erow:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.edot { flex: none; width: 10px; height: 10px; margin-top: 7px; border-radius: 50%; background: var(--sc, var(--muted)); }
+.ebody { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ename { font-family: var(--serif); font-size: 18.5px; line-height: 1.3; letter-spacing: -.005em; }
+.ename.untitled { font-family: var(--sans); font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+.emeta2 { font-size: 12.5px; color: var(--muted); }
+.emeta2 b { color: var(--sc, var(--muted)); font-weight: 700; }
+.eline {
+  font-size: 13.5px; line-height: 1.45; color: var(--ink-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.more { text-align: center; margin: 18px 0 0; font-size: 14px; font-weight: 600; }
+.more a { text-decoration: none; }
+
+/* the sections as one scrolling row of chips */
+.secchips {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: -4px -16px 18px; padding: 4px 16px;
+}
+.secchips::-webkit-scrollbar { display: none; }
+.secchips .chip { flex: none; font-size: 13px; padding: 8px 12px 8px 10px; }
+.secchips .chip b { font-weight: 700; opacity: .65; margin-left: 1px; }
+
+/* the post page's own meta line */
 .emeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; color: var(--muted); }
 .emeta a { color: inherit; text-decoration: none; }
-.emeta a.when:hover { color: var(--accent); }
 .about { font-style: italic; }
-.etitle { margin: 8px 0 0; font-family: var(--serif); font-weight: 500; font-size: 21px; line-height: 1.25; letter-spacing: -.01em; }
-.etitle a { color: var(--ink); text-decoration: none; }
-.etitle a:hover { color: var(--accent); }
-.etitle.untitled { font-size: 17px; font-weight: 400; line-height: 1.45; }
-.ex { margin: 6px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
-.lessonline {
-  margin: 10px 0 0; padding: 8px 11px; border-radius: 12px;
-  background: var(--miss-soft); font-size: 14px; color: var(--ink-2);
-}
-.lessonline b { color: var(--miss); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; }
 .tag { font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
 .tag:hover { color: var(--accent); }
@@ -367,21 +390,18 @@ ul.habits li:has(input:checked) .hn { color: var(--muted); }
 .emeta .chip { color: var(--sc); }
 .dotsec { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--sc); margin-right: 12px; vertical-align: .12em; }
 
-/* ---------- section tiles ---------- */
-.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (min-width: 640px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.tile {
-  position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 124px;
-  padding: 14px 14px 12px 16px; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow); color: var(--ink); text-decoration: none;
-}
-.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--sc); }
-.tile:hover { border-color: var(--sc); }
-.tname { font-weight: 700; font-size: 15.5px; padding-right: 30px; }
-.tcount { position: absolute; right: 14px; top: 12px; font-weight: 700; font-size: 18px; color: var(--sc); }
-.tblurb { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
-.tlast { margin-top: auto; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+/* ---------- yesterday, folded ---------- */
+.yday > summary { list-style: none; cursor: pointer; margin-bottom: 0; }
+.yday > summary::-webkit-details-marker { display: none; }
+.yday > summary h3::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted); transition: transform .15s; }
+.yday[open] > summary h3::before { transform: rotate(90deg); }
+.yday > summary h3 .muted { font-weight: 500; }
+.yday[open] > summary { margin-bottom: 8px; }
+.yday:not([open]) > .bar { margin-top: 10px; margin-bottom: 0; }
+.yday .small { margin: 8px 0 0; }
+
+/* not connected in this browser: still looks tappable, says why it will not */
+ul.habits input.locked, button.cell.locked, .prose input.locked { cursor: pointer; }
 
 /* ---------- the habit grid ----------
    A phone has no room for the name beside seven circles, so the name takes
@@ -605,6 +625,8 @@ mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.err { background: var(--miss); color: #fff; }
+.toast.act { pointer-events: auto; }
+.toast a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 @media (min-width: 760px) { .toast { bottom: 28px; } }
 
 /* ---------- the medallions ---------- */

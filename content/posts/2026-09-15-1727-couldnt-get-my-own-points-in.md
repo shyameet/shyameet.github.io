@@ -1,6 +1,7 @@
 ---
 title: "Couldn't get my own points in"
 date: 2026-09-15T17:27:00+05:30
+day: 2026-09-14
 section: mistakes
 lesson: "Let the other person finish — but that doesn't mean staying silent for the rest of the conversation. Find the gap and bring my own point back in, every time, not just once."
 tags: [people]
