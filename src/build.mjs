@@ -506,11 +506,25 @@ function yesterdayCard(p) {
     + '</details>';
 }
 
-function medal(k, size = '') {
-  const d = deityFor(k);
-  if (!d || !ART[d.id]) return '';
-  return '<a class="medal ' + size + '" href="/darshan/#' + d.id + '" aria-label="' + esc(d.name) + '">' + ART[d.id] + '</a>';
+/* The deity for a day: a real image in an arched frame when the config names
+   one (deities[].image, under public/), otherwise the drawn medallion. */
+function murti(d, { link = true, big = false } = {}) {
+  if (!d) return '';
+  let inner;
+  if (d.image) {
+    inner = '<img src="/' + esc(d.image) + '" alt="' + esc(d.name) + '" loading="' + (big ? 'lazy' : 'eager') + '"'
+      + (d.imageFocus ? ' style="object-position:' + esc(d.imageFocus) + '"' : '') + '>';
+  } else if (ART[d.id]) {
+    inner = ART[d.id];
+  } else {
+    return '';
+  }
+  const cls = (d.image ? 'murti' : 'medal') + (big ? ' big' : '');
+  return link
+    ? '<a class="' + cls + '" href="/darshan/#' + d.id + '" aria-label="' + esc(d.name) + '">' + inner + '</a>'
+    : '<div class="' + cls + '">' + inner + '</div>';
 }
+const medal = (k) => murti(deityFor(k));
 
 function mantraBlock(k) {
   const d = deityFor(k);
@@ -764,11 +778,17 @@ write('darshan/index.html', shell({
     + '<div class="darshan">' + [1, 2, 3, 4, 5, 6, 0].map((dow) => {
       const d = DEITIES.find((x) => x.day === dow);
       if (!d) return '';
+      /* a borrowed image says whose it is, right under it */
+      const credit = d.image && d.credit
+        ? '<p class="credit">' + (d.source ? '<a href="' + esc(d.source) + '" rel="noopener">' + esc(d.credit) + '</a>' : esc(d.credit))
+          + (d.license ? ' · ' + esc(d.license) : '') + '</p>'
+        : '';
       return '<section class="card dcard' + (dow === weekdayOf(TODAY) ? ' today' : '') + '" id="' + d.id + '">'
-        + '<div class="medal big">' + ART[d.id] + '</div>'
+        + murti(d, { link: false, big: true })
         + '<p class="kicker">' + VAAR[dow] + ' <span lang="hi">' + VAAR_DEVA[dow] + '</span></p>'
         + '<h2>' + esc(d.name) + '</h2>'
-        + '<p class="mantra" lang="sa">' + esc(d.mantra) + '</p><p class="roman">' + esc(d.roman) + '</p></section>';
+        + '<p class="mantra" lang="sa">' + esc(d.mantra) + '</p><p class="roman">' + esc(d.roman) + '</p>'
+        + credit + '</section>';
     }).join('') + '</div>',
 }));
 

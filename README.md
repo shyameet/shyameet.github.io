@@ -100,17 +100,24 @@ flashing tab title. Space starts and pauses.
 `src/sw.js` is the smallest service worker that makes those notifications work (Android
 refuses the plain `Notification` constructor). It has no fetch handler and caches nothing.
 
-## The medallions
+## The deities
 
 `deities` in `site.config.json` pairs each weekday with a deity and a mantra:
 Ravivar Surya, Somvar Shiva, Mangalvar Hanuman, Budhvar Ganesha, Guruvar Vishnu,
 Shukravar Kali Mata, Shanivar Kal Bhairav. Change the pairing there.
 
-The art is drawn in code by `src/make_art.py` into `src/art/<id>.svg` — symbols, not
-faces: the trishul and damaru over Kailash, the conch, namam, chakra and lotus, the gada
-and the tail, Ganesha's crown and single tusk, the khadga in a ring of fire with a jaba flower,
-Bhairav's dog at the foot of the trishul. Line art in one ink plus an accent, so every
-medallion follows the light/dark theme. `src/make_icons.py` renders the Om app icons.
+Each shows as a **public-domain image** in an arched, mandir-niche frame: Ravi Varma
+Press chromolithographs (Surya, Shiva, Hanuman, Vishnu, Kali), a chromolithograph Ganesha
+and a Trichinopoly gouache of Bhairava with his dog, from Wikimedia Commons and the
+Wellcome Collection. `image`, `credit`, `license` and `source` sit on each deity in the
+config, and the credit shows under the image on `/darshan/`. `src/make_photos.py` holds the
+source URLs and the crops, and rebuilds `public/art/photos/` from the downloaded originals.
+Most devotional images online are copyrighted — calendar art, wallpapers, digital paintings
+— so nothing goes in without a stated free licence.
+
+A deity with no `image` falls back to a medallion drawn in code by `src/make_art.py`
+(`src/art/<id>.svg`: the trishul over Kailash, conch and chakra, the gada, and so on).
+`src/make_icons.py` renders the Om app icons.
 
 ## Posting
 

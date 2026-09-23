@@ -124,12 +124,26 @@
     "dailyTargetHours": 7
   },
   "deities": [
-    { "id": "surya",   "day": 0, "name": "Surya",       "mantra": "ॐ सूर्याय नमः",      "roman": "Om Suryaya Namah" },
-    { "id": "shiva",   "day": 1, "name": "Shiva",       "mantra": "ॐ नमः शिवाय",        "roman": "Om Namah Shivaya" },
-    { "id": "hanuman", "day": 2, "name": "Hanuman",     "mantra": "ॐ हं हनुमते नमः",    "roman": "Om Ham Hanumate Namah" },
-    { "id": "ganesha", "day": 3, "name": "Ganesha",     "mantra": "ॐ गं गणपतये नमः",    "roman": "Om Gam Ganapataye Namah" },
-    { "id": "vishnu",  "day": 4, "name": "Vishnu",      "mantra": "ॐ नमो नारायणाय",     "roman": "Om Namo Narayanaya" },
-    { "id": "kali",    "day": 5, "name": "Kali Mata",   "mantra": "ॐ क्रीं कालिकायै नमः", "roman": "Om Kreem Kalikayai Namah" },
-    { "id": "bhairav", "day": 6, "name": "Kal Bhairav", "mantra": "ॐ कालभैरवाय नमः",    "roman": "Om Kaal Bhairavaya Namah" }
+    { "id": "surya",   "day": 0, "name": "Surya",       "mantra": "ॐ सूर्याय नमः",      "roman": "Om Suryaya Namah",
+      "image": "art/photos/surya.jpg", "credit": "Surya Narayana — Ravi Varma Press, early 20th century", "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Surya_Narayana.jpg" },
+    { "id": "shiva",   "day": 1, "name": "Shiva",       "mantra": "ॐ नमः शिवाय",        "roman": "Om Namah Shivaya",
+      "image": "art/photos/shiva.jpg", "credit": "Gangavatarana (detail) — Ravi Varma Press, c. 1900–10, Wellcome Collection", "license": "Public Domain Mark",
+      "source": "https://wellcomecollection.org/works/j5qhnkxw" },
+    { "id": "hanuman", "day": 2, "name": "Hanuman",     "mantra": "ॐ हं हनुमते नमः",    "roman": "Om Ham Hanumate Namah",
+      "image": "art/photos/hanuman.jpg", "credit": "Mahavir Hanuman — Ravi Varma Press, 1910s, British Museum", "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Hanuman_fetches_the_herb-bearing_mountain,_in_a_print_from_the_Ravi_Varma_Press,_1910%27s.jpg" },
+    { "id": "ganesha", "day": 3, "name": "Ganesha",     "mantra": "ॐ गं गणपतये नमः",    "roman": "Om Gam Ganapataye Namah",
+      "image": "art/photos/ganesha.jpg", "credit": "Ganesha — chromolithograph, Wellcome Collection", "license": "Public Domain Mark",
+      "source": "https://wellcomecollection.org/works/nekd64ff" },
+    { "id": "vishnu",  "day": 4, "name": "Vishnu",      "mantra": "ॐ नमो नारायणाय",     "roman": "Om Namo Narayanaya",
+      "image": "art/photos/vishnu.jpg", "credit": "Shesh Narayana — Ravi Varma Press, c. 1900–15, Wellcome Collection", "license": "Public Domain Mark",
+      "source": "https://wellcomecollection.org/works/nbqvmr6r" },
+    { "id": "kali",    "day": 5, "name": "Kali Mata",   "mantra": "ॐ क्रीं कालिकायै नमः", "roman": "Om Kreem Kalikayai Namah",
+      "image": "art/photos/kali.jpg", "credit": "Kali — Ravi Varma Press, c. 1910, Wellcome Collection", "license": "Public Domain Mark",
+      "source": "https://wellcomecollection.org/works/d8rycze2" },
+    { "id": "bhairav", "day": 6, "name": "Kal Bhairav", "mantra": "ॐ कालभैरवाय नमः",    "roman": "Om Kaal Bhairavaya Namah",
+      "image": "art/photos/bhairav.jpg", "credit": "Bhairava — Trichinopoly gouache, c. 1830, British Museum", "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Bhairava_drawing.jpg" }
   ]
 }
