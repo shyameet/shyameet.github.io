@@ -8,28 +8,35 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="manifest" href="/admin/manifest.webmanifest">
-<meta name="theme-color" content="#faf7f0">
+<meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10111a" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Tiro+Devanagari+Sanskrit&display=swap">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
+  /* same sandalwood / Kashi-night palette as the site (src/style.css);
+     "mono" is the label face here, and it is the site's sans now */
   :root {
-    --paper: #faf7f0; --paper-2: #f2eee3; --rule: #e0d9c9; --rule-2: #cec5b0;
-    --ink: #1e1c19; --muted: #6f6a61; --accent: #2b4f6b; --warn: #9c3d2e;
-    --ok: #5a7d52; --bad: #9c3d2e;
+    --paper: #f6efe2; --paper-2: #fffaf2; --rule: #e9dcc5; --rule-2: #d6c3a3;
+    --ink: #2a2118; --muted: #86745e; --accent: #c65a1e; --warn: #b3432f;
+    --ok: #4d7c38; --bad: #b3432f;
     --serif: "Newsreader", Georgia, serif;
-    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --mono: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #161512; --paper-2: #1f1d19; --rule: #322e28; --rule-2: #454036;
-      --ink: #ece6d9; --muted: #968f80; --accent: #8ab6d0; --warn: #d9705c;
-      --ok: #8fae85; --bad: #d9705c;
+      --paper: #10111a; --paper-2: #181a27; --rule: #2a2d42; --rule-2: #3b3f5a;
+      --ink: #f1e9d8; --muted: #9c96aa; --accent: #f08b4c; --warn: #e57a63;
+      --ok: #8cc275; --bad: #e57a63;
       color-scheme: dark;
     }
+  }
+  header .home {
+    font-family: "Tiro Devanagari Sanskrit", "Nirmala UI", serif; font-size: 1.35rem; line-height: 1;
+    color: var(--accent); text-decoration: none; margin-right: -.2rem;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -249,6 +256,7 @@
 <body>
 
 <header>
+  <a class="home" href="/" title="Back to Today" lang="sa">ॐ</a>
   <span class="title">Write</span>
   <span class="spacer"></span>
   <button class="tabbtn" id="tab-new" aria-selected="true">New</button>

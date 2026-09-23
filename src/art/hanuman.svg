@@ -1,0 +1,18 @@
+<svg class="deity deity-hanuman" viewBox="0 0 200 200" role="img" aria-label="Hanuman" xmlns="http://www.w3.org/2000/svg">
+  <circle class="halo" cx="100" cy="100" r="91"/>
+  <circle class="ring" cx="100" cy="100" r="97.5"/>
+  <g class="fl" opacity=".7"><circle cx="194.2" cy="100" r="1.35"/><circle cx="193.39" cy="112.3" r="0.8"/><circle cx="190.99" cy="124.38" r="1.35"/><circle cx="187.03" cy="136.05" r="0.8"/><circle cx="181.58" cy="147.1" r="1.35"/><circle cx="174.73" cy="157.35" r="0.8"/><circle cx="166.61" cy="166.61" r="1.35"/><circle cx="157.35" cy="174.73" r="0.8"/><circle cx="147.1" cy="181.58" r="1.35"/><circle cx="136.05" cy="187.03" r="0.8"/><circle cx="124.38" cy="190.99" r="1.35"/><circle cx="112.3" cy="193.39" r="0.8"/><circle cx="100" cy="194.2" r="1.35"/><circle cx="87.7" cy="193.39" r="0.8"/><circle cx="75.62" cy="190.99" r="1.35"/><circle cx="63.95" cy="187.03" r="0.8"/><circle cx="52.9" cy="181.58" r="1.35"/><circle cx="42.65" cy="174.73" r="0.8"/><circle cx="33.39" cy="166.61" r="1.35"/><circle cx="25.27" cy="157.35" r="0.8"/><circle cx="18.42" cy="147.1" r="1.35"/><circle cx="12.97" cy="136.05" r="0.8"/><circle cx="9.01" cy="124.38" r="1.35"/><circle cx="6.61" cy="112.3" r="0.8"/><circle cx="5.8" cy="100" r="1.35"/><circle cx="6.61" cy="87.7" r="0.8"/><circle cx="9.01" cy="75.62" r="1.35"/><circle cx="12.97" cy="63.95" r="0.8"/><circle cx="18.42" cy="52.9" r="1.35"/><circle cx="25.27" cy="42.65" r="0.8"/><circle cx="33.39" cy="33.39" r="1.35"/><circle cx="42.65" cy="25.27" r="0.8"/><circle cx="52.9" cy="18.42" r="1.35"/><circle cx="63.95" cy="12.97" r="0.8"/><circle cx="75.62" cy="9.01" r="1.35"/><circle cx="87.7" cy="6.61" r="0.8"/><circle cx="100" cy="5.8" r="1.35"/><circle cx="112.3" cy="6.61" r="0.8"/><circle cx="124.38" cy="9.01" r="1.35"/><circle cx="136.05" cy="12.97" r="0.8"/><circle cx="147.1" cy="18.42" r="1.35"/><circle cx="157.35" cy="25.27" r="0.8"/><circle cx="166.61" cy="33.39" r="1.35"/><circle cx="174.73" cy="42.65" r="0.8"/><circle cx="181.58" cy="52.9" r="1.35"/><circle cx="187.03" cy="63.95" r="0.8"/><circle cx="190.99" cy="75.62" r="1.35"/><circle cx="193.39" cy="87.7" r="0.8"/></g>
+  <path class="tube-out" style="stroke-width:8.5" d="M52,160 C64,146 84,140 104,139 C134,137 156,124 158,98 C160,74 151,55 136,51 C124,48 119,61 127,65 C133,68 139,61 135,56"/><path class="tube-in" style="stroke-width:4.8" d="M52,160 C64,146 84,140 104,139 C134,137 156,124 158,98 C160,74 151,55 136,51 C124,48 119,61 127,65 C133,68 139,61 135,56"/>
+  <rect class="iv" x="96.4" y="104" width="7.2" height="66" rx="2.5"/>
+  <rect class="ac" x="94.6" y="118" width="10.8" height="5" rx="1.8"/>
+  <rect class="ac" x="94.6" y="138" width="10.8" height="5" rx="1.8"/>
+  <rect class="ac" x="94.6" y="158" width="10.8" height="5" rx="1.8"/>
+  <circle class="ac" cx="100" cy="176" r="6.5"/>
+  <path class="ac" d="M89,100 L111,100 L108,108 L92,108 Z"/>
+  <ellipse class="ac" cx="100" cy="70" rx="25" ry="30"/>
+  <path class="lnt" d="M100,41 Q75.97,70 100,99 M100,41 Q90.31,70 100,99 M100,41 Q109.69,70 100,99 M100,41 Q124.03,70 100,99"/>
+  <path class="lnt" d="M78,58 Q100,64 122,58 M78,82 Q100,88 122,82"/>
+  <rect class="iv" x="91" y="37.5" width="18" height="6" rx="2.5"/>
+  <path class="iv" d="M95.5,38 L100,24 L104.5,38 Z"/>
+  <circle class="fl" cx="100" cy="22" r="2.6"/>
+</svg>

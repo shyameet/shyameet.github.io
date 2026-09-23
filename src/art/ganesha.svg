@@ -1,0 +1,20 @@
+<svg class="deity deity-ganesha" viewBox="0 0 200 200" role="img" aria-label="Ganesha" xmlns="http://www.w3.org/2000/svg">
+  <circle class="halo" cx="100" cy="100" r="91"/>
+  <circle class="ring" cx="100" cy="100" r="97.5"/>
+  <g class="fl" opacity=".7"><circle cx="194.2" cy="100" r="1.35"/><circle cx="193.39" cy="112.3" r="0.8"/><circle cx="190.99" cy="124.38" r="1.35"/><circle cx="187.03" cy="136.05" r="0.8"/><circle cx="181.58" cy="147.1" r="1.35"/><circle cx="174.73" cy="157.35" r="0.8"/><circle cx="166.61" cy="166.61" r="1.35"/><circle cx="157.35" cy="174.73" r="0.8"/><circle cx="147.1" cy="181.58" r="1.35"/><circle cx="136.05" cy="187.03" r="0.8"/><circle cx="124.38" cy="190.99" r="1.35"/><circle cx="112.3" cy="193.39" r="0.8"/><circle cx="100" cy="194.2" r="1.35"/><circle cx="87.7" cy="193.39" r="0.8"/><circle cx="75.62" cy="190.99" r="1.35"/><circle cx="63.95" cy="187.03" r="0.8"/><circle cx="52.9" cy="181.58" r="1.35"/><circle cx="42.65" cy="174.73" r="0.8"/><circle cx="33.39" cy="166.61" r="1.35"/><circle cx="25.27" cy="157.35" r="0.8"/><circle cx="18.42" cy="147.1" r="1.35"/><circle cx="12.97" cy="136.05" r="0.8"/><circle cx="9.01" cy="124.38" r="1.35"/><circle cx="6.61" cy="112.3" r="0.8"/><circle cx="5.8" cy="100" r="1.35"/><circle cx="6.61" cy="87.7" r="0.8"/><circle cx="9.01" cy="75.62" r="1.35"/><circle cx="12.97" cy="63.95" r="0.8"/><circle cx="18.42" cy="52.9" r="1.35"/><circle cx="25.27" cy="42.65" r="0.8"/><circle cx="33.39" cy="33.39" r="1.35"/><circle cx="42.65" cy="25.27" r="0.8"/><circle cx="52.9" cy="18.42" r="1.35"/><circle cx="63.95" cy="12.97" r="0.8"/><circle cx="75.62" cy="9.01" r="1.35"/><circle cx="87.7" cy="6.61" r="0.8"/><circle cx="100" cy="5.8" r="1.35"/><circle cx="112.3" cy="6.61" r="0.8"/><circle cx="124.38" cy="9.01" r="1.35"/><circle cx="136.05" cy="12.97" r="0.8"/><circle cx="147.1" cy="18.42" r="1.35"/><circle cx="157.35" cy="25.27" r="0.8"/><circle cx="166.61" cy="33.39" r="1.35"/><circle cx="174.73" cy="42.65" r="0.8"/><circle cx="181.58" cy="52.9" r="1.35"/><circle cx="187.03" cy="63.95" r="0.8"/><circle cx="190.99" cy="75.62" r="1.35"/><circle cx="193.39" cy="87.7" r="0.8"/></g>
+  <path class="ac2" d="M80,66 C62,52 38,60 37,86 C36,108 54,122 70,114 C77,110 82,105 86,99 C84,88 82,77 80,66 Z"/>
+  <path class="ac2" d="M120,66C138,52 162,60 163,86C164,108 146,122 130,114C123,110 118,105 114,99C116,88 118,77 120,66Z"/>
+  <path class="lnt" d="M76,74 C62,66 48,72 48,88 C48,100 58,108 68,105"/>
+  <path class="lnt" d="M76,74C62,66 48,72 48,88C48,100 58,108 68,105"/>
+  <path class="ac" d="M78,63 L122,63 C123,76 121,90 114,100 C110,105 90,105 86,100 C79,90 77,76 78,63 Z"/>
+  <path class="tube-out" style="stroke-width:13" d="M100,98 C99,116 95,134 101,148 C106,158 120,158 124,149 C127,142 121,136 115,140"/><path class="tube-ac" style="stroke-width:8.4" d="M100,98 C99,116 95,134 101,148 C106,158 120,158 124,149 C127,142 121,136 115,140"/>
+  <path class="iv" d="M108,99 C118,102 126,110 129,122 C122,115 115,110 105,106 Z"/>
+  <path class="iv" d="M92,99 C88,100 85.5,102 84.5,105.5 L90,104.5 Z"/>
+  <path class="ln" d="M84,83 Q89.5,87.5 95,83 M105,83 Q110.5,87.5 116,83"/>
+  <path class="ln" style="stroke-width:1.6" d="M89,69.5 L111,69.5 M90.5,74 L109.5,74"/>
+  <circle class="acd" cx="100" cy="78" r="2.4"/>
+  <path class="iv" d="M77,64 L123,64 L121,52 C119,42 110,35 100,25 C90,35 81,42 79,52 Z"/>
+  <path class="lnt" d="M79.5,56 L120.5,56 M84,47 L116,47"/>
+  <circle class="ac" cx="100" cy="41" r="4"/>
+  <circle class="fl" cx="100" cy="22" r="2.6"/>
+</svg>

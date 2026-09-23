@@ -117,5 +117,19 @@
   "weeklyRoutine": [
     "Mandir"
   ],
-  "weekStartsMonday": true
+  "weekStartsMonday": true,
+  "focus": {
+    "defaultMinutes": 30,
+    "presets": [25, 30, 45, 60, 90],
+    "dailyTargetHours": 7
+  },
+  "deities": [
+    { "id": "surya",   "day": 0, "name": "Surya",       "mantra": "ॐ सूर्याय नमः",      "roman": "Om Suryaya Namah" },
+    { "id": "shiva",   "day": 1, "name": "Shiva",       "mantra": "ॐ नमः शिवाय",        "roman": "Om Namah Shivaya" },
+    { "id": "hanuman", "day": 2, "name": "Hanuman",     "mantra": "ॐ हं हनुमते नमः",    "roman": "Om Ham Hanumate Namah" },
+    { "id": "ganesha", "day": 3, "name": "Ganesha",     "mantra": "ॐ गं गणपतये नमः",    "roman": "Om Gam Ganapataye Namah" },
+    { "id": "vishnu",  "day": 4, "name": "Vishnu",      "mantra": "ॐ नमो नारायणाय",     "roman": "Om Namo Narayanaya" },
+    { "id": "kali",    "day": 5, "name": "Kali Mata",   "mantra": "ॐ क्रीं कालिकायै नमः", "roman": "Om Kreem Kalikayai Namah" },
+    { "id": "bhairav", "day": 6, "name": "Kal Bhairav", "mantra": "ॐ कालभैरवाय नमः",    "roman": "Om Kaal Bhairavaya Namah" }
+  ]
 }

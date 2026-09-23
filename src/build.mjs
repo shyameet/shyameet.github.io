@@ -1,10 +1,13 @@
 /* Static generator for the journal.
    Design notes:
-   - Every post belongs to exactly one SECTION (daily, goals, feynman, wins,
-     mistakes, speaking, vocabulary, blabber). Tags stay, but they are secondary.
+   - Two halves, one site. TODAY / HABITS / FOCUS are the tracker; JOURNAL is
+     the writing. Every post still belongs to exactly one SECTION.
    - Dates are formatted from the LITERAL clock time in the frontmatter, never via
      Date#toLocale*. The build runs on a UTC runner; converting would shift a
      00:30 IST post back a day. Date objects are used ONLY for sorting and RSS.
+   - "Today" is the date in CFG.timezone at build time. The day page for it is
+     made at 05:00 by the newday workflow, which also redeploys, so the site
+     turns over to the new day on its own.
    - One dependency (marked). Nothing else to rot.
 */
 import fs from 'node:fs';
@@ -20,15 +23,24 @@ const CFG = JSON.parse(fs.readFileSync(path.join(ROOT, 'site.config.json'), 'utf
 const SECTIONS = CFG.sections || [];
 const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
 const FALLBACK = SECTIONS.length ? SECTIONS[SECTIONS.length - 1].id : 'blabber';
+const isTaskSection = (id) => !!(SECTION_BY_ID[id] && SECTION_BY_ID[id].tasks);
 
 /* No personal name on this site by design (2026-09-13) -- the tagline carries
    the identity instead. Text that technically cannot be blank (browser tab,
-   RSS reader title, og:title) falls back to it. Setting CFG.title back to a
-   real value brings the old name-led header/masthead straight back. */
+   RSS reader title, og:title) falls back to it. */
 const SITE_NAME = CFG.title || CFG.tagline;
+const ZONE = CFG.timezone || 'Asia/Kolkata';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const FULLDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const FULLMONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+/* the day's name as it is said at home -- Somvar is Shiva's day, and so on */
+const VAAR = ['Ravivar', 'Somvar', 'Mangalvar', 'Budhvar', 'Guruvar', 'Shukravar', 'Shanivar'];
+const VAAR_DEVA = ['रविवार', 'सोमवार', 'मंगलवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
+const WEEK_LETTERS = CFG.weekStartsMonday === false
+  ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 /* ---------- helpers ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -51,7 +63,10 @@ function parseFront(raw) {
     if (v.startsWith('[') && v.endsWith(']')) {
       v = v.slice(1, -1).split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
     } else {
+      /* "a \"quoted\" word" -- the editor escapes quotes inside a quoted value */
+      const dq = v.length > 1 && v.startsWith('"') && v.endsWith('"');
       v = v.replace(/^["']|["']$/g, '');
+      if (dq) v = v.replace(/\\"/g, '"');
       if (v === 'true') v = true;
       else if (v === 'false') v = false;
     }
@@ -72,113 +87,140 @@ function clockParts(iso) {
   };
 }
 
+const pad2 = (n) => String(n).padStart(2, '0');
+const keyOf = (iso) => {
+  const p = clockParts(iso);
+  return p ? p.y + '-' + pad2(p.mo) + '-' + pad2(p.d) : '';
+};
+const hhmm = (iso) => {
+  const p = clockParts(iso);
+  return p && p.h != null ? pad2(p.h) + ':' + pad2(p.mi) : '';
+};
+
+/* date keys (YYYY-MM-DD) as calendar arithmetic, done in UTC so no machine
+   timezone can leak in */
+const keyDate = (k) => new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)));
+const dateKey = (d) => d.toISOString().slice(0, 10);
+const addDays = (k, n) => { const d = keyDate(k); d.setUTCDate(d.getUTCDate() + n); return dateKey(d); };
+const weekdayOf = (k) => keyDate(k).getUTCDay();          // 0 = Sunday
+const weekStartKey = (k) => {
+  const dow = weekdayOf(k);
+  return addDays(k, -(CFG.weekStartsMonday === false ? dow : (dow + 6) % 7));
+};
+const weekKeys = (k) => { const s = weekStartKey(k); return [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(s, i)); };
+
 function fmtDate(iso, withTime = true) {
   const p = clockParts(iso);
   if (!p) return String(iso);
-  const dow = DAYS[new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay()];
-  let s = dow + ' ' + p.d + ' ' + MONTHS[p.mo - 1] + ' ' + p.y;
-  if (withTime && p.h != null) {
-    s += ' · ' + String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0');
-  }
+  let s = DAYS[weekdayOf(keyOf(iso))] + ' ' + p.d + ' ' + MONTHS[p.mo - 1] + ' ' + p.y;
+  if (withTime && p.h != null) s += ' · ' + pad2(p.h) + ':' + pad2(p.mi);
   return s;
 }
-
 const shortDate = (iso) => {
   const p = clockParts(iso);
   return p ? p.d + ' ' + MONTHS[p.mo - 1] : '';
 };
+/* "Saturday 12 September" -- the heading a day gets, like a page in a diary */
+function fullDate(isoOrKey) {
+  const k = keyOf(isoOrKey);
+  if (!k) return String(isoOrKey);
+  return FULLDAYS[weekdayOf(k)] + ' ' + +k.slice(8) + ' ' + FULLMONTHS[+k.slice(5, 7) - 1];
+}
+const monthKey = (iso) => keyOf(iso).slice(0, 7) || '0000-00';
+const monthLabel = (k) => MONTHS[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4);
 
-/* "Saturday 12 September" -- the heading a day of tasks gets, so the list reads
-   like a page in a diary rather than a blog post with a date on it */
-const FULLDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const FULLMONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-function fullDate(iso) {
-  const p = clockParts(iso);
-  if (!p) return String(iso);
-  const dow = FULLDAYS[new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay()];
-  return dow + ' ' + p.d + ' ' + FULLMONTHS[p.mo - 1];
+/* 2h 05m / 7h / 45m / 0m */
+function fmtDur(sec) {
+  const m = Math.round((sec || 0) / 60);
+  if (m < 60) return m + 'm';
+  return Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + pad2(m % 60) + 'm' : '');
+}
+/* the short form a grid cell has room for: 2.5h / 40m */
+function fmtShort(sec) {
+  const m = Math.round((sec || 0) / 60);
+  if (!m) return '';
+  if (m < 60) return m + 'm';
+  const h = m / 60;
+  return (h >= 10 ? Math.round(h) : Math.round(h * 10) / 10) + 'h';
 }
 
-const monthKey = (iso) => {
-  const p = clockParts(iso);
-  return p ? p.y + '-' + String(p.mo).padStart(2, '0') : '0000-00';
-};
-const monthLabel = (k) => {
-  const parts = k.split('-');
-  return MONTHS[+parts[1] - 1] + ' ' + parts[0];
-};
-
-/* "- [ ] thing" / "- [x] thing" -- counted so a task post can show its own
-   progress without anyone maintaining a tally by hand */
-function countTasks(md) {
-  const open = (md.match(/^\s*[-*]\s+\[ \]\s+/gm) || []).length;
-  const done = (md.match(/^\s*[-*]\s+\[[xX]\]\s+/gm) || []).length;
-  return { open, done, total: open + done };
+function todayInZone() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
+  return parts.year + '-' + parts.month + '-' + parts.day;
 }
+/* BUILD_TODAY=2026-09-23 pins the date -- for checking a build as it will look
+   on a given morning */
+const TODAY = /^\d{4}-\d{2}-\d{2}$/.test(process.env.BUILD_TODAY || '') ? process.env.BUILD_TODAY : todayInZone();
 
-function progressBar(t) {
-  if (!t.total) return '';
-  const pct = Math.round((t.done / t.total) * 100);
-  return '<div class="progress">' + t.done + ' of ' + t.total + ' done'
-    + '<span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%</div>';
-}
-
-/* The tasks themselves, rendered into the listing. A list you have to click
-   into to read is a list you stop checking. Built from the markdown rather
-   than scraped out of the rendered post so the index order is guaranteed to
-   match the source order the toggler rewrites. */
-function taskListHtml(md) {
+/* ---------- tasks ----------
+   "- [ ] thing" / "- [x] thing". Counted so a task post shows its own
+   progress without anyone keeping a tally by hand. */
+const TASK_RE = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
+function taskItems(md) {
   const items = [];
   for (const line of md.split('\n')) {
-    const m = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/);
-    if (m) items.push({ done: m[1] !== ' ', text: m[2] });
+    const m = line.match(TASK_RE);
+    if (m) items.push({ done: m[1] !== ' ', text: m[2].trim() });
   }
+  return items;
+}
+function countTasks(md) {
+  const items = taskItems(md);
+  const done = items.filter((i) => i.done).length;
+  return { done, open: items.length - done, total: items.length };
+}
+const norm = (s) => String(s).trim().toLowerCase();
+
+/* marked renders checkboxes with nothing that says which task they are, so each
+   one is stamped with its task text. The toggler finds the line by that text,
+   not by position, so a box still hits the right line after the file changed. */
+function annotateTasks(html, md) {
+  const items = taskItems(md);
+  let i = 0;
+  return html.replace(/<input (checked="" )?disabled="" type="checkbox">/g, (m) => {
+    const it = items[i++];
+    return it ? m.replace('<input ', '<input data-task="' + esc(it.text) + '" ') : m;
+  });
+}
+
+/* A checklist as the tracker shows it: a big round tick per line. Disabled in
+   the HTML; app.js wakes them up only for whoever holds the token. */
+function habitList(md) {
+  const items = taskItems(md);
   if (!items.length) return '';
-  return '<ul class="tasks">' + items.map((i) => '<li><input type="checkbox" disabled'
-    + (i.done ? ' checked' : '') + '>' + marked.parseInline(i.text) + '</li>').join('')
-    + '</ul>';
+  return '<ul class="habits">' + items.map((it) => '<li><label>'
+    + '<input type="checkbox" data-task="' + esc(it.text) + '" disabled' + (it.done ? ' checked' : '') + '>'
+    + '<span class="hn">' + marked.parseInline(it.text) + '</span></label></li>').join('') + '</ul>';
 }
-
-/* Routine items are either "Gym" or { name: "Gym", target: 5 }. */
-const ROUTINE = (CFG.routine || []).map((r) => (typeof r === 'string' ? { name: r } : r));
-
-/* Monday-based week key, so a week reads Mon..Sun the way a week actually does. */
-function weekStart(iso) {
-  const p = clockParts(iso);
-  if (!p) return null;
-  const d = new Date(Date.UTC(p.y, p.mo - 1, p.d));
-  const dow = d.getUTCDay();                       // 0 = Sunday
-  const back = CFG.weekStartsMonday === false ? dow : (dow + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - back);
-  return d;
-}
-const ymd = (d) => d.toISOString().slice(0, 10);
-
-/* Which routine items got ticked on a given day page. Matched on the task text
-   so a day page can carry extra one-off tasks without confusing the tally. */
-function doneNames(md) {
-  const done = new Set();
-  for (const line of md.split('\n')) {
-    const m = line.match(/^\s*[-*+]\s+\[[xX]\]\s+(.*)$/);
-    if (m) done.add(m[1].trim().toLowerCase());
-  }
-  return done;
-}
+const stripTasks = (md) => md.split('\n').filter((l) => !TASK_RE.test(l)).join('\n').trim();
 
 function plainText(md) {
   return md
+    .replace(/<details[\s\S]*?<\/details>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^>\s?/gm, '')
-    .replace(/^#{1,6}\s*/gm, '')
+    /* a heading ends a sentence, or it runs into the paragraph in an excerpt */
+    .replace(/^#{1,6}\s*(.+?)\s*$/gm, (_m, h) => (/[.!?:]$/.test(h) ? h : h + '.'))
     .replace(/^\s*[-*+]\s+\[[ xX]\]\s*/gm, '')  /* task markers */
     .replace(/^\s*[-*+]\s+/gm, '')              /* list bullets */
     .replace(/[*_`~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/* ---------- art ---------- */
+const DEITIES = CFG.deities || [];
+const ART = {};
+for (const d of DEITIES) {
+  const f = path.join(ROOT, 'src', 'art', d.id + '.svg');
+  ART[d.id] = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n').trim() : '';
+}
+const deityFor = (k) => DEITIES.find((d) => d.day === weekdayOf(k)) || null;
 
 /* ---------- load posts ---------- */
 const POSTS_DIR = path.join(ROOT, 'content', 'posts');
@@ -190,11 +232,8 @@ const posts = fs.readdirSync(POSTS_DIR)
     /* Normalized to LF once, here, for every function downstream. Git's
        core.autocrlf on this machine writes CRLF into the working tree, and a
        line ending in \r silently breaks any regex capturing "rest of line"
-       with (.*)$  -- \r is a line terminator in JS regex, so . can't consume
-       it and $ won't match past it. doneNames() and taskListHtml() both hit
-       this: doneNames returned an empty set for a correctly-ticked box, and
-       taskListHtml rendered zero items for a six-item list. Fixing it once
-       here beats re-deriving \r?-tolerance in every regex that touches body. */
+       with (.*)$ -- \r is a line terminator in JS regex, so . can't consume
+       it and $ won't match past it. */
     const raw = fs.readFileSync(path.join(POSTS_DIR, file), 'utf8').replace(/\r\n/g, '\n');
     const { data, body } = parseFront(raw);
     const fileDate = (file.match(/^(\d{4}-\d{2}-\d{2})/) || [])[1];
@@ -204,23 +243,20 @@ const posts = fs.readdirSync(POSTS_DIR)
     const tags = (Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []))
       .map((t) => String(t).toLowerCase().trim()).filter(Boolean);
     const section = SECTION_BY_ID[String(data.section || '').toLowerCase()] ? String(data.section).toLowerCase() : FALLBACK;
-    /* An untitled day page is identified by its day, not by its filename --
-       /posts/daytasks-2026-09-12/ rather than the timestamped source name. */
-    const dateSlug = (clockParts(iso)
-      ? section + '-' + String(clockParts(iso).y) + '-'
-        + String(clockParts(iso).mo).padStart(2, '0') + '-'
-        + String(clockParts(iso).d).padStart(2, '0')
-      : '');
+    /* `day:` ties a post to the day it is ABOUT when it was filed later --
+       Tuesday's story told on Wednesday still belongs to Tuesday's page. */
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(data.day || '')) ? String(data.day) : keyOf(iso);
+    const dateSlug = keyOf(iso) ? section + '-' + keyOf(iso) : '';
     const slug = data.slug || slugify(title) || dateSlug || file.replace(/\.md$/, '');
     return {
-      file, title, iso, tags, body, text, slug, section,
+      file, title, iso, day, tags, body, text, slug, section,
       lesson: (data.lesson || '').trim(),
       draft: data.draft === true,
       url: '/posts/' + slug + '/',
       ts: new Date(iso).getTime() || 0,
       words: text ? text.split(/\s+/).length : 0,
-      excerpt: text.slice(0, 240) + (text.length > 240 ? '…' : ''),
-      html: marked.parse(body),
+      excerpt: text.slice(0, 220) + (text.length > 220 ? '…' : ''),
+      html: annotateTasks(marked.parse(body), body),
       tasks: countTasks(body),
     };
   })
@@ -244,21 +280,97 @@ for (const p of [...posts].reverse()) {
 const bySection = {};
 for (const s of SECTIONS) bySection[s.id] = [];
 for (const p of posts) (bySection[p.section] ||= []).push(p);
+const journal = posts.filter((p) => !isTaskSection(p.section));
 
-/* ---------- page shell ---------- */
-function sectionStrip(activeId) {
-  return '<nav class="strip" aria-label="Sections">'
-    + SECTIONS.map((s) => '<a href="/s/' + s.id + '/"' + (s.id === activeId ? ' class="on" aria-current="page"' : '') + '>'
-      + esc(s.name) + '</a>').join('')
-    + '</nav>';
+/* one day page per date (newest wins if there were ever two) */
+const DAY_PAGES = new Map();
+for (const p of [...(bySection.daytasks || [])].reverse()) DAY_PAGES.set(keyOf(p.iso), p);
+const WEEK_PAGES = bySection.weektasks || [];
+
+/* ---------- focus log ----------
+   content/focus/YYYY-MM-DD.json, written by the timer on /focus/ one block at a
+   time. The build only reads it. */
+const FOCUS_DIR = path.join(ROOT, 'content', 'focus');
+const FOCUS = new Map();
+if (fs.existsSync(FOCUS_DIR)) {
+  for (const f of fs.readdirSync(FOCUS_DIR).filter((x) => /^\d{4}-\d{2}-\d{2}\.json$/.test(x))) {
+    let data;
+    try { data = JSON.parse(fs.readFileSync(path.join(FOCUS_DIR, f), 'utf8')); } catch (e) {
+      console.log('  focus: unreadable ' + f + ' (' + e.message + ')');
+      continue;
+    }
+    const key = f.slice(0, 10);
+    const sessions = (Array.isArray(data.sessions) ? data.sessions : [])
+      .filter((s) => s && s.id && Number(s.sec) > 0 && Number(s.sec) < 86400 && clockParts(s.start))
+      .sort((a, b) => String(a.start).localeCompare(String(b.start)));
+    const sec = sessions.reduce((t, s) => t + Number(s.sec), 0);
+    FOCUS.set(key, { sessions, sec, n: sessions.length });
+  }
+}
+const FOCUS_TARGET = Math.round(((CFG.focus && CFG.focus.dailyTargetHours) || 7) * 3600);
+
+/* ---------- habits ---------- */
+const ROUTINE = (CFG.routine || []).map((r) => (typeof r === 'string' ? { name: r } : r));
+
+/* true = ticked, false = on the page and not ticked, null = no page / not on it */
+function doneOn(k, name) {
+  const page = DAY_PAGES.get(k);
+  if (!page) return null;
+  const it = taskItems(page.body).find((t) => norm(t.text) === norm(name));
+  return it ? it.done : null;
 }
 
-function shell({ title, desc, body, canonical, activeId = '' }) {
+/* Consecutive days done, counted back from today. Today only counts once it is
+   ticked -- an unticked morning has not broken anything yet. */
+function streak(name) {
+  let k = TODAY;
+  if (doneOn(k, name) !== true) k = addDays(k, -1);
+  let n = 0;
+  while (doneOn(k, name) === true) { n++; k = addDays(k, -1); }
+  return n;
+}
+
+/* ---------- small graphics ---------- */
+function ring(pct, size, stroke, cls = '') {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(1, pct || 0));
+  const h = size / 2;
+  return '<svg class="ring ' + cls + '" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" aria-hidden="true">'
+    + '<circle class="ring-bg" cx="' + h + '" cy="' + h + '" r="' + r.toFixed(2) + '" stroke-width="' + stroke + '"/>'
+    + '<circle class="ring-fg" cx="' + h + '" cy="' + h + '" r="' + r.toFixed(2) + '" stroke-width="' + stroke + '"'
+    + ' stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + (c * (1 - v)).toFixed(2) + '"'
+    + ' transform="rotate(-90 ' + h + ' ' + h + ')"/></svg>';
+}
+
+const ICON = {
+  today: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.3M12 19.1v2.3M2.6 12h2.3M19.1 12h2.3M5.4 5.4 7 7M17 17l1.6 1.6M5.4 18.6 7 17M17 7l1.6-1.6"/></svg>',
+  habits: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3.6"/><circle cx="17" cy="7" r="3.6"/><circle cx="7" cy="17" r="3.6"/><path d="m14.2 17.1 2 2 3.8-4.3"/></svg>',
+  focus: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.4" r="7.6"/><path d="M12 13.4V9.2M9.6 2.8h4.8M12 2.8v2.9M18.3 6.3l1.4-1.4"/></svg>',
+  journal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.2 4.6c0-.9.7-1.6 1.6-1.6h12v15H6.8c-.9 0-1.6.7-1.6 1.6z"/><path d="M5.2 19.6c0 .9.7 1.4 1.6 1.4h12"/><path d="M9 7.6h6M9 10.6h4"/></svg>',
+  write: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11.4" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0M12 17.6v3.6M9 21.2h6"/></svg>',
+  search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 5 5"/></svg>',
+  theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 0 0 16.8z" fill="currentColor" stroke="none"/></svg>',
+};
+
+const NAV = [
+  ['today', '/', 'Today'],
+  ['habits', '/habits/', 'Habits'],
+  ['focus', '/focus/', 'Focus'],
+  ['journal', '/journal/', 'Journal'],
+  ['write', '/admin/', 'Write'],
+];
+
+/* ---------- page shell ---------- */
+function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' }) {
   const t = title ? title + ' · ' + SITE_NAME : SITE_NAME;
   const d = desc || CFG.tagline;
+  const links = (withIcons) => NAV.map(([id, href, label]) => '<a href="' + href + '"'
+    + (id === nav ? ' aria-current="page" class="on"' : '') + '>'
+    + (withIcons ? ICON[id] : '') + '<span>' + label + '</span></a>').join('');
   return '<!doctype html>\n<html lang="en">\n<head>\n'
     + '<meta charset="utf-8">\n'
-    + '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
     + '<title>' + esc(t) + '</title>\n'
     + '<meta name="description" content="' + esc(d) + '">\n'
     + '<meta property="og:title" content="' + esc(t) + '">\n'
@@ -269,71 +381,181 @@ function shell({ title, desc, body, canonical, activeId = '' }) {
     + '<link rel="icon" href="/icon.svg" type="image/svg+xml">\n'
     + '<link rel="apple-touch-icon" href="/icon-180.png">\n'
     + '<link rel="manifest" href="/manifest.webmanifest">\n'
-    + '<meta name="theme-color" content="#faf7f0">\n'
+    + '<meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">\n'
+    + '<meta name="theme-color" content="#11121b" media="(prefers-color-scheme: dark)">\n'
     + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
     + 'family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400'
-    + '&family=IBM+Plex+Mono:wght@400;500&display=swap">\n'
+    + '&family=Plus+Jakarta+Sans:wght@400;500;600;700'
+    + '&family=Tiro+Devanagari+Sanskrit&display=swap">\n'
     + '<link rel="stylesheet" href="/style.css">\n'
     + '<script>(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}})();</script>\n'
-    + '</head>\n<body>\n'
-    + '<header class="site">\n'
-    /* "Home" is navigation, not an identity -- keeps the flex layout (brand
-       left, nav right) intact without needing a name to show there. */
-    + '  <a class="brand" href="/">' + (CFG.title ? esc(CFG.title) : 'Home') + '</a>\n'
-    + '  <nav>\n'
-    + '    <a href="/archive/">Archive</a>\n'
-    + '    <a href="/search/">Search</a>\n'
-    + '    <a href="/admin/">Write</a>\n'
-    + '    <button id="themetoggle" type="button" aria-label="Toggle theme">◐</button>\n'
-    + '  </nav>\n'
+    + '</head>\n<body class="' + esc(cls) + '">\n'
+    + '<header class="top">\n'
+    + '  <a class="brand" href="/" title="' + esc(CFG.tagline) + '"><span class="om" lang="sa">ॐ</span></a>\n'
+    + '  <nav class="topnav" aria-label="Main">' + links(false) + '</nav>\n'
+    + '  <div class="topicons">\n'
+    + '    <a class="iconbtn" href="/search/" aria-label="Search">' + ICON.search + '</a>\n'
+    + '    <button id="themetoggle" class="iconbtn" type="button" aria-label="Switch light or dark">' + ICON.theme + '</button>\n'
+    + '  </div>\n'
     + '</header>\n'
-    + sectionStrip(activeId) + '\n'
-    + '<main>\n' + body + '\n</main>\n'
+    + '<main class="wrap">\n' + body + '\n</main>\n'
     + '<footer class="site">\n'
-    + (CFG.author ? '  <span>' + esc(CFG.author) + '</span>\n  <span class="sep">·</span>\n' : '')
-    + '  <a href="/archive/">' + posts.length + ' post' + (posts.length === 1 ? '' : 's') + '</a>\n'
-    + '  <span class="sep">·</span>\n'
-    + '  <a href="/feed.xml">RSS</a>\n'
+    + '  <p class="motto">' + esc(CFG.tagline) + '</p>\n'
+    + '  <p class="flinks"><a href="/archive/">Archive · ' + journal.length + '</a>'
+    + '<a href="/darshan/">Darshan</a><a href="/search/">Search</a><a href="/feed.xml">RSS</a></p>\n'
     + '</footer>\n'
-    + '<script src="/app.js"></script>\n'
+    + '<nav class="tabbar" aria-label="Main">' + links(true) + '</nav>\n'
+    + '<div id="toast" class="toast" role="status" aria-live="polite"></div>\n'
+    + '<script src="/app.js" defer></script>\n'
+    + scripts.map((s) => '<script src="' + s + '" defer></script>\n').join('')
     + '</body>\n</html>\n';
 }
 
 /* ---------- fragments ---------- */
 const tagList = (tags) => tags.length
-  ? '<div class="tags">' + tags.map((t) => '<a class="tag" href="/tags/' + esc(t) + '/">' + esc(t) + '</a>').join('') + '</div>'
+  ? '<div class="tags">' + tags.map((t) => '<a class="tag" href="/tags/' + esc(t) + '/">#' + esc(t) + '</a>').join('') + '</div>'
   : '';
 
-const readTime = (p) => (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min' : '');
+const secChip = (id) => {
+  const s = SECTION_BY_ID[id];
+  return s ? '<a class="chip sec-' + s.id + '" href="/s/' + s.id + '/">' + esc(s.name) + '</a>' : '';
+};
 
-function feedItem(p, showSection = true) {
-  const sec = SECTION_BY_ID[p.section];
-  const isTaskCard = !!(sec && sec.tasks && p.tasks.total);
+const readTime = (p) => (p.words > 400 ? '<span>' + Math.ceil(p.words / 220) + ' min read</span>' : '');
 
-  /* A day of tasks is headed by its day, not by a made-up title. */
-  const headText = p.title || (isTaskCard ? fullDate(p.iso) : '');
-  const heading = headText
-    ? '<h2 class="pt"><a href="' + p.url + '">' + esc(headText) + '</a></h2>'
-    : '<h2 class="pt untitled"><a href="' + p.url + '">' + esc(p.excerpt.slice(0, 90) || 'Untitled') + '</a></h2>';
+/* "about Tuesday" when a post was filed after the day it describes */
+const aboutDay = (p) => (p.day && p.day !== keyOf(p.iso)
+  ? '<span class="about">about ' + esc(fullDate(p.day)) + '</span>' : '');
 
-  const metaBits = [];
-  if (showSection && sec) metaBits.push('<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a>');
-  metaBits.push('<a href="' + p.url + '">'
-    + esc(isTaskCard ? fmtDate(p.iso, false) : fmtDate(p.iso)) + '</a>' + readTime(p));
-
-  return '<article class="card' + (isTaskCard ? ' taskcard' : '') + '"'
-    + (isTaskCard ? ' data-file="content/posts/' + esc(p.file) + '"' : '') + '>\n'
-    + '  <div class="meta">' + metaBits.join(' <span class="sep">·</span> ') + '</div>\n'
-    + '  ' + heading + '\n'
-    + (isTaskCard
-      ? '  ' + progressBar(p.tasks) + '\n  ' + taskListHtml(p.body) + '\n'
-      : (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n'
-        : (p.title ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')))
-    + (p.lesson ? '  <p class="lessonline"><b>Instead →</b> ' + esc(p.lesson) + '</p>\n' : '')
-    + '  ' + tagList(p.tags) + '\n'
+function entryCard(p, showSection = true) {
+  const head = p.title
+    ? '<h3 class="etitle"><a href="' + p.url + '">' + esc(p.title) + '</a></h3>'
+    : '<h3 class="etitle untitled"><a href="' + p.url + '">' + esc(p.excerpt.slice(0, 110) || 'Untitled') + '</a></h3>';
+  return '<article class="entry">\n'
+    + '  <div class="emeta">' + (showSection ? secChip(p.section) : '')
+    + '<a class="when" href="' + p.url + '">' + esc(fmtDate(p.iso)) + '</a>' + aboutDay(p) + readTime(p) + '</div>\n'
+    + '  ' + head + '\n'
+    + (p.title && p.excerpt ? '  <p class="ex">' + esc(p.excerpt) + '</p>\n' : '')
+    + (p.lesson ? '  <p class="lessonline"><b>Instead</b> ' + esc(p.lesson) + '</p>\n' : '')
+    + (p.tags.length ? '  ' + tagList(p.tags) + '\n' : '')
     + '</article>';
+}
+
+/* a day (or week) of tasks, as a card whose boxes can be ticked in place */
+function taskCard(p, heading, { link = true, cls = '' } = {}) {
+  const t = p.tasks;
+  const pct = t.total ? t.done / t.total : 0;
+  return '<section class="card taskcard' + (cls ? ' ' + cls : '') + '" data-file="content/posts/' + esc(p.file) + '">\n'
+    + '  <div class="cardhead"><h3>' + (link ? '<a href="' + p.url + '">' + esc(heading) + '</a>' : esc(heading)) + '</h3>'
+    + '<span class="count" data-count>' + t.done + ' / ' + t.total + '</span></div>\n'
+    + '  <div class="bar"><i data-bar style="width:' + Math.round(pct * 100) + '%"></i></div>\n'
+    + '  ' + habitList(p.body) + '\n'
+    + '</section>';
+}
+
+function medal(k, size = '') {
+  const d = deityFor(k);
+  if (!d || !ART[d.id]) return '';
+  return '<a class="medal ' + size + '" href="/darshan/#' + d.id + '" aria-label="' + esc(d.name) + '">' + ART[d.id] + '</a>';
+}
+
+function mantraBlock(k) {
+  const d = deityFor(k);
+  if (!d) return '';
+  return '<p class="mantra" lang="sa">' + esc(d.mantra) + '</p>'
+    + '<p class="roman">' + esc(d.roman) + ' <span class="dot">·</span> ' + esc(d.name) + '</p>';
+}
+
+function weekStrip(k) {
+  const keys = weekKeys(k);
+  return '<nav class="weekstrip" aria-label="This week">' + keys.map((key, i) => {
+    const page = DAY_PAGES.get(key);
+    const t = page ? page.tasks : null;
+    const pct = t && t.total ? t.done / t.total : 0;
+    const cls = ['wd', key === k ? 'today' : '', key > k ? 'future' : '',
+      page && t.total && t.done === t.total ? 'full' : ''].filter(Boolean).join(' ');
+    const inner = '<span class="wl">' + WEEK_LETTERS[i] + '</span>'
+      + '<span class="wr">' + ring(pct, 44, 3.6) + '<span class="wn">' + +key.slice(8) + '</span></span>';
+    return page
+      ? '<a class="' + cls + '" href="' + page.url + '" title="' + esc(fullDate(key)) + ' — ' + t.done + ' of ' + t.total + '">' + inner + '</a>'
+      : '<span class="' + cls + '">' + inner + '</span>';
+  }).join('') + '</nav>';
+}
+
+/* The tracker grid: one row per routine item, one cell per day this week.
+   Past cells can still be tapped -- the usual fix is ticking yesterday. */
+function habitGrid(k) {
+  const keys = weekKeys(k);
+  const head = '<div class="hg-row hg-head"><span class="hg-name"></span>'
+    + keys.map((key, i) => '<span class="hg-d' + (key === k ? ' today' : '') + '">' + WEEK_LETTERS[i]
+      + '<small>' + +key.slice(8) + '</small></span>').join('')
+    + '<span class="hg-sum">Week</span></div>';
+  const rows = ROUTINE.map((item) => {
+    const cells = keys.map((key) => {
+      const page = DAY_PAGES.get(key);
+      const it = page && taskItems(page.body).find((t) => norm(t.text) === norm(item.name));
+      if (!it) return '<span class="cell ' + (key > k ? 'future' : 'none') + '"></span>';
+      return '<button type="button" class="cell' + (key < k ? ' past' : '') + (key === k ? ' now' : '') + '"'
+        + ' data-file="content/posts/' + esc(page.file) + '" data-task="' + esc(it.text) + '"'
+        + ' aria-pressed="' + it.done + '" aria-label="' + esc(item.name + ', ' + fullDate(key)) + '" disabled></button>';
+    }).join('');
+    const count = keys.filter((key) => doneOn(key, item.name) === true).length;
+    const target = item.target;
+    const st = streak(item.name);
+    const sum = target
+      ? '<b class="' + (count >= target ? 'met' : '') + '">' + count + '/' + target + '</b>'
+      : '<b>' + count + '</b>';
+    const sub = target
+      ? (count >= target ? 'done' : (target - count) + ' to go')
+      : (st ? st + ' day' + (st === 1 ? '' : 's') + ' in a row' : '');
+    return '<div class="hg-row"><span class="hg-name">' + esc(item.name) + '<small>' + esc(sub) + '</small></span>'
+      + cells + '<span class="hg-sum">' + sum + '</span></div>';
+  }).join('');
+  const focusRow = '<div class="hg-row hg-focus"><span class="hg-name">Focus<small>hours, from the timer</small></span>'
+    + keys.map((key) => {
+      const f = FOCUS.get(key);
+      return '<span class="fcell' + (key === k ? ' now' : '') + '">' + (f && f.sec ? fmtShort(f.sec) : '') + '</span>';
+    }).join('')
+    + '<span class="hg-sum"><b>' + fmtShort(keys.reduce((t, key) => t + ((FOCUS.get(key) || {}).sec || 0), 0)) + '</b></span></div>';
+  return '<div class="hgrid">' + head + rows + focusRow + '</div>';
+}
+
+/* four weeks per habit, Monday-aligned, ending with this week */
+function heatmaps(k) {
+  const start = addDays(weekStartKey(k), -21);
+  const keys = Array.from({ length: 28 }, (_, i) => addDays(start, i));
+  return ROUTINE.map((item) => {
+    let done = 0;
+    let seen = 0;
+    const cells = keys.map((key) => {
+      const v = doneOn(key, item.name);
+      if (key <= k && v !== null) seen++;
+      if (v === true) done++;
+      const cls = key > k ? 'fut' : v === true ? 'yes' : v === false ? (key === k ? 'open' : 'no') : 'off';
+      return '<i class="' + cls + '" title="' + esc(fullDate(key)) + '"></i>';
+    });
+    /* grouped by week, so the eye can count Mondays */
+    const weeks = [0, 7, 14, 21].map((i) => '<span class="wk">' + cells.slice(i, i + 7).join('') + '</span>').join('');
+    return '<div class="heat"><div class="heathead"><span>' + esc(item.name) + '</span>'
+      + '<span class="muted">' + done + ' of ' + seen + ' days</span></div>'
+      + '<div class="heatcells">' + weeks + '</div></div>';
+  }).join('');
+}
+
+function focusTimeline(key) {
+  const f = FOCUS.get(key);
+  if (!f || !f.sec) return '';
+  const blocks = f.sessions.map((s) => {
+    const p = clockParts(s.start);
+    const a = p.h * 60 + p.mi;
+    const w = Math.max(Number(s.sec) / 60, 4);
+    return '<i style="left:' + (a / 14.4).toFixed(2) + '%;width:' + (w / 14.4).toFixed(2) + '%" title="'
+      + esc(hhmm(s.start) + ' · ' + fmtDur(s.sec)) + '"></i>';
+  }).join('');
+  return '<div class="timeline"><div class="tl-track">' + blocks + '</div>'
+    + '<div class="tl-hours"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div></div>';
 }
 
 /* ---------- write ---------- */
@@ -344,121 +566,184 @@ const write = (rel, content) => {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, content);
 };
+/* JSON inside a <script> tag: nothing in it may close the tag */
+const inlineJson = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
 
-/* home: a table of contents, the way a notebook has one -- then what is newest */
-const board = '<nav class="contents">'
-  + SECTIONS.map((s) => {
-    const ps = bySection[s.id] || [];
-    const count = ps.length
-      ? ps.length + ' · ' + esc(shortDate(ps[0].iso))
-      : '<span class="empty-dot">empty</span>';
-    return '<a href="/s/' + s.id + '/">'
-      + '<span class="n">' + esc(s.name) + '</span>'
-      + '<span class="c">' + count + '</span>'
-      + '<span class="b">' + esc(s.blurb) + '</span>'
-      + '</a>';
-  }).join('')
-  + '</nav>';
-
-/* With no name to lead on, the tagline itself becomes the h1 -- one line,
-   not the name followed by a restatement of it underneath. */
-const masthead = CFG.title
-  ? '<div class="masthead"><h1>' + esc(CFG.title) + '</h1>'
-    + '<p class="sub">' + esc(CFG.tagline) + '</p></div>\n'
-  : '<div class="masthead"><h1 class="taglineh1">' + esc(CFG.tagline) + '</h1></div>\n';
-
-const latest = posts.slice(0, CFG.latestOnHome || 15);
-write('index.html', shell({
-  canonical: '/',
-  body: masthead
-    + board + '\n'
-    + '<h2 class="rule">Latest</h2>\n'
-    + '<div class="feed">'
-    + (latest.map((p) => feedItem(p)).join('\n') || '<p class="empty">Nothing here yet. Go say something.</p>')
-    + '</div>\n'
-    + (posts.length > latest.length ? '<nav class="pager"><span></span><a href="/archive/">everything in the archive →</a></nav>' : ''),
-}));
-
-/* ---------- this week's scoreboard ----------
-   Built from the day pages themselves, so it cannot disagree with them. Shows
-   the week Mon..Sun: what was done, what was missed, and how far off target.
-   The site cannot nag, so the miss has to be visible the moment the page opens. */
-function scoreboard() {
-  const days = (bySection.daytasks || []);
-  if (!days.length || !ROUTINE.length) return '';
-
-  const start = weekStart(days[0].iso);            // week of the most recent day page
-  if (!start) return '';
-  const startKey = ymd(start);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-
-  /* one slot per weekday, holding that day's page if it exists */
-  const slots = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setUTCDate(d.getUTCDate() + i);
-    const key = ymd(d);
-    const page = days.find((p) => {
-      const c = clockParts(p.iso);
-      return c && key === c.y + '-' + String(c.mo).padStart(2, '0') + '-' + String(c.d).padStart(2, '0');
-    });
-    slots.push({ key, page, done: page ? doneNames(page.body) : null });
-  }
-
-  const rows = ROUTINE.map((item) => {
-    const want = item.name.trim().toLowerCase();
-    const marks = slots.map((s) => {
-      if (!s.page) return '<i class="no"></i>';               // no page for that day yet
-      return s.done.has(want) ? '<i class="yes"></i>' : '<i class="miss"></i>';
-    }).join('');
-    const count = slots.filter((s) => s.done && s.done.has(want)).length;
-    const target = item.target;
-    const met = target ? count >= target : null;
-    const tally = target ? count + ' / ' + target : String(count);
-    const note = target
-      ? (met ? 'done' : (target - count) + ' to go')
-      : count + (count === 1 ? ' day' : ' days');
-    return '<li class="' + (met === false ? 'short' : (met ? 'met' : '')) + '">'
-      + '<span class="n">' + esc(item.name) + '</span>'
-      + '<span class="dots">' + marks + '</span>'
-      + '<span class="tally">' + esc(tally) + '</span>'
-      + '<span class="note">' + esc(note) + '</span>'
-      + '</li>';
-  }).join('');
-
-  const label = shortDate(startKey + 'T00:00') + ' – ' + shortDate(ymd(end) + 'T00:00');
-  return '<section class="scoreboard">\n'
-    + '  <h2 class="rule">This week · ' + esc(label) + '</h2>\n'
-    /* same grid and same dot widths as the rows, so the letters sit over them */
-    + '  <div class="wkhead"><span></span><span class="dots">'
-    + ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => '<i>' + d + '</i>').join('')
-    + '</span><span></span></div>\n'
-    + '  <ul class="score">' + rows + '</ul>\n'
+const todayFocus = FOCUS.get(TODAY) || { sessions: [], sec: 0, n: 0 };
+const focusCard = (k) => {
+  const f = FOCUS.get(k) || { sessions: [], sec: 0, n: 0 };
+  return '<section class="card focuscard" data-focus-card>\n'
+    + '  <div class="fc-text"><p class="label">Focus today</p>'
+    + '<p class="big" data-f-total>' + fmtDur(f.sec) + '</p>'
+    + '<p class="sub"><span data-f-sub>of ' + fmtDur(FOCUS_TARGET) + ' · ' + f.n + ' block' + (f.n === 1 ? '' : 's') + '</span>'
+    + '<span class="running" data-f-running hidden></span></p></div>\n'
+    + '  <div class="fc-ring" data-f-ring>' + ring(f.sec / FOCUS_TARGET, 72, 7, 'focusring') + '</div>\n'
+    + '  <a class="btn primary" href="/focus/">Start a block</a>\n'
     + '</section>';
-}
+};
+/* what the focus script needs to show today live on any page */
+const focusEmbed = () => '<script type="application/json" id="focusdata">' + inlineJson({
+  today: TODAY,
+  target: FOCUS_TARGET,
+  presets: (CFG.focus && CFG.focus.presets) || [25, 30, 45, 60, 90],
+  defaultMinutes: (CFG.focus && CFG.focus.defaultMinutes) || 30,
+  repo: CFG.repo,
+  branch: CFG.branch,
+  weekStartsMonday: CFG.weekStartsMonday !== false,
+  days: Object.fromEntries([...FOCUS].filter(([key]) => key >= addDays(TODAY, -40))
+    .map(([key, v]) => [key, { sec: v.sec, n: v.n }])),
+  sessions: todayFocus.sessions,
+}) + '</script>';
 
-/* section pages */
-for (const s of SECTIONS) {
-  const ps = bySection[s.id] || [];
-  write('s/' + s.id + '/index.html', shell({
-    title: s.name,
-    desc: s.blurb,
-    canonical: '/s/' + s.id + '/',
-    activeId: s.id,
-    body: '<h1 class="pagetitle">' + esc(s.name) + '</h1>\n'
-      + '<p class="tagline">' + esc(s.blurb) + '</p>\n'
-      + (s.id === 'daytasks' ? scoreboard() + '\n' : '')
-      + '<div class="feed">'
-      + (ps.map((p) => feedItem(p, false)).join('\n')
-        || '<p class="empty">Nothing filed here yet. <a href="/admin/">Add the first one</a>.</p>')
-      + '</div>',
+/* ---------- home: today ---------- */
+{
+  const k = TODAY;
+  const page = DAY_PAGES.get(k);
+  const d = deityFor(k);
+  const week = WEEK_PAGES.find((p) => weekStartKey(keyOf(p.iso)) === weekStartKey(k));
+  const latest = journal.slice(0, 6);
+  const body = '<section class="hero">\n'
+    + '  <div class="herotext">\n'
+    + '    <p class="kicker">' + esc(VAAR[weekdayOf(k)]) + ' <span lang="hi">' + VAAR_DEVA[weekdayOf(k)] + '</span></p>\n'
+    + '    <h1>' + esc(FULLDAYS[weekdayOf(k)]) + '<span>' + +k.slice(8) + ' ' + FULLMONTHS[+k.slice(5, 7) - 1] + '</span></h1>\n'
+    + '    ' + mantraBlock(k) + '\n'
+    + '  </div>\n'
+    + '  ' + medal(k) + '\n'
+    + '</section>\n'
+    + weekStrip(k) + '\n'
+    + (page
+      ? taskCard(page, 'Today', { link: false, cls: 'today' })
+      : '<section class="card"><p class="muted">Today\'s page appears at 5am. <a href="/admin/">Make it now</a> — pick Day Tasks and the routine fills itself in.</p></section>')
+    + '\n' + focusCard(k) + '\n'
+    + (week ? taskCard(week, 'This week') + '\n' : '')
+    + '<div class="rowhead"><h2>From the journal</h2><a href="/journal/">All sections →</a></div>\n'
+    + '<div class="entries">' + (latest.map((p) => entryCard(p)).join('\n') || '<p class="muted">Nothing written yet.</p>') + '</div>\n'
+    + focusEmbed();
+  write('index.html', shell({
+    canonical: '/', nav: 'today', cls: 'home',
+    desc: d ? CFG.tagline + ' ' + d.roman + '.' : CFG.tagline,
+    body, scripts: ['/focus.js'],
   }));
 }
 
-/* posts */
-for (let i = 0; i < posts.length; i++) {
-  const p = posts[i];
+/* ---------- habits ---------- */
+write('habits/index.html', shell({
+  title: 'Habits', canonical: '/habits/', nav: 'habits',
+  body: '<div class="pagehead"><h1>Habits</h1><p class="muted">This week, ' + esc(shortDate(weekKeys(TODAY)[0]))
+    + ' – ' + esc(shortDate(weekKeys(TODAY)[6])) + '. Tap a circle to tick a day, even a past one.</p></div>\n'
+    + '<section class="card">' + habitGrid(TODAY) + '</section>\n'
+    + '<div class="rowhead"><h2>Last four weeks</h2></div>\n'
+    + '<section class="card heats">' + heatmaps(TODAY)
+    + '<p class="legend"><i class="yes"></i> done <i class="no"></i> missed <i class="off"></i> not tracked</p></section>\n'
+    + '<div class="rowhead"><h2>Every day</h2><a href="/s/daytasks/">All day pages →</a></div>\n'
+    + '<div class="stack">' + (bySection.daytasks || []).slice(0, 7).map((p) => taskCard(p, fullDate(p.iso))).join('\n') + '</div>',
+}));
+
+/* ---------- focus ---------- */
+write('focus/index.html', shell({
+  title: 'Focus', canonical: '/focus/', nav: 'focus', cls: 'focuspage',
+  desc: 'A block timer with an alarm, and a running total of focused time.',
+  scripts: ['/focus.js'],
+  body: '<div id="focusapp" class="focusapp">\n'
+    + '<section class="card timer">\n'
+    + '  <div class="dial">\n'
+    + '    <svg class="dialring" viewBox="0 0 240 240" aria-hidden="true"><circle class="track" cx="120" cy="120" r="108"/>'
+    + '<circle class="prog" id="fprog" cx="120" cy="120" r="108" transform="rotate(-90 120 120)"/></svg>\n'
+    + '    <div class="dialtext"><div class="clock" id="fclock">30:00</div><div class="fstate" id="fstate">Ready</div></div>\n'
+    + '  </div>\n'
+    + '  <div class="presets" id="fpresets" role="group" aria-label="Block length"></div>\n'
+    + '  <div class="custom" id="fcustombox" hidden><input id="fcustom" type="number" inputmode="numeric" min="1" max="240" placeholder="minutes">'
+    + '<button type="button" class="btn" id="fcustomset">Set</button></div>\n'
+    + '  <div class="controls" id="fcontrols">\n'
+    + '    <button type="button" class="btn primary big" id="fstart">Start</button>\n'
+    + '    <button type="button" class="btn big" id="fpause" hidden>Pause</button>\n'
+    + '    <button type="button" class="btn" id="fplus" hidden>+5 min</button>\n'
+    + '    <button type="button" class="btn ghost" id="fstop" hidden>Stop &amp; log</button>\n'
+    + '  </div>\n'
+    + '  <div class="alarmbox" id="falarm" hidden>\n'
+    + '    <p class="alarmtitle" id="falarmtitle">Time.</p>\n'
+    + '    <div class="controls"><button type="button" class="btn primary big" id="fagain">Another block</button>'
+    + '<button type="button" class="btn big" id="fdone">Done for now</button></div>\n'
+    + '  </div>\n'
+    + '  <p class="fnote" id="fnote"></p>\n'
+    + '</section>\n'
+    + '<section class="card ftoday">\n'
+    + '  <div class="ftodayhead"><div><p class="label">Focused today</p><p class="big" id="ftotal">0m</p>'
+    + '<p class="sub" id="fsub"></p></div><div id="fring"></div></div>\n'
+    + '  <div class="timeline"><div class="tl-track" id="ftimeline"></div>'
+    + '<div class="tl-hours"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div></div>\n'
+    + '  <ul class="sessions" id="fsessions"></ul>\n'
+    + '</section>\n'
+    + '<section class="card">\n'
+    + '  <div class="cardhead"><h3>This week</h3><span class="count" id="fweektotal"></span></div>\n'
+    + '  <div class="bars" id="fweek"></div>\n'
+    + '</section>\n'
+    + '<section class="card fsettings">\n'
+    + '  <div class="cardhead"><h3>Alarm</h3></div>\n'
+    + '  <label class="switch"><input type="checkbox" id="fsound" checked><span>Bell when a block ends</span></label>\n'
+    + '  <label class="switch"><input type="checkbox" id="fwake"><span>Keep the screen on while a block runs</span></label>\n'
+    + '  <div class="notifyrow"><span id="fnotifystate">Notifications</span><button type="button" class="btn" id="fnotify">Allow notifications</button>'
+    + '<button type="button" class="btn ghost" id="ftest">Test the alarm</button></div>\n'
+    + '  <p class="muted small" id="fsync"></p>\n'
+    + '</section>\n'
+    + '</div>\n'
+    + focusEmbed(),
+}));
+
+/* ---------- journal ---------- */
+{
+  const tiles = SECTIONS.map((s) => {
+    const ps = bySection[s.id] || [];
+    return '<a class="tile sec-' + s.id + '" href="/s/' + s.id + '/">'
+      + '<span class="tname">' + esc(s.name) + '</span>'
+      + '<span class="tcount">' + ps.length + '</span>'
+      + '<span class="tblurb">' + esc(s.blurb) + '</span>'
+      + '<span class="tlast">' + (ps.length ? 'last ' + esc(shortDate(ps[0].iso)) : 'empty') + '</span>'
+      + '</a>';
+  }).join('');
+  write('journal/index.html', shell({
+    title: 'Journal', canonical: '/journal/', nav: 'journal',
+    body: '<div class="pagehead"><h1>Journal</h1><p class="muted">Ten fixed sections. Everything said out loud lands in one of them.</p></div>\n'
+      + '<nav class="tiles">' + tiles + '</nav>\n'
+      + '<div class="rowhead"><h2>Latest</h2><a href="/archive/">Archive →</a></div>\n'
+      + '<div class="entries">' + journal.slice(0, 20).map((p) => entryCard(p)).join('\n') + '</div>',
+  }));
+}
+
+/* ---------- darshan: all seven, one per weekday ---------- */
+write('darshan/index.html', shell({
+  title: 'Darshan', canonical: '/darshan/',
+  body: '<div class="pagehead"><h1>Darshan</h1><p class="muted">One for each day of the week. Today\'s sits at the top of the Today page.</p></div>\n'
+    + '<div class="darshan">' + [1, 2, 3, 4, 5, 6, 0].map((dow) => {
+      const d = DEITIES.find((x) => x.day === dow);
+      if (!d) return '';
+      return '<section class="card dcard' + (dow === weekdayOf(TODAY) ? ' today' : '') + '" id="' + d.id + '">'
+        + '<div class="medal big">' + ART[d.id] + '</div>'
+        + '<p class="kicker">' + VAAR[dow] + ' <span lang="hi">' + VAAR_DEVA[dow] + '</span></p>'
+        + '<h2>' + esc(d.name) + '</h2>'
+        + '<p class="mantra" lang="sa">' + esc(d.mantra) + '</p><p class="roman">' + esc(d.roman) + '</p></section>';
+    }).join('') + '</div>',
+}));
+
+/* ---------- section pages ---------- */
+for (const s of SECTIONS) {
+  const ps = bySection[s.id] || [];
+  const list = s.tasks
+    ? '<div class="stack">' + ps.map((p) => taskCard(p, p.title || fullDate(p.iso))).join('\n') + '</div>'
+    : '<div class="entries">' + ps.map((p) => entryCard(p, false)).join('\n') + '</div>';
+  write('s/' + s.id + '/index.html', shell({
+    title: s.name, desc: s.blurb, canonical: '/s/' + s.id + '/',
+    nav: s.tasks ? 'habits' : 'journal',
+    body: '<div class="pagehead"><p class="kicker"><a href="/journal/">Journal</a></p>'
+      + '<h1><span class="dotsec sec-' + s.id + '"></span>' + esc(s.name) + '</h1>'
+      + '<p class="muted">' + esc(s.blurb) + '</p></div>\n'
+      + (s.id === 'daytasks' ? '<p class="muted"><a href="/habits/">The tracker view →</a></p>\n' : '')
+      + (ps.length ? list : '<p class="muted">Nothing filed here yet. <a href="/admin/">Add the first one</a>.</p>'),
+  }));
+}
+
+/* ---------- posts ---------- */
+for (const p of posts) {
   const sec = SECTION_BY_ID[p.section];
   /* prev/next stay inside the same section -- reading one section end to end is
      the point of having sections at all */
@@ -466,91 +751,114 @@ for (let i = 0; i < posts.length; i++) {
   const at = sibs.indexOf(p);
   const prev = sibs[at + 1];
   const next = sibs[at - 1];
-  const label = (q) => esc((q.title || fmtDate(q.iso, false)).slice(0, 40));
-  const lessonBlock = p.lesson
-    ? '  <aside class="lesson"><b>' + esc((sec && sec.lessonLabel) || 'Instead') + '</b>'
-      + '<span>' + esc(p.lesson) + '</span></aside>\n'
-    : '';
-  /* data-file lets the browser find this post's source to tick a box off. Public
-     visitors have no token, so for them the checkboxes stay inert. */
-  const body = '<article class="post" data-file="content/posts/' + esc(p.file) + '">\n'
-    + '  <div class="meta">'
-    + (sec ? '<a class="secref" href="/s/' + sec.id + '/">' + esc(sec.name) + '</a> <span class="sep">·</span> ' : '')
-    + esc(fmtDate(p.iso))
-    + (p.words > 400 ? ' <span class="sep">·</span> ' + Math.ceil(p.words / 220) + ' min read' : '')
-    + '</div>\n'
-    + (p.title
-      ? '  <h1>' + esc(p.title) + '</h1>\n'
-      : (sec && sec.tasks ? '  <h1>' + esc(fullDate(p.iso)) + '</h1>\n' : ''))
-    + (p.tasks.total ? '  ' + progressBar(p.tasks) + '\n' : '')
-    + '  <div class="prose">' + p.html + '</div>\n'
-    + lessonBlock
-    + '  ' + tagList(p.tags) + '\n'
-    + '</article>\n'
-    + '<nav class="pager">'
+  const label = (q) => esc((q.title || fullDate(q.iso)).slice(0, 44));
+  const pager = '<nav class="pager">'
     + (prev ? '<a href="' + prev.url + '">← ' + label(prev) + '</a>' : '<span></span>')
     + (next ? '<a href="' + next.url + '">' + label(next) + ' →</a>' : '<span></span>')
     + '</nav>';
+  let body;
+
+  if (p.section === 'daytasks') {
+    /* a day page reads like a page of a diary: the day, its deity, the ticks,
+       the focus, and everything written about that day */
+    const k = keyOf(p.iso);
+    const notes = stripTasks(p.body);
+    const about = journal.filter((q) => q.day === k);
+    const f = FOCUS.get(k);
+    body = '<article class="daypage">\n'
+      + '<section class="hero small">\n'
+      + '  <div class="herotext"><p class="kicker">' + esc(VAAR[weekdayOf(k)]) + ' <span lang="hi">' + VAAR_DEVA[weekdayOf(k)] + '</span></p>\n'
+      + '  <h1>' + esc(FULLDAYS[weekdayOf(k)]) + '<span>' + +k.slice(8) + ' ' + FULLMONTHS[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4) + '</span></h1>\n'
+      + '  ' + mantraBlock(k) + '</div>\n'
+      + '  ' + medal(k) + '\n'
+      + '</section>\n'
+      + taskCard(p, 'Habits', { link: false }) + '\n'
+      + '<section class="card"><div class="cardhead"><h3>Focus</h3><span class="count">'
+      + (f && f.sec ? fmtDur(f.sec) + ' · ' + f.n + ' block' + (f.n === 1 ? '' : 's') : 'none logged') + '</span></div>'
+      + focusTimeline(k) + '</section>\n'
+      + (notes ? '<section class="card prose">' + marked.parse(notes) + '</section>\n' : '')
+      + (about.length ? '<div class="rowhead"><h2>Written about this day</h2></div><div class="entries">'
+        + about.map((q) => entryCard(q)).join('\n') + '</div>\n' : '')
+      + '</article>\n' + pager;
+  } else if (sec && sec.tasks) {
+    body = '<div class="pagehead"><p class="kicker">' + secChip(p.section) + '</p><h1>' + esc(p.title || fullDate(p.iso)) + '</h1>'
+      + '<p class="muted">' + esc(fmtDate(p.iso, false)) + '</p></div>\n'
+      + taskCard(p, 'The list', { link: false }) + '\n'
+      + (stripTasks(p.body) ? '<section class="card prose">' + marked.parse(stripTasks(p.body)) + '</section>\n' : '')
+      + pager;
+  } else {
+    const lessonBlock = p.lesson
+      ? '  <aside class="lesson"><b>' + esc((sec && sec.lessonLabel) || 'Instead') + '</b>'
+        + '<span>' + esc(p.lesson) + '</span></aside>\n'
+      : '';
+    /* data-file lets the browser find this post's source to tick a box off.
+       Public visitors have no token, so for them the checkboxes stay inert. */
+    body = '<article class="post" data-file="content/posts/' + esc(p.file) + '">\n'
+      + '  <div class="emeta">' + secChip(p.section) + '<span class="when">' + esc(fmtDate(p.iso)) + '</span>'
+      + aboutDay(p) + readTime(p) + '</div>\n'
+      + (p.title ? '  <h1>' + esc(p.title) + '</h1>\n' : '<div class="spacer"></div>\n')
+      + '  <div class="prose">' + p.html + '</div>\n'
+      + lessonBlock
+      + (p.tags.length ? '  ' + tagList(p.tags) + '\n' : '')
+      + '</article>\n' + pager;
+  }
   write('posts/' + p.slug + '/index.html', shell({
-    title: p.title || fmtDate(p.iso, false),
-    desc: p.excerpt,
+    title: p.title || fullDate(p.iso),
+    desc: p.excerpt || (sec && sec.blurb),
     canonical: p.url,
-    activeId: p.section,
+    nav: sec && sec.tasks ? 'habits' : 'journal',
     body,
   }));
 }
 
-/* tags */
+/* ---------- tags ---------- */
 const byTag = {};
-for (const p of posts) for (const t of p.tags) (byTag[t] ||= []).push(p);
+for (const p of journal) for (const t of p.tags) (byTag[t] ||= []).push(p);
 for (const [t, ps] of Object.entries(byTag)) {
   write('tags/' + t + '/index.html', shell({
-    title: '#' + t,
-    canonical: '/tags/' + t + '/',
-    body: '<h1 class="pagetitle">#' + esc(t) + '</h1>'
-      + '<p class="tagline">' + ps.length + ' post' + (ps.length === 1 ? '' : 's') + '</p>\n'
-      + '<div class="feed">' + ps.map((p) => feedItem(p)).join('\n') + '</div>',
+    title: '#' + t, canonical: '/tags/' + t + '/', nav: 'journal',
+    body: '<div class="pagehead"><h1>#' + esc(t) + '</h1><p class="muted">' + ps.length + ' entr' + (ps.length === 1 ? 'y' : 'ies') + '</p></div>\n'
+      + '<div class="entries">' + ps.map((p) => entryCard(p)).join('\n') + '</div>',
   }));
 }
 
-/* archive */
-const byMonth = {};
-for (const p of posts) (byMonth[monthKey(p.iso)] ||= []).push(p);
-const cloud = Object.keys(byTag).length
-  ? '<div class="tags tagcloud">' + Object.entries(byTag).sort((a, b) => b[1].length - a[1].length)
-      .map(([t, ps]) => '<a class="tag" href="/tags/' + esc(t) + '/">' + esc(t) + ' <span class="n">' + ps.length + '</span></a>').join('')
-    + '</div>'
-  : '';
-const archiveBody = '<h1 class="pagetitle">Archive</h1>\n'
-  + '<p class="tagline">Everything, newest first.</p>\n' + cloud + '\n'
-  + Object.keys(byMonth).sort().reverse().map((k) => '<section class="month">\n'
-    + '  <h2>' + esc(monthLabel(k)) + '</h2>\n'
-    + '  <ul>' + byMonth[k].map((p) => {
-      const sec = SECTION_BY_ID[p.section];
-      return '<li><span class="d">' + String(clockParts(p.iso).d).padStart(2, '0') + '</span>'
-        + '<a href="' + p.url + '">' + esc(p.title || p.excerpt.slice(0, 70) || 'Untitled') + '</a>'
-        + (sec ? '<span class="sectag">' + esc(sec.name) + '</span>' : '') + '</li>';
-    }).join('') + '</ul>\n'
-    + '</section>').join('\n');
-write('archive/index.html', shell({ title: 'Archive', body: archiveBody, canonical: '/archive/' }));
+/* ---------- archive ---------- */
+{
+  const byMonth = {};
+  for (const p of journal) (byMonth[monthKey(p.iso)] ||= []).push(p);
+  const cloud = Object.keys(byTag).length
+    ? '<div class="tags tagcloud">' + Object.entries(byTag).sort((a, b) => b[1].length - a[1].length)
+      .map(([t, ps]) => '<a class="tag" href="/tags/' + esc(t) + '/">#' + esc(t) + ' <span class="n">' + ps.length + '</span></a>').join('')
+      + '</div>'
+    : '';
+  write('archive/index.html', shell({
+    title: 'Archive', canonical: '/archive/', nav: 'journal',
+    body: '<div class="pagehead"><h1>Archive</h1><p class="muted">Everything written, newest first. Day pages live under <a href="/s/daytasks/">Day Tasks</a>.</p></div>\n'
+      + cloud + '\n'
+      + Object.keys(byMonth).sort().reverse().map((mk) => '<section class="card month">\n'
+        + '  <h2>' + esc(monthLabel(mk)) + '</h2>\n'
+        + '  <ul>' + byMonth[mk].map((p) => '<li><span class="d">' + pad2(clockParts(p.iso).d) + '</span>'
+          + '<a href="' + p.url + '">' + esc(p.title || p.excerpt.slice(0, 70) || 'Untitled') + '</a>'
+          + secChip(p.section) + '</li>').join('') + '</ul>\n'
+        + '</section>').join('\n'),
+  }));
+}
 
-/* search */
+/* ---------- search ---------- */
 write('search/index.html', shell({
-  title: 'Search',
-  canonical: '/search/',
-  body: '<h1 class="pagetitle">Search</h1>\n'
-    + '<p class="tagline">Every word of every post. Section names work too.</p>\n'
+  title: 'Search', canonical: '/search/',
+  body: '<div class="pagehead"><h1>Search</h1><p class="muted">Every word of every entry. Section names work too.</p></div>\n'
     + '<input id="q" type="search" placeholder="Type to search…" autocomplete="off" autofocus>\n'
-    + '<div id="results" class="feed"></div>',
+    + '<div id="results" class="entries"></div>',
 }));
 write('search.json', JSON.stringify(posts.map((p) => ({
-  t: p.title, u: p.url, d: fmtDate(p.iso, false), g: p.tags,
-  s: (SECTION_BY_ID[p.section] || {}).name || '',
-  x: p.text.slice(0, 1200),
+  t: p.title || (isTaskSection(p.section) ? fullDate(p.iso) : ''), u: p.url, d: fmtDate(p.iso, false), g: p.tags,
+  s: (SECTION_BY_ID[p.section] || {}).name || '', i: p.section,
+  x: p.text.slice(0, 1500),
 }))));
 
-/* rss */
-const rssItems = posts.slice(0, 50).map((p) => '  <item>\n'
+/* ---------- rss ---------- */
+const rssItems = journal.slice(0, 50).map((p) => '  <item>\n'
   + '    <title>' + esc(p.title || fmtDate(p.iso, false)) + '</title>\n'
   + '    <link>' + esc(CFG.url + p.url) + '</link>\n'
   + '    <guid isPermaLink="true">' + esc(CFG.url + p.url) + '</guid>\n'
@@ -565,7 +873,13 @@ write('feed.xml', '<?xml version="1.0" encoding="UTF-8"?>\n'
   + '  <description>' + esc(CFG.tagline) + '</description>\n'
   + rssItems + '\n</channel></rss>\n');
 
-/* static passthrough */
+/* focus totals as data, for anything that wants them */
+write('focus.json', JSON.stringify({
+  target: FOCUS_TARGET,
+  days: Object.fromEntries([...FOCUS].map(([key, v]) => [key, { sec: v.sec, n: v.n }])),
+}));
+
+/* ---------- static passthrough ---------- */
 function copyDir(src, dst) {
   if (!fs.existsSync(src)) return;
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
@@ -582,17 +896,19 @@ copyDir(path.join(ROOT, 'public'), OUT);
 write('admin/config.json', JSON.stringify({
   repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [],
   url: CFG.url, sections: SECTIONS, speechLang: CFG.speechLang || 'en-IN',
-  routine: CFG.routine || [],
+  routine: CFG.routine || [], weeklyRoutine: CFG.weeklyRoutine || [],
 }));
 
-fs.copyFileSync(path.join(ROOT, 'src', 'style.css'), path.join(OUT, 'style.css'));
-fs.copyFileSync(path.join(ROOT, 'src', 'app.js'), path.join(OUT, 'app.js'));
+for (const f of ['style.css', 'app.js', 'focus.js', 'sw.js']) {
+  fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
+}
 write('.nojekyll', '');
 write('404.html', shell({
   title: 'Not found',
-  body: '<h1 class="pagetitle">Not found</h1><p class="tagline">That page does not exist. <a href="/">Back home</a>.</p>',
+  body: '<div class="pagehead"><h1>Not found</h1><p class="muted">That page does not exist. <a href="/">Back to today</a>.</p></div>',
 }));
 
-console.log('built ' + posts.length + ' posts across '
+console.log('built ' + posts.length + ' posts (' + journal.length + ' journal, '
+  + DAY_PAGES.size + ' day pages) across '
   + SECTIONS.filter((s) => (bySection[s.id] || []).length).length + '/' + SECTIONS.length
-  + ' sections, ' + Object.keys(byTag).length + ' tags');
+  + ' sections, ' + Object.keys(byTag).length + ' tags, ' + FOCUS.size + ' focus days; today = ' + TODAY);
