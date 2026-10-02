@@ -242,7 +242,18 @@ const posts = fs.readdirSync(POSTS_DIR)
     const text = plainText(body);
     const tags = (Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []))
       .map((t) => String(t).toLowerCase().trim()).filter(Boolean);
-    const section = SECTION_BY_ID[String(data.section || '').toLowerCase()] ? String(data.section).toLowerCase() : FALLBACK;
+    let section = SECTION_BY_ID[String(data.section || '').toLowerCase()] ? String(data.section).toLowerCase() : FALLBACK;
+    const tasks = countTasks(body);
+    /* A post filed under a task section (Day Tasks, Week Tasks) with no checkboxes
+       in it is writing, not a task list. Left there it would REPLACE that day's real
+       habit page (the newest post wins the date) and vanish from the Journal -- which
+       is exactly what happened to a journal entry typed under Day Tasks. So it is
+       filed as Daily instead, and the build says so. */
+    if (isTaskSection(section) && tasks.total === 0 && text) {
+      const home = SECTION_BY_ID.daily ? 'daily' : FALLBACK;
+      console.log('  re-filed ' + file + ': ' + section + ' -> ' + home + ' (no checkboxes, so it is writing)');
+      section = home;
+    }
     /* `day:` ties a post to the day it is ABOUT when it was filed later --
        Tuesday's story told on Wednesday still belongs to Tuesday's page. */
     const day = /^\d{4}-\d{2}-\d{2}$/.test(String(data.day || '')) ? String(data.day) : keyOf(iso);
@@ -256,8 +267,10 @@ const posts = fs.readdirSync(POSTS_DIR)
       ts: new Date(iso).getTime() || 0,
       words: text ? text.split(/\s+/).length : 0,
       excerpt: text.slice(0, 220) + (text.length > 220 ? '…' : ''),
-      html: annotateTasks(marked.parse(body), body),
-      tasks: countTasks(body),
+      /* breaks: true keeps the line breaks the writer typed. The phone editor sets it;
+         older posts are hard-wrapped at ~90 columns and must NOT have it. */
+      html: annotateTasks(marked.parse(body, { breaks: data.breaks === true }), body),
+      tasks,
     };
   })
   .filter((p) => !p.draft)

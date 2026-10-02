@@ -842,7 +842,10 @@
     var b = e.target.closest('button[data-sec]');
     if (!b) return;
     state.section = b.dataset.sec;
-    try { localStorage.setItem(LS.lastSection, state.section); } catch (err) {}
+    /* Day Tasks / Week Tasks are special pages, not a place to keep writing --
+       remembering one as the "last section" is how a journal entry once went
+       into Day Tasks and replaced that day's habit page. */
+    try { if (!isTaskSec(state.section)) localStorage.setItem(LS.lastSection, state.section); } catch (err) {}
     renderSections();
     updateInfo();  /* immediately, not after saveDraft's debounce */
     saveDraft();
@@ -874,6 +877,22 @@
   });
 
   /* ---------- publish ---------- */
+  var TASK_LINE_RE = /^\s*[-*+]\s+\[[ xX]\]\s/m;
+  function hasTaskLines(text) { return TASK_LINE_RE.test(text || ''); }
+  function isTaskSec(id) {
+    for (var i = 0; i < CFG.sections.length; i++) {
+      if (CFG.sections[i].id === id) return !!CFG.sections[i].tasks;
+    }
+    return false;
+  }
+  /* where plain writing belongs: Daily, or failing that the last section */
+  function proseHome() {
+    for (var i = 0; i < CFG.sections.length; i++) {
+      if (CFG.sections[i].id === 'daily') return 'daily';
+    }
+    return CFG.sections.length ? CFG.sections[CFG.sections.length - 1].id : 'blabber';
+  }
+
   function buildMarkdown(iso) {
     var title = $('title').value.trim();
     var lesson = $('lesson').hidden ? '' : $('lesson').value.trim();
@@ -883,6 +902,10 @@
     fm.push('section: ' + (state.section || 'blabber'));
     if (lesson) fm.push('lesson: "' + lesson.replace(/"/g, '\\"') + '"');
     if (state.tags.length) fm.push('tags: [' + state.tags.join(', ') + ']');
+    /* breaks: true keeps the line breaks as typed or dictated. An edited post
+       carries over whatever else its file had (day:, slug:, breaks:) -- rebuilding
+       the header from only the known fields used to drop them silently. */
+    (state.editing ? (state.editing.extra || []) : ['breaks: true']).forEach(function (l) { fm.push(l); });
     fm.push('---', '');
     return fm.join('\n') + $('body').value.trim() + '\n';
   }
@@ -896,6 +919,15 @@
     var body = $('body').value.trim();
     if (!body) { say($('msg'), 'err', 'Nothing to publish yet.'); return; }
     if (!getToken()) { showTab('setup'); say($('setup-msg'), 'err', 'Connect a token first.'); return; }
+
+    /* Writing with no checkboxes under Day/Week Tasks: that page is for the habit
+       list, and prose there replaces it. Offer Daily instead of publishing it. */
+    if (isTaskSec(state.section) && !state.editing && !hasTaskLines(body)) {
+      if (!confirm('This has no checkboxes, so it is not a task list. File it under Daily instead?')) return;
+      state.section = proseHome();
+      renderSections();
+      updateInfo();
+    }
 
     state.busy = true;
     $('publish').disabled = true;
@@ -993,18 +1025,26 @@
         var tg = head.match(/^tags:\s*\[(.*)\]\s*$/m);
         var sc = head.match(/^section:\s*(.+)$/m);
         var ls = head.match(/^lesson:\s*"?(.*?)"?\s*$/m);
-        $('title').value = t ? t[1] : '';
+        /* the header is written with \" for a quote inside a quoted value; take
+           that back out, or saving doubles the backslash every time */
+        var unq = function (s) { return String(s).replace(/\\"/g, '"'); };
+        var extra = head.split(/\r?\n/).filter(function (l) {
+          var k = l.match(/^([A-Za-z_][\w-]*)\s*:/);
+          return k && ['title', 'date', 'section', 'lesson', 'tags'].indexOf(k[1]) < 0;
+        });
+        $('title').value = t ? unq(t[1]) : '';
         $('body').value = rest.trim();
         state.tags = tg ? tg[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
         state.section = sc ? sc[1].trim() : state.section;
         state.editing = {
           path: file.path, sha: file.sha, name: b.dataset.name,
-          iso: dt ? dt[1].trim() : localIso(new Date())
+          iso: dt ? dt[1].trim() : localIso(new Date()),
+          extra: extra
         };
         renderSections();
         /* set the lesson AFTER renderSections, which clears it for sections that
            do not use one */
-        if (ls) $('lesson').value = ls[1];
+        if (ls) $('lesson').value = unq(ls[1]);
         renderChips(); autogrow(); saveDraft(); showTab('new');
         say($('msg'), 'ok', 'Editing an existing post. Publishing overwrites it.');
       })
@@ -1075,11 +1115,15 @@
       $('repo-name').textContent = CFG.repo || 'this repo';
       /* default to whatever section was used last -- most days run in streaks */
       try { state.section = localStorage.getItem(LS.lastSection) || ''; } catch (e) {}
-      if (!state.section && CFG.sections.length) {
-        state.section = CFG.sections[CFG.sections.length - 1].id;
-      }
+      /* never start in Day/Week Tasks, even if an older version remembered it */
+      if (!state.section || isTaskSec(state.section)) state.section = proseHome();
       initMic();
       loadDraft();
+      /* a draft sitting in a task section with no checkboxes in it is writing that
+         landed in the wrong place -- put it back where writing goes */
+      if (isTaskSec(state.section) && !state.editing && !hasTaskLines($('body').value)) {
+        state.section = proseHome();
+      }
       renderSections();
       renderChips();
       autogrow();

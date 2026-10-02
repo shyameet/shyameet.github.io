@@ -1,6 +1,7 @@
 ---
 date: 2026-10-02T13:05:56+05:30
-section: daytasks
+section: daily
+breaks: true
 ---
 So yesterday there was this girl who came once again while i was in the gym to look for table tennis and she inquired about it once again , she asked about my sister as well - what time she comes in and any one else plays the table tennis 
 i told her that my sister would be going out of mumbai in a few days and there are is one uncle who plays and judging by her face reaction she wasnt interested in that , so she asked me directly whether i would play with her 
