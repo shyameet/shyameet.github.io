@@ -10,11 +10,13 @@ Live at **https://shyameet.github.io**
 
 | Page | What it is |
 |---|---|
-| **Today** (`/`) | The date, the day's deity and mantra, the week as rings, today's habits (tappable), yesterday's folded underneath, focus so far, this week's list, the last three days of writing |
+| **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
 | **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
-| **Darshan** (`/darshan/`) | All seven medallions, one per weekday |
+| **Shloka** (`/shloka/`) | Every verse in the collection, searchable, with a chip per scripture |
+| **Utsav** (`/utsav/`) | The festivals coming up, with their Mumbai dates |
+| **Darshan** (`/darshan/`) | All seven deities, one per weekday |
 | **Write** (`/admin/`) | The phone editor |
 
 A phone gets a bottom tab bar (Today · Habits · Focus · Journal · Write); a desk gets the
@@ -47,6 +49,11 @@ end of the post. The lesson is the part that stops it happening twice.
 Sections marked `"tasks": true` count `- [ ]` / `- [x]` lines. The editor gets a button
 that inserts a task line, since you cannot dictate square brackets.
 
+A post in a task section **with no checkboxes in it is writing, not a checklist**, so the
+build files it under Daily instead (and says so in the build log). Before this rule an
+entry filed under Day Tasks by mistake took over that day's habit page and vanished from
+the Journal. The editor warns before publishing one, and `npm run check` flags any left.
+
 Checkboxes and habit circles are **tappable on the live site**, but only for whoever holds
 the token. `/admin/` and the site share an origin, so any page can read the token out of
 local storage; if one is there, ticking rewrites the markdown and commits it. Each box
@@ -69,8 +76,11 @@ in local storage (no repeat until the list has gone round once).
 
 The routine is `routine` in `site.config.json` — plain names, or `{ "name": "Gym",
 "target": 5 }` for something counted per week instead of daily. `weeklyRoutine` fills
-the Monday week page. The newday workflow writes each day's page at 05:00 IST and
-redeploys, so the site turns over to the new day on its own.
+the Monday week page. The newday workflow makes **today's and tomorrow's** page (and the
+week page on a Monday) at 02:00 and 04:00 IST and redeploys. GitHub's scheduler can run a
+couple of hours late, so a page is always made a day ahead rather than at the last moment;
+and a browser holding the token makes any missing day or week page itself from the same
+template (`src/lib/seed.mjs` is shared by both, so the two always agree).
 
 The grid marks a past unticked day as missed and says so; a daily habit shows its streak,
 a targeted one shows how many it still needs this week.
@@ -119,6 +129,72 @@ A deity with no `image` falls back to a medallion drawn in code by `src/make_art
 (`src/art/<id>.svg`: the trishul over Kailash, conch and chakra, the gada, and so on).
 `src/make_icons.py` renders the Om app icons.
 
+Each deity also has a `jai` (the call said with the greeting: *जय माँ काली*, *हर हर महादेव* …).
+
+## Shloka
+
+`content/shlokas.json` holds the verses; Today shows one a day, `/shloka/` shows them all.
+Each weekday draws from its own **pool** — Sunday Surya, Monday Shiva, Tuesday Hanuman,
+Wednesday Ganesha, Thursday Vishnu and Krishna, Friday Devi, Saturday Bhairav and Time —
+and moves on by one verse each week. The pick is a pure function of the date
+(`src/lib/shlokas.mjs`), so every device and every rebuild agrees without storing anything.
+
+```
+{ "id": "gita-2-47", "day": 4, "family": "gita",
+  "src": "Bhagavad Gita 2.47", "by": "Krishna to Arjuna",
+  "sa": "कर्मण्येवाधिकारस्ते ...",        // Devanagari: the source of truth
+  "en": "...", "carry": "one line to take into the day" }
+```
+
+`day` is 0 (Sunday) to 6 (Saturday); `family` is a key of `families` in the same file. The
+Roman line is **generated** from the Devanagari (`src/lib/translit.mjs`), so there is only
+one text to get right; a verse in Hindi or Awadhi (the Chalisa) brings its own `tr`,
+because the Sanskrit rules would mispronounce it. The English and `carry` lines are
+original wording, not a published translation.
+
+Check a new verse against a printed or well-edited source before adding it, and cite it by
+its real number — editions differ (Gita 13.34 is 13.33 in Gita Press numbering, so the
+`src` says so). Where a text has two readings in print, keep one and move on. A verse that
+cannot be confirmed is better left out than guessed.
+
+## Utsav
+
+`content/festivals.json` is a hand-checked table of dates (Mumbai, IST), each one
+confirmed against Drik Panchang and a second panchang. Today shows the next two;
+`/utsav/` lists them all. Tithis do not reduce to a formula this site should carry, so the
+list **runs out**: the build prints a warning when fewer than 60 days remain, and it is
+about due again around December 2026 (when the Maharashtra holiday list for 2027 appears).
+Where two traditions keep a festival a day apart it is listed once and the `note` says
+which; dates the sources would not agree on were left out rather than picked.
+
+## The look
+
+A toran of marigolds and mango leaves hangs over Today, `/shloka/`, `/utsav/` and
+`/darshan/`; a faint rangoli sits behind the deity; the shloka is set like a leaf of a
+palm-leaf manuscript (pothi); and the footer closes the way a recitation closes. Focus is
+counted in **lamps** — a diya lights for every half hour of focus, and the timer's own
+lamp burns while a block runs. All of that artwork is drawn in code by
+`src/make_ornaments.py` into `public/art/ornaments/`, so none of it is a borrowed image.
+
+## Keeping the page current
+
+A static site is only as fresh as its last build, and a phone resumed in the morning is
+still showing last night's HTML. So:
+
+- **`/build.json`** (never cached) says when the live build was made and what today is.
+  Every page carries its own build time; if the live one is newer the page reloads itself
+  (or, if you are mid-sentence or a focus block is running, offers a tap-to-refresh).
+- **Two panels on Today.** The page holds today *and* tomorrow and shows the one that
+  matches the device's date, so the day turns over the moment the clock does.
+- **CSS and JS are content-hashed** (`?v=…`), so a new deploy can never be paired with an
+  old script.
+- For the owner, ticks and focus blocks are read from the live files, not the page.
+
+`npm run check` builds nothing; it reads `dist/` and the content and fails on a broken
+internal link, a tick box pointing at a file that is not there, a journal entry hiding
+inside a task section, two habit pages for one day, a verse missing a field, or a bad
+festival date.
+
 ## Posting
 
 **From the phone.** Open <https://shyameet.github.io/admin/>, pick a section, hit
@@ -141,6 +217,7 @@ colliding and makes the folder sort correctly.
 title: "Optional — omit it for a quick untitled note"
 date: 2026-09-12T10:30:00+05:30
 day: 2026-09-11   # optional: the day this is ABOUT, when it was filed later
+breaks: true     # optional: keep the line breaks as typed (the phone editor sets it)
 section: mistakes
 lesson: "Only used by sections that define lessonLabel"
 tags: [quant, people]
@@ -182,6 +259,7 @@ Scoped that way, a leaked token can edit this journal and nothing else. Revoke a
 npm install
 npm run build      # writes dist/
 npm run serve      # preview on http://localhost:4321
+npm run check      # after a build: broken links, hidden entries, missing day pages
 ```
 
 `BUILD_TODAY=2026-09-23 npm run build` builds the site as it looks on a given morning.
@@ -191,14 +269,21 @@ npm run serve      # preview on http://localhost:4321
 ```
 content/posts/*.md      what you say (and the day pages)
 content/focus/*.json    focus blocks, one file per day, written by /focus/
+content/shlokas.json    the verses, in weekday pools
+content/festivals.json  the festival dates
 site.config.json        sections, routine, focus, deities -- the only config
 src/build.mjs           the generator (one dependency: marked)
+src/lib/                seed (day/week templates), shlokas (the pick), translit
+                        (Devanagari to Roman), festivals
+src/check.mjs           npm run check
 src/style.css           all the styling
-src/app.js              theme, tappable tasks, search
-src/focus.js            the timer, and the live focus total
+src/app.js              theme, freshness, day rollover, tappable tasks, search, the verse
+                        library, the greeting and the festival countdown
+src/focus.js            the timer, and the live focus total (as lamps)
 src/sw.js               notifications for the timer
 src/art/*.svg           the medallions (made by src/make_art.py)
-src/newday.mjs          makes the day's page (run by .github/workflows/newday.yml)
+public/art/ornaments/   the toran, rangoli and lotus (made by src/make_ornaments.py)
+src/newday.mjs          makes today's and tomorrow's page (run by .github/workflows/newday.yml)
 public/admin/           the phone editor (static; talks to the GitHub API)
 .github/workflows/      push to main -> build -> GitHub Pages
 ```

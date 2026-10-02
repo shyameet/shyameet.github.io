@@ -1,0 +1,725 @@
+{
+  "about": "One verse a day. Each weekday draws from its own deity's pool (day 0 = Sunday/Surya ... 6 = Saturday/Bhairav), rotating week by week, so a verse returns about every fourteen weeks. Devanagari is the source of truth; the Roman line is generated from it (add \"tr\" only for Hindi/Awadhi verses, where the Sanskrit rules would mispronounce them). English and \"carry\" lines are original wording.",
+  "families": {
+    "gita": "Bhagavad Gita",
+    "mahabharata": "Mahabharata",
+    "upanishad": "Upanishads",
+    "veda": "Vedas",
+    "ramayana": "Ramayana",
+    "shiva": "Shiva",
+    "devi": "Devi",
+    "ganesha": "Ganesha",
+    "vishnu": "Vishnu",
+    "hanuman": "Hanuman",
+    "surya": "Surya & Grahas",
+    "wisdom": "Classical wisdom"
+  },
+  "items": [
+    {
+      "id": "gayatri", "day": 0, "family": "veda",
+      "src": "Gayatri Mantra · Rigveda 3.62.10",
+      "sa": "ॐ भूर्भुवः स्वः ।\nतत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि ।\nधियो यो नः प्रचोदयात् ॥",
+      "en": "We meditate on the radiant light of the divine Sun. May it awaken and guide our minds.",
+      "carry": "Start with one clear intention before the first task."
+    },
+    {
+      "id": "gita-6-5", "day": 0, "family": "gita",
+      "src": "Bhagavad Gita 6.5", "by": "Krishna to Arjuna",
+      "sa": "उद्धरेदात्मनात्मानं नात्मानमवसादयेत् ।\nआत्मैव ह्यात्मनो बन्धुरात्मैव रिपुरात्मनः ॥",
+      "en": "Lift yourself by your own effort; do not let yourself sink. You alone are your own friend, and you alone are your own enemy.",
+      "carry": "Be your own friend today: do the thing you have been avoiding."
+    },
+    {
+      "id": "brihadaranyaka-1-3-28", "day": 0, "family": "upanishad",
+      "src": "Brihadaranyaka Upanishad 1.3.28",
+      "sa": "असतो मा सद्गमय ।\nतमसो मा ज्योतिर्गमय ।\nमृत्योर्मामृतं गमय ॥",
+      "en": "Lead me from the unreal to the real, from darkness to light, from death to immortality.",
+      "carry": "At each small choice today, take the clearer, truer option."
+    },
+    {
+      "id": "aditya-hridayam", "day": 0, "family": "surya",
+      "src": "Aditya Hridayam 5 · Valmiki Ramayana, Yuddha Kanda 107 (sarga 105 in other editions)", "by": "Sage Agastya to Rama",
+      "sa": "सर्वमङ्गलमाङ्गल्यं सर्वपापप्रणाशनम् ।\nचिन्ताशोकप्रशमनमायुर्वर्धनमुत्तमम् ॥",
+      "en": "This hymn is the most auspicious of all that is auspicious: it destroys every sin, calms worry and grief, and lengthens life. It is the best.",
+      "carry": "Stand in the daylight for a minute and let the worry settle."
+    },
+    {
+      "id": "gita-3-8", "day": 0, "family": "gita",
+      "src": "Bhagavad Gita 3.8", "by": "Krishna to Arjuna",
+      "sa": "नियतं कुरु कर्म त्वं कर्म ज्यायो ह्यकर्मणः ।\nशरीरयात्रापि च ते न प्रसिद्ध्येदकर्मणः ॥",
+      "en": "Do your allotted work, for action is better than inaction. Even the upkeep of your body is impossible without action.",
+      "carry": "Action beats waiting for motivation. Begin the first block."
+    },
+    {
+      "id": "rigveda-1-89-1", "day": 0, "family": "veda",
+      "src": "Rigveda 1.89.1",
+      "sa": "आ नो भद्राः क्रतवो यन्तु विश्वतः ॥",
+      "en": "May noble thoughts come to us from every side.",
+      "carry": "Let one good idea in today: a page, a walk, a conversation."
+    },
+    {
+      "id": "gita-10-21", "day": 0, "family": "gita",
+      "src": "Bhagavad Gita 10.21", "by": "Krishna to Arjuna",
+      "sa": "आदित्यानामहं विष्णुर्ज्योतिषां रविरंशुमान् ।\nमरीचिर्मरुतामस्मि नक्षत्राणामहं शशी ॥",
+      "en": "Among the Adityas I am Vishnu; among lights, the radiant Sun; among the Maruts I am Marichi; among the stars, the Moon.",
+      "carry": "Notice one thing today that is simply brilliant, and say thanks."
+    },
+    {
+      "id": "taittiriya-1-11-1", "day": 0, "family": "upanishad",
+      "src": "Taittiriya Upanishad 1.11.1",
+      "sa": "सत्यं वद ।\nधर्मं चर ।\nस्वाध्यायान्मा प्रमदः ॥",
+      "en": "Speak the truth. Follow dharma. Do not neglect your own study.",
+      "carry": "Say one true thing clearly today, and read a little."
+    },
+    {
+      "id": "gita-6-17", "day": 0, "family": "gita",
+      "src": "Bhagavad Gita 6.17", "by": "Krishna to Arjuna",
+      "sa": "युक्ताहारविहारस्य युक्तचेष्टस्य कर्मसु ।\nयुक्तस्वप्नावबोधस्य योगो भवति दुःखहा ॥",
+      "en": "For one who is moderate in food and recreation, in effort and in work, and in sleep and waking, yoga destroys sorrow.",
+      "carry": "Keep today in balance: regular meals, steady effort, sleep on time."
+    },
+    {
+      "id": "katha-1-3-14", "day": 0, "family": "upanishad",
+      "src": "Katha Upanishad 1.3.14",
+      "sa": "उत्तिष्ठत जाग्रत प्राप्य वरान्निबोधत ।\nक्षुरस्य धारा निशिता दुरत्यया दुर्गं पथस्तत्कवयो वदन्ति ॥",
+      "en": "Arise, awake; approach the wise and understand. The path is sharp as a razor's edge, hard to cross, say the sages.",
+      "carry": "Stand up and begin. The path is narrow, so take one step."
+    },
+    {
+      "id": "rigveda-1-115-1", "day": 0, "family": "surya",
+      "src": "Rigveda 1.115.1",
+      "sa": "सूर्य आत्मा जगतस्तस्थुषश्च ॥",
+      "en": "The Sun is the soul of all that moves and all that stands still.",
+      "carry": "Step into the daylight for ten minutes today."
+    },
+    {
+      "id": "gita-13-34", "day": 0, "family": "gita",
+      "src": "Bhagavad Gita 13.34 (13.33 in Gita Press numbering)", "by": "Krishna to Arjuna",
+      "sa": "यथा प्रकाशयत्येकः कृत्स्नं लोकमिमं रविः ।\nक्षेत्रं क्षेत्री तथा कृत्स्नं प्रकाशयति भारत ॥",
+      "en": "As the one sun lights up this whole world, so the knower of the field lights up the whole field, O Bharata.",
+      "carry": "Watch the awareness behind your thoughts, not only the thoughts."
+    },
+    {
+      "id": "isha-1", "day": 0, "family": "upanishad",
+      "src": "Isha Upanishad 1",
+      "sa": "ईशावास्यमिदं सर्वं यत्किञ्च जगत्यां जगत् ।\nतेन त्यक्तेन भुञ्जीथा मा गृधः कस्यस्विद्धनम् ॥",
+      "en": "All this, whatever moves in the world, is pervaded by the Lord. Enjoy through renunciation; do not covet anyone's wealth.",
+      "carry": "Enjoy what you already have today, and measure it against no one."
+    },
+    {
+      "id": "ramayana-ayodhya-109-13", "day": 0, "family": "ramayana",
+      "src": "Valmiki Ramayana, Ayodhya Kanda 109.13", "by": "Rama",
+      "sa": "सत्यमेवेश्वरो लोके सत्ये धर्मः सदाश्रितः ।\nसत्यमूलानि सर्वाणि सत्यान्नास्ति परं पदम् ॥",
+      "en": "Truth alone is God in this world; dharma always rests on truth. Everything has truth as its root; there is no higher state than truth.",
+      "carry": "Be as honest in small things as in big ones."
+    },
+
+    {
+      "id": "mahamrityunjaya", "day": 1, "family": "shiva",
+      "src": "Mahamrityunjaya Mantra · Rigveda 7.59.12",
+      "sa": "ॐ त्र्यम्बकं यजामहे सुगन्धिं पुष्टिवर्धनम् ।\nउर्वारुकमिव बन्धनान्मृत्योर्मुक्षीय मामृतात् ॥",
+      "en": "We worship the three-eyed one, fragrant, who nourishes all. As a ripe cucumber is freed from its stem, may he free us from death, but not from immortality.",
+      "carry": "Loosen one worry you are gripping today; it is ripe to fall."
+    },
+    {
+      "id": "panchakshara-stotra", "day": 1, "family": "shiva",
+      "src": "Shiva Panchakshara Stotra · Adi Shankaracharya",
+      "sa": "नागेन्द्रहाराय त्रिलोचनाय भस्माङ्गरागाय महेश्वराय ।\nनित्याय शुद्धाय दिगम्बराय तस्मै नकाराय नमः शिवाय ॥",
+      "en": "Salutations to Shiva, the syllable 'Na': garlanded with the king of serpents, three-eyed, smeared with ash, the great Lord, eternal, pure, clothed in the sky.",
+      "carry": "Say 'Om Namah Shivaya' once, slowly, before you start."
+    },
+    {
+      "id": "gita-2-20", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 2.20", "by": "Krishna to Arjuna",
+      "sa": "न जायते म्रियते वा कदाचिन्नायं भूत्वा भविता वा न भूयः ।\nअजो नित्यः शाश्वतोऽयं पुराणो न हन्यते हन्यमाने शरीरे ॥",
+      "en": "The Self is never born and never dies; having come to be, it does not cease to be. Unborn, eternal, ancient, it is not killed when the body is killed.",
+      "carry": "Whatever happens to today's plans, the Self underneath is untouched."
+    },
+    {
+      "id": "nirvana-shatakam", "day": 1, "family": "shiva",
+      "src": "Nirvana Shatakam 1 · Adi Shankaracharya",
+      "sa": "मनोबुद्ध्यहङ्कारचित्तानि नाहं न च श्रोत्रजिह्वे न च घ्राणनेत्रे ।\nन च व्योमभूमिर्न तेजो न वायुश्चिदानन्दरूपः शिवोऽहं शिवोऽहम् ॥",
+      "en": "I am not mind, intellect, ego or memory; not ears, tongue, nose or eyes; not sky, earth, fire or air. I am consciousness and bliss: I am Shiva, I am Shiva.",
+      "carry": "You are more than today's score. Start from there."
+    },
+    {
+      "id": "gita-2-14", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 2.14", "by": "Krishna to Arjuna",
+      "sa": "मात्रास्पर्शास्तु कौन्तेय शीतोष्णसुखदुःखदाः ।\nआगमापायिनोऽनित्यास्तांस्तितिक्षस्व भारत ॥",
+      "en": "Contacts of the senses with their objects give cold and heat, pleasure and pain. They come and go and do not last; endure them, O Bharata.",
+      "carry": "Stay with the discomfort of the hard part; it will pass."
+    },
+    {
+      "id": "rudram-namakam", "day": 1, "family": "shiva",
+      "src": "Shri Rudram (Namakam) · Taittiriya Samhita 4.5.8",
+      "sa": "नमः शम्भवे च मयोभवे च\nनमः शङ्कराय च मयस्कराय च\nनमः शिवाय च शिवतराय च ॥",
+      "en": "Salutations to the source of happiness and the maker of happiness; to the doer of good and the maker of joy; to the auspicious one and to the still more auspicious.",
+      "carry": "Leave one thing a little better than you found it."
+    },
+    {
+      "id": "gita-2-56", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 2.56", "by": "Krishna to Arjuna",
+      "sa": "दुःखेष्वनुद्विग्नमनाः सुखेषु विगतस्पृहः ।\nवीतरागभयक्रोधः स्थितधीर्मुनिरुच्यते ॥",
+      "en": "One whose mind is not shaken by sorrow, who does not crave pleasures, and who is free from attachment, fear and anger, is called a sage of steady wisdom.",
+      "carry": "Meet the good news and the bad news at the same level today."
+    },
+    {
+      "id": "shiva-tandava-1", "day": 1, "family": "shiva",
+      "src": "Shiva Tandava Stotram 1 · Ravana",
+      "sa": "जटाटवीगलज्जलप्रवाहपावितस्थले\nगलेऽवलम्ब्य लम्बितां भुजङ्गतुङ्गमालिकाम् ।\nडमड्डमड्डमड्डमन्निनादवड्डमर्वयं\nचकार चण्डताण्डवं तनोतु नः शिवः शिवम् ॥",
+      "en": "From the forest of his matted hair the sacred waters flow, a great serpent hangs as a garland at his throat; to the drum's resounding damad-damad he dances his fierce tandava. May Shiva grant us what is auspicious.",
+      "carry": "Bring real energy to your work; dance a little at the hard parts."
+    },
+    {
+      "id": "gita-6-26", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 6.26", "by": "Krishna to Arjuna",
+      "sa": "यतो यतो निश्चरति मनश्चञ्चलमस्थिरम् ।\nततस्ततो नियम्यैतदात्मन्येव वशं नयेत् ॥",
+      "en": "Wherever the restless, unsteady mind wanders, bring it back from there and place it under the control of the Self.",
+      "carry": "Each time your mind wanders in a focus block, simply bring it back."
+    },
+    {
+      "id": "shiva-mahimna-35", "day": 1, "family": "shiva",
+      "src": "Shiva Mahimna Stotram 35 · Pushpadanta",
+      "sa": "महेशान्नापरो देवो महिम्नो नापरा स्तुतिः ।\nअघोरान्नापरो मन्त्रो नास्ति तत्त्वं गुरोः परम् ॥",
+      "en": "There is no god higher than Mahesha, no hymn higher than the Mahimna, no mantra higher than Aghora, no truth higher than the guru.",
+      "carry": "Thank someone who taught you something today."
+    },
+    {
+      "id": "gita-2-38", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 2.38", "by": "Krishna to Arjuna",
+      "sa": "सुखदुःखे समे कृत्वा लाभालाभौ जयाजयौ ।\nततो युद्धाय युज्यस्व नैवं पापमवाप्स्यसि ॥",
+      "en": "Treating pleasure and pain, gain and loss, victory and defeat alike, then engage in the battle; thus you will incur no sin.",
+      "carry": "Take the next step with the same calm after a win or a loss."
+    },
+    {
+      "id": "shiva-sutra-1-1", "day": 1, "family": "shiva",
+      "src": "Shiva Sutras 1.1",
+      "sa": "चैतन्यमात्मा ॥",
+      "en": "Consciousness is the Self.",
+      "carry": "Sit for one minute and simply notice that you are aware."
+    },
+    {
+      "id": "gita-2-23", "day": 1, "family": "gita",
+      "src": "Bhagavad Gita 2.23", "by": "Krishna to Arjuna",
+      "sa": "नैनं छिन्दन्ति शस्त्राणि नैनं दहति पावकः ।\nन चैनं क्लेदयन्त्यापो न शोषयति मारुतः ॥",
+      "en": "Weapons do not cut the Self, fire does not burn it, water does not wet it, and the wind does not dry it.",
+      "carry": "Keep in view the part of you that criticism cannot touch."
+    },
+    {
+      "id": "shiva-manasa-puja-1", "day": 1, "family": "shiva",
+      "src": "Shiva Manasa Puja 1 · Adi Shankaracharya",
+      "sa": "रत्नैः कल्पितमासनं हिमजलैः स्नानं च दिव्याम्बरं\nनानारत्नविभूषितं मृगमदामोदाङ्कितं चन्दनम् ।\nजातीचम्पकबिल्वपत्ररचितं पुष्पं च धूपं तथा\nदीपं देव दयानिधे पशुपते हृत्कल्पितं गृह्यताम् ॥",
+      "en": "A seat set with jewels, a bath of cool water, divine garments, sandal paste, flowers of jasmine, champaka and bilva, incense and a lamp: all of it imagined in my heart, Lord, I offer to you.",
+      "carry": "You need nothing extra to offer today. Bring your attention."
+    },
+    {
+      "id": "shiva-purana-1-23", "day": 1, "family": "shiva",
+      "src": "Shiva Purana, Vidyeshvara Samhita 23.23",
+      "sa": "शिवेति नामदावाग्नेर्महापातकपर्वताः ।\nभस्मीभवन्त्यनायासात्सत्यं सत्यं न संशयः ॥",
+      "en": "The name 'Shiva' is a wildfire: even mountains of great wrongdoing burn to ash without effort. This is true, truly true; there is no doubt.",
+      "carry": "Begin with one auspicious word and let it clear the clutter in your head."
+    },
+
+    {
+      "id": "chalisa-doha-1", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Doha 1 · Tulsidas",
+      "sa": "श्रीगुरु चरन सरोज रज निज मनु मुकुरु सुधारि ।\nबरनउँ रघुबर बिमल जसु जो दायकु फल चारि ॥",
+      "tr": "Śrī guru caran saroj raj, nij manu mukuru sudhāri;\nbaranauṃ raghubar bimal jasu, jo dāyaku phal cāri.",
+      "en": "With the dust of my guru's lotus feet I polish the mirror of my mind, then sing the spotless glory of Rama, which gives the four fruits of life.",
+      "carry": "Clean the mirror first: clear your head before you begin."
+    },
+    {
+      "id": "gita-2-3", "day": 2, "family": "gita",
+      "src": "Bhagavad Gita 2.3", "by": "Krishna to Arjuna",
+      "sa": "क्लैब्यं मा स्म गमः पार्थ नैतत्त्वय्युपपद्यते ।\nक्षुद्रं हृदयदौर्बल्यं त्यक्त्वोत्तिष्ठ परन्तप ॥",
+      "en": "Do not yield to weakness, O Partha; it does not suit you. Shake off this petty faintness of heart and stand up, O scorcher of foes.",
+      "carry": "Name the fear, then act in spite of it."
+    },
+    {
+      "id": "chalisa-doha-2", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Doha 2 · Tulsidas",
+      "sa": "बुद्धिहीन तनु जानिके सुमिरौं पवन-कुमार ।\nबल बुधि बिद्या देहु मोहिं हरहु कलेस बिकार ॥",
+      "tr": "Buddhihīn tanu jānike sumirauṃ pavan-kumār;\nbal budhi bidyā dehu mohiṃ harahu kales bikār.",
+      "en": "Knowing myself to be lacking in wisdom, I remember you, son of the wind. Grant me strength, wisdom and knowledge, and remove my afflictions and flaws.",
+      "carry": "Ask for strength, then use it on the thing in front of you."
+    },
+    {
+      "id": "ramayana-kishkindha-1-121", "day": 2, "family": "ramayana",
+      "src": "Valmiki Ramayana, Kishkindha Kanda 1.121", "by": "Lakshmana to Rama",
+      "sa": "उत्साहो बलवानार्य नास्त्युत्साहात्परं बलम् ।\nसोत्साहस्य हि लोकेषु न किञ्चिदपि दुर्लभम् ॥",
+      "en": "Enthusiasm is strength, noble one; there is no strength greater than enthusiasm. For the enthusiastic, nothing in the world is hard to attain.",
+      "carry": "Bring real energy to the first ten minutes; the rest follows."
+    },
+    {
+      "id": "chalisa-durgam-kaj", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Chaupai 20 · Tulsidas",
+      "sa": "दुर्गम काज जगत के जेते ।\nसुगम अनुग्रह तुम्हरे तेते ॥",
+      "tr": "Durgam kāj jagat ke jete,\nsugam anugrah tumhare tete.",
+      "en": "Every hard task in the world becomes easy with your grace.",
+      "carry": "Pick the hardest task on the list and take only its first step."
+    },
+    {
+      "id": "gita-11-33", "day": 2, "family": "gita",
+      "src": "Bhagavad Gita 11.33", "by": "Krishna to Arjuna",
+      "sa": "तस्मात्त्वमुत्तिष्ठ यशो लभस्व जित्वा शत्रून्भुङ्क्ष्व राज्यं समृद्धम् ।\nमयैवैते निहताः पूर्वमेव निमित्तमात्रं भव सव्यसाचिन् ॥",
+      "en": "Therefore arise and win glory; conquer your enemies and enjoy a prosperous kingdom. They have already been struck down by Me; be only the instrument, O Savyasachin.",
+      "carry": "Do your part well and leave the outcome to the larger picture."
+    },
+    {
+      "id": "chalisa-sab-sukh", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Chaupai 22 · Tulsidas",
+      "sa": "सब सुख लहै तुम्हारी सरना ।\nतुम रच्छक काहू को डर ना ॥",
+      "tr": "Sab sukh lahai tumhārī saranā,\ntum racchak kāhū ko ḍar nā.",
+      "en": "All happiness comes to those who take your refuge; with you as protector, why fear anyone?",
+      "carry": "Walk into the day without bracing for it."
+    },
+    {
+      "id": "gita-3-30", "day": 2, "family": "gita",
+      "src": "Bhagavad Gita 3.30", "by": "Krishna to Arjuna",
+      "sa": "मयि सर्वाणि कर्माणि संन्यस्याध्यात्मचेतसा ।\nनिराशीर्निर्ममो भूत्वा युध्यस्व विगतज्वरः ॥",
+      "en": "Offering all your actions to Me, with your mind fixed on the Self, free from hope and possessiveness, fight without fever.",
+      "carry": "Work hard and keep the fever of anxiety out of it."
+    },
+    {
+      "id": "chalisa-sankat-te", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Chaupai 26 · Tulsidas",
+      "sa": "संकट तें हनुमान छुड़ावै ।\nमन क्रम बचन ध्यान जो लावै ॥",
+      "tr": "Saṅkaṭ teṃ Hanumān chuṛāvai,\nman kram bacan dhyān jo lāvai.",
+      "en": "Hanuman frees from trouble the one who keeps him in mind, in deed and in word.",
+      "carry": "Let what you think, do and say today point the same way."
+    },
+    {
+      "id": "ramayana-aranya-37-13", "day": 2, "family": "ramayana",
+      "src": "Valmiki Ramayana, Aranya Kanda 37.13", "by": "Maricha, about Rama",
+      "sa": "रामो विग्रहवान्धर्मः साधुः सत्यपराक्रमः ।\nराजा सर्वस्य लोकस्य देवानामिव वासवः ॥",
+      "en": "Rama is dharma embodied: virtuous, truthful and valiant; king of the whole world as Indra is of the gods.",
+      "carry": "Make decisions today that you would not need to hide."
+    },
+    {
+      "id": "hanuman-dhyana", "day": 2, "family": "hanuman",
+      "src": "Ramcharitmanas, Sundara Kanda, invocation shloka 3 · Tulsidas",
+      "sa": "अतुलितबलधामं हेमशैलाभदेहं\nदनुजवनकृशानुं ज्ञानिनामग्रगण्यम् ।\nसकलगुणनिधानं वानराणामधीशं\nरघुपतिप्रियभक्तं वातजातं नमामि ॥",
+      "en": "I bow to the son of the wind: abode of matchless strength, with a body like a golden mountain, fire to the forest of demons, foremost among the wise, treasury of all virtues, lord of the vanaras, dear devotee of Rama.",
+      "carry": "Strength and humility can live in one person. Practise both."
+    },
+    {
+      "id": "gita-18-78", "day": 2, "family": "gita",
+      "src": "Bhagavad Gita 18.78", "by": "Sanjaya",
+      "sa": "यत्र योगेश्वरः कृष्णो यत्र पार्थो धनुर्धरः ।\nतत्र श्रीर्विजयो भूतिर्ध्रुवा नीतिर्मतिर्मम ॥",
+      "en": "Where there is Krishna, the lord of yoga, and Arjuna, the archer, there are prosperity, victory, well-being and firm policy: this is my conviction.",
+      "carry": "Pair effort with trust: do the work, then let go."
+    },
+    {
+      "id": "chalisa-bhoot-pisach", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Chaupai 24 · Tulsidas",
+      "sa": "भूत पिसाच निकट नहिं आवै ।\nमहाबीर जब नाम सुनावै ॥",
+      "tr": "Bhūt pisāc nikaṭ nahiṃ āvai,\nmahābīr jab nām sunāvai.",
+      "en": "Ghosts and demons do not come near when the name of the mighty Hanuman is chanted.",
+      "carry": "Chant one name whenever the old fears start talking."
+    },
+    {
+      "id": "chalisa-sankat-kate", "day": 2, "family": "hanuman",
+      "src": "Hanuman Chalisa · Chaupai 36 · Tulsidas",
+      "sa": "संकट कटै मिटै सब पीरा ।\nजो सुमिरै हनुमत बलबीरा ॥",
+      "tr": "Saṅkaṭ kaṭai miṭai sab pīrā,\njo sumirai Hanumat balabīrā.",
+      "en": "Troubles are cut away and all pain disappears for one who remembers the brave and mighty Hanuman.",
+      "carry": "When it gets heavy, remember: this too will be cut away."
+    },
+
+    {
+      "id": "vakratunda", "day": 3, "family": "ganesha",
+      "src": "Ganesha Stotra (traditional)",
+      "sa": "वक्रतुण्ड महाकाय सूर्यकोटिसमप्रभ ।\nनिर्विघ्नं कुरु मे देव सर्वकार्येषु सर्वदा ॥",
+      "en": "O Lord of the curved trunk and mighty body, with the brilliance of a million suns, make all my undertakings free of obstacles, always.",
+      "carry": "Remove the first obstacle by simply starting."
+    },
+    {
+      "id": "gita-2-40", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 2.40", "by": "Krishna to Arjuna",
+      "sa": "नेहाभिक्रमनाशोऽस्ति प्रत्यवायो न विद्यते ।\nस्वल्पमप्यस्य धर्मस्य त्रायते महतो भयात् ॥",
+      "en": "On this path no effort is wasted and no harm is done. Even a little of this dharma protects from great fear.",
+      "carry": "A small start counts. Do ten minutes."
+    },
+    {
+      "id": "shuklambaradharam", "day": 3, "family": "ganesha",
+      "src": "Ganesha Prarthana (traditional)",
+      "sa": "शुक्लाम्बरधरं विष्णुं शशिवर्णं चतुर्भुजम् ।\nप्रसन्नवदनं ध्यायेत्सर्वविघ्नोपशान्तये ॥",
+      "en": "One should meditate on the all-pervading one clad in white, moon-coloured, four-armed, with a serene face, for the stilling of all obstacles.",
+      "carry": "Take one calm breath, then meet the day."
+    },
+    {
+      "id": "gita-2-41", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 2.41", "by": "Krishna to Arjuna",
+      "sa": "व्यवसायात्मिका बुद्धिरेकेह कुरुनन्दन ।\nबहुशाखा ह्यनन्ताश्च बुद्धयोऽव्यवसायिनाम् ॥",
+      "en": "On this path the resolute intellect is one-pointed, O joy of the Kurus; the thoughts of the irresolute have many branches and no end.",
+      "carry": "Choose one thing for this block and let the rest wait."
+    },
+    {
+      "id": "ganapati-atharvashirsha", "day": 3, "family": "ganesha",
+      "src": "Ganapati Atharvashirsha 1",
+      "sa": "त्वमेव केवलं कर्ताऽसि ।\nत्वमेव केवलं धर्ताऽसि ।\nत्वमेव केवलं हर्ताऽसि ।\nत्वमेव सर्वं खल्विदं ब्रह्मासि ।\nत्वं साक्षादात्माऽसि नित्यम् ॥",
+      "en": "You alone are the creator, you alone the sustainer, you alone the dissolver. You are all this, the Brahman. You are the eternal Self, directly seen.",
+      "carry": "Treat what you start today as an offering."
+    },
+    {
+      "id": "gita-4-38", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 4.38", "by": "Krishna to Arjuna",
+      "sa": "न हि ज्ञानेन सदृशं पवित्रमिह विद्यते ।\nतत्स्वयं योगसंसिद्धः कालेनात्मनि विन्दति ॥",
+      "en": "Nothing in this world purifies like knowledge. One perfected in yoga finds it within oneself in time.",
+      "carry": "Learn one thing properly today; time will do the rest."
+    },
+    {
+      "id": "hitopadesha-vidya", "day": 3, "family": "wisdom",
+      "src": "Hitopadesha, Introduction 6",
+      "sa": "विद्या ददाति विनयं विनयाद्याति पात्रताम् ।\nपात्रत्वाद्धनमाप्नोति धनाद्धर्मं ततः सुखम् ॥",
+      "en": "Knowledge gives humility; humility gives worthiness; worthiness brings wealth; wealth enables dharma, and from that comes happiness.",
+      "carry": "Stay a student today. It is the surest way up."
+    },
+    {
+      "id": "gita-4-39", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 4.39", "by": "Krishna to Arjuna",
+      "sa": "श्रद्धावाँल्लभते ज्ञानं तत्परः संयतेन्द्रियः ।\nज्ञानं लब्ध्वा परां शान्तिमचिरेणाधिगच्छति ॥",
+      "en": "One who has faith, is devoted to it, and has mastered the senses gains knowledge; having gained knowledge, one quickly attains supreme peace.",
+      "carry": "Give today's study your full, unhurried attention."
+    },
+    {
+      "id": "gajananam", "day": 3, "family": "ganesha",
+      "src": "Ganesha Stotra (traditional)",
+      "sa": "गजाननं भूतगणादिसेवितं कपित्थजम्बूफलसारभक्षितम् ।\nउमासुतं शोकविनाशकारणं नमामि विघ्नेश्वरपादपङ्कजम् ॥",
+      "en": "I bow at the lotus feet of Vighneshwara, the elephant-faced son of Uma, attended by hosts of spirits, who eats the essence of wood-apple and jambul fruit and brings an end to sorrow.",
+      "carry": "Begin with gratitude for what is already working."
+    },
+    {
+      "id": "gita-6-35", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 6.35", "by": "Krishna to Arjuna",
+      "sa": "असंशयं महाबाहो मनो दुर्निग्रहं चलम् ।\nअभ्यासेन तु कौन्तेय वैराग्येण च गृह्यते ॥",
+      "en": "Without doubt, O mighty-armed, the mind is restless and hard to restrain; but it is held by practice and by detachment.",
+      "carry": "Practice answers a restless mind. Repeat the block."
+    },
+    {
+      "id": "udyamena-hi", "day": 3, "family": "wisdom",
+      "src": "Hitopadesha, Introduction 36",
+      "sa": "उद्यमेन हि सिध्यन्ति कार्याणि न मनोरथैः ।\nन हि सुप्तस्य सिंहस्य प्रविशन्ति मुखे मृगाः ॥",
+      "en": "Tasks are accomplished by effort, not by wishes. Deer do not walk into the mouth of a sleeping lion.",
+      "carry": "Turn one wish into a scheduled block today."
+    },
+    {
+      "id": "taittiriya-1-11-2", "day": 3, "family": "upanishad",
+      "src": "Taittiriya Upanishad 1.11.2",
+      "sa": "मातृदेवो भव ।\nपितृदेवो भव ।\nआचार्यदेवो भव ।\nअतिथिदेवो भव ॥",
+      "en": "Let your mother be a god to you; let your father be a god to you; let your teacher be a god to you; let your guest be a god to you.",
+      "carry": "Sit with someone at home and give them your full attention."
+    },
+    {
+      "id": "gita-2-50", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 2.50", "by": "Krishna to Arjuna",
+      "sa": "बुद्धियुक्तो जहातीह उभे सुकृतदुष्कृते ।\nतस्माद्योगाय युज्यस्व योगः कर्मसु कौशलम् ॥",
+      "en": "One established in wisdom casts off both good and evil deeds here. So devote yourself to yoga; yoga is skill in action.",
+      "carry": "Aim for skill, not speed. Do the next thing well."
+    },
+    {
+      "id": "gita-3-35", "day": 3, "family": "gita",
+      "src": "Bhagavad Gita 3.35", "by": "Krishna to Arjuna",
+      "sa": "श्रेयान्स्वधर्मो विगुणः परधर्मात्स्वनुष्ठितात् ।\nस्वधर्मे निधनं श्रेयः परधर्मो भयावहः ॥",
+      "en": "Better is one's own duty, though imperfect, than another's duty well performed. Death in one's own duty is better; another's duty brings fear.",
+      "carry": "Stop comparing paths. Make your own a little better today."
+    },
+
+    {
+      "id": "guru-gita", "day": 4, "family": "wisdom",
+      "src": "Guru Gita (Skanda Purana) · as commonly recited",
+      "sa": "गुरुर्ब्रह्मा गुरुर्विष्णुर्गुरुर्देवो महेश्वरः ।\nगुरुः साक्षात्परं ब्रह्म तस्मै श्रीगुरवे नमः ॥",
+      "en": "The guru is Brahma, the guru is Vishnu, the guru is the god Maheshwara; the guru is the Supreme Brahman itself. Salutations to that revered guru.",
+      "carry": "Thursday is Guruvar: thank, or learn from, one teacher today."
+    },
+    {
+      "id": "gita-2-47", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 2.47", "by": "Krishna to Arjuna",
+      "sa": "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन ।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि ॥",
+      "en": "You have a right to action alone, never to its fruits. Do not be the cause of the fruits of action, and do not be attached to inaction.",
+      "carry": "Do the work for its own sake. Let the result arrive on its own."
+    },
+    {
+      "id": "vishnu-dhyana", "day": 4, "family": "vishnu",
+      "src": "Vishnu Dhyana Shloka (traditional)",
+      "sa": "शान्ताकारं भुजगशयनं पद्मनाभं सुरेशं\nविश्वाधारं गगनसदृशं मेघवर्णं शुभाङ्गम् ।\nलक्ष्मीकान्तं कमलनयनं योगिभिर्ध्यानगम्यं\nवन्दे विष्णुं भवभयहरं सर्वलोकैकनाथम् ॥",
+      "en": "I bow to Vishnu: peaceful in form, resting on the serpent, lotus-navelled, lord of the gods; support of the universe, vast as the sky, cloud-hued, beautiful of limb; lord of Lakshmi, lotus-eyed, reached by yogis in meditation; remover of the fear of worldly life, the one Lord of all the worlds.",
+      "carry": "Be as calm as the Vishnu in this verse when the day pulls at you."
+    },
+    {
+      "id": "gita-4-7", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 4.7", "by": "Krishna to Arjuna",
+      "sa": "यदा यदा हि धर्मस्य ग्लानिर्भवति भारत ।\nअभ्युत्थानमधर्मस्य तदात्मानं सृजाम्यहम् ॥",
+      "en": "Whenever dharma declines, O Bharata, and adharma rises, then I send myself forth.",
+      "carry": "When something right needs defending today, speak up a little."
+    },
+    {
+      "id": "gita-4-8", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 4.8", "by": "Krishna to Arjuna",
+      "sa": "परित्राणाय साधूनां विनाशाय च दुष्कृताम् ।\nधर्मसंस्थापनार्थाय सम्भवामि युगे युगे ॥",
+      "en": "To protect the good, to destroy evil-doers, and to establish dharma, I come into being age after age.",
+      "carry": "Protect one good thing today: a person, an animal, a promise."
+    },
+    {
+      "id": "yato-dharmas-tato-jayah", "day": 4, "family": "mahabharata",
+      "src": "Mahabharata, Bhishma Parva 6.21.11 (critical edition)",
+      "sa": "यतो धर्मस्ततो जयः ॥",
+      "en": "Where there is dharma, there is victory.",
+      "carry": "Choose the right way even when it is the slower way."
+    },
+    {
+      "id": "gita-9-22", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 9.22", "by": "Krishna to Arjuna",
+      "sa": "अनन्याश्चिन्तयन्तो मां ये जनाः पर्युपासते ।\nतेषां नित्याभियुक्तानां योगक्षेमं वहाम्यहम् ॥",
+      "en": "To those who worship Me alone, thinking of nothing else and always devoted, I carry what they lack and preserve what they have.",
+      "carry": "Do the work wholeheartedly and trust the rest to be looked after."
+    },
+    {
+      "id": "bhagavata-7-5-23", "day": 4, "family": "vishnu",
+      "src": "Bhagavata Purana 7.5.23",
+      "sa": "श्रवणं कीर्तनं विष्णोः स्मरणं पादसेवनम् ।\nअर्चनं वन्दनं दास्यं सख्यमात्मनिवेदनम् ॥",
+      "en": "Hearing, chanting and remembering Vishnu; serving his feet; worshipping, bowing, serving, friendship, and surrendering oneself: the nine ways of devotion.",
+      "carry": "Pick one of the nine today: listen, chant, remember, serve."
+    },
+    {
+      "id": "gita-9-27", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 9.27", "by": "Krishna to Arjuna",
+      "sa": "यत्करोषि यदश्नासि यज्जुहोषि ददासि यत् ।\nयत्तपस्यसि कौन्तेय तत्कुरुष्व मदर्पणम् ॥",
+      "en": "Whatever you do, whatever you eat, whatever you offer, give, or practise as austerity, O Kaunteya, do it as an offering to Me.",
+      "carry": "Treat today's ordinary tasks as an offering."
+    },
+    {
+      "id": "dharma-rakshati-rakshitah", "day": 4, "family": "wisdom",
+      "src": "Manusmriti 8.15 · echoed in the Mahabharata, Vana Parva 313.128",
+      "sa": "धर्म एव हतो हन्ति धर्मो रक्षति रक्षितः ।\nतस्माद्धर्मो न हन्तव्यो मा नो धर्मो हतोऽवधीत् ॥",
+      "en": "Dharma, when destroyed, destroys; dharma, when protected, protects. So dharma must not be destroyed, lest destroyed dharma destroy us.",
+      "carry": "Keep one small promise exactly as you made it."
+    },
+    {
+      "id": "gita-9-26", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 9.26", "by": "Krishna to Arjuna",
+      "sa": "पत्रं पुष्पं फलं तोयं यो मे भक्त्या प्रयच्छति ।\nतदहं भक्त्युपहृतमश्नामि प्रयतात्मनः ॥",
+      "en": "Whoever offers Me with devotion a leaf, a flower, a fruit or water, that offering of the pure-hearted I accept.",
+      "carry": "A small offering made with love is enough. Offer what you have."
+    },
+    {
+      "id": "yaksha-dharmasya-tattvam", "day": 4, "family": "mahabharata",
+      "src": "Mahabharata, Vana Parva 313.117 (Gita Press numbering) · Yaksha Prashna", "by": "Yudhishthira to the Yaksha",
+      "sa": "तर्कोऽप्रतिष्ठः श्रुतयो विभिन्ना नैको ऋषिर्यस्य मतं प्रमाणम् ।\nधर्मस्य तत्त्वं निहितं गुहायां महाजनो येन गतः स पन्थाः ॥",
+      "en": "Argument has no firm footing, the scriptures differ, and no single sage's word settles it. The truth of dharma lies hidden in the cave (of the heart); the path is the one the great have walked.",
+      "carry": "When unsure, ask what the people you most respect would do."
+    },
+    {
+      "id": "gita-18-46", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 18.46", "by": "Krishna to Arjuna",
+      "sa": "यतः प्रवृत्तिर्भूतानां येन सर्वमिदं ततम् ।\nस्वकर्मणा तमभ्यर्च्य सिद्धिं विन्दति मानवः ॥",
+      "en": "From whom all beings arise, by whom all this is pervaded: worshipping Him through one's own work, a person attains perfection.",
+      "carry": "Let your work be your worship today."
+    },
+    {
+      "id": "gita-18-66", "day": 4, "family": "gita",
+      "src": "Bhagavad Gita 18.66", "by": "Krishna to Arjuna",
+      "sa": "सर्वधर्मान्परित्यज्य मामेकं शरणं व्रज ।\nअहं त्वा सर्वपापेभ्यो मोक्षयिष्यामि मा शुचः ॥",
+      "en": "Abandoning all other duties, take refuge in Me alone. I will free you from all sins; do not grieve.",
+      "carry": "Put down one burden you have been carrying alone."
+    },
+
+    {
+      "id": "devi-mahatmya-11-10", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya (Durga Saptashati) 11.10",
+      "sa": "सर्वमङ्गलमाङ्गल्ये शिवे सर्वार्थसाधिके ।\nशरण्ये त्र्यम्बके गौरि नारायणि नमोऽस्तु ते ॥",
+      "en": "O auspicious of all that is auspicious, benevolent one, accomplisher of every aim, giver of refuge, three-eyed Gauri, Narayani: salutations to you.",
+      "carry": "Begin with Maa's name; ask for steadiness, not only success."
+    },
+    {
+      "id": "gita-10-34", "day": 5, "family": "gita",
+      "src": "Bhagavad Gita 10.34", "by": "Krishna to Arjuna",
+      "sa": "मृत्युः सर्वहरश्चाहमुद्भवश्च भविष्यताम् ।\nकीर्तिः श्रीर्वाक्च नारीणां स्मृतिर्मेधा धृतिः क्षमा ॥",
+      "en": "I am all-devouring death and the source of what is yet to be. Among feminine qualities I am fame, prosperity, speech, memory, intelligence, steadfastness and patience.",
+      "carry": "Grow one of these today: memory, steadiness or patience."
+    },
+    {
+      "id": "devi-mahatmya-5-32", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya 5.32",
+      "sa": "या देवी सर्वभूतेषु शक्तिरूपेण संस्थिता ।\nनमस्तस्यै नमस्तस्यै नमस्तस्यै नमो नमः ॥",
+      "en": "To the Goddess who dwells in all beings in the form of strength: salutations to her, again and again.",
+      "carry": "Spend your strength where it counts: the one hard thing."
+    },
+    {
+      "id": "gita-16-1", "day": 5, "family": "gita",
+      "src": "Bhagavad Gita 16.1–2", "by": "Krishna to Arjuna",
+      "sa": "अभयं सत्त्वसंशुद्धिर्ज्ञानयोगव्यवस्थितिः ।\nदानं दमश्च यज्ञश्च स्वाध्यायस्तप आर्जवम् ॥\nअहिंसा सत्यमक्रोधस्त्यागः शान्तिरपैशुनम् ।\nदया भूतेष्वलोलुप्त्वं मार्दवं ह्रीरचापलम् ॥",
+      "en": "Fearlessness, purity of heart, steadiness in knowledge and yoga, giving, self-control, sacrifice, study of scripture, austerity, straightforwardness; non-violence, truth, freedom from anger, renunciation, peace, not speaking ill of others, compassion for beings, freedom from greed, gentleness, modesty, steadiness.",
+      "carry": "Pick one quality from this list and practise it before night."
+    },
+    {
+      "id": "devi-mahatmya-11-24", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya 11.24",
+      "sa": "सर्वस्वरूपे सर्वेशे सर्वशक्तिसमन्विते ।\nभयेभ्यस्त्राहि नो देवि दुर्गे देवि नमोऽस्तु ते ॥",
+      "en": "O Devi, in the form of all, ruler of all, endowed with all power: protect us from all fears. O Durga, salutations to you.",
+      "carry": "Walk through one fear today. You are protected."
+    },
+    {
+      "id": "gita-12-13", "day": 5, "family": "gita",
+      "src": "Bhagavad Gita 12.13", "by": "Krishna to Arjuna",
+      "sa": "अद्वेष्टा सर्वभूतानां मैत्रः करुण एव च ।\nनिर्ममो निरहङ्कारः समदुःखसुखः क्षमी ॥",
+      "en": "One who hates no being, who is friendly and compassionate, free from possessiveness and ego, equal in pain and pleasure, and forgiving.",
+      "carry": "Show kindness to something small that cannot repay you."
+    },
+    {
+      "id": "devi-mahatmya-5-20", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya 5.20",
+      "sa": "या देवी सर्वभूतेषु बुद्धिरूपेण संस्थिता ।\nनमस्तस्यै नमस्तस्यै नमस्तस्यै नमो नमः ॥",
+      "en": "To the Goddess who dwells in all beings in the form of intelligence: salutations to her, again and again.",
+      "carry": "Think before you react, once today."
+    },
+    {
+      "id": "ahimsa-paramo-dharmah", "day": 5, "family": "mahabharata",
+      "src": "Mahabharata, Anushasana Parva 13.117.37–38 (chapter 116 in older editions)", "by": "Bhishma to Yudhishthira",
+      "sa": "अहिंसा परमो धर्मस्तथाहिंसा परो दमः ।\nअहिंसा परमं दानमहिंसा परमस्तपः ॥\nअहिंसा परमो यज्ञस्तथाहिंसा परं बलम् ।\nअहिंसा परमं मित्रमहिंसा परमं सुखम् ॥",
+      "en": "Non-violence is the highest dharma, the highest self-restraint, the highest gift, the highest austerity, the highest sacrifice, the highest strength, the highest friend, the highest happiness.",
+      "carry": "Be gentle in word and deed with every living thing today."
+    },
+    {
+      "id": "devi-mahatmya-5-38", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya 5.38",
+      "sa": "या देवी सर्वभूतेषु क्षान्तिरूपेण संस्थिता ।\nनमस्तस्यै नमस्तस्यै नमस्तस्यै नमो नमः ॥",
+      "en": "To the Goddess who dwells in all beings in the form of forbearance: salutations to her, again and again.",
+      "carry": "Be patient once today where you would normally snap."
+    },
+    {
+      "id": "gita-5-18", "day": 5, "family": "gita",
+      "src": "Bhagavad Gita 5.18", "by": "Krishna to Arjuna",
+      "sa": "विद्याविनयसम्पन्ने ब्राह्मणे गवि हस्तिनि ।\nशुनि चैव श्वपाके च पण्डिताः समदर्शिनः ॥",
+      "en": "The wise see with an equal eye a learned and humble brahmin, a cow, an elephant, a dog, and an outcaste.",
+      "carry": "Treat everyone you meet today, human or animal, with the same respect."
+    },
+    {
+      "id": "sri-suktam-1", "day": 5, "family": "devi",
+      "src": "Shri Suktam 1",
+      "sa": "हिरण्यवर्णां हरिणीं सुवर्णरजतस्रजाम् ।\nचन्द्रां हिरण्मयीं लक्ष्मीं जातवेदो म आवह ॥",
+      "en": "O Jatavedas (Agni), bring to me Lakshmi: golden-hued, deer-like in grace, adorned with garlands of gold and silver, moon-like, radiant.",
+      "carry": "Prosperity follows steadiness. Keep today's habits."
+    },
+    {
+      "id": "vidura-eko-dharmah", "day": 5, "family": "mahabharata",
+      "src": "Mahabharata, Udyoga Parva, chapter 33 · Vidura Niti", "by": "Vidura to Dhritarashtra",
+      "sa": "एको धर्मः परं श्रेयः क्षमैका शान्तिरुत्तमा ।\nविद्यैका परमा तृप्तिरहिंसैका सुखावहा ॥",
+      "en": "Dharma alone is the highest good; forbearance alone brings the highest peace; knowledge alone is the highest contentment; non-violence alone brings happiness.",
+      "carry": "Forgive one small thing today and feel how much lighter it is."
+    },
+    {
+      "id": "devi-mahatmya-5-65", "day": 5, "family": "devi",
+      "src": "Devi Mahatmya 5.65",
+      "sa": "या देवी सर्वभूतेषु दयारूपेण संस्थिता ।\nनमस्तस्यै नमस्तस्यै नमस्तस्यै नमो नमः ॥",
+      "en": "To the Goddess who dwells in all beings in the form of compassion: salutations to her, again and again.",
+      "carry": "Feed or help one stray creature today. That is compassion in action."
+    },
+    {
+      "id": "gita-16-3", "day": 5, "family": "gita",
+      "src": "Bhagavad Gita 16.3", "by": "Krishna to Arjuna",
+      "sa": "तेजः क्षमा धृतिः शौचमद्रोहो नातिमानिता ।\nभवन्ति सम्पदं दैवीमभिजातस्य भारत ॥",
+      "en": "Vigour, forgiveness, fortitude, purity, freedom from malice and from excessive pride: these belong to one born with a divine endowment, O Bharata.",
+      "carry": "Show vigour without pride today."
+    },
+
+    {
+      "id": "kalabhairavashtakam-1", "day": 6, "family": "shiva",
+      "src": "Kalabhairavashtakam 1 · Adi Shankaracharya",
+      "sa": "देवराजसेव्यमानपावनाङ्घ्रिपङ्कजं\nव्यालयज्ञसूत्रमिन्दुशेखरं कृपाकरम् ।\nनारदादियोगिवृन्दवन्दितं दिगम्बरं\nकाशिकापुराधिनाथकालभैरवं भजे ॥",
+      "en": "I worship Kalabhairava, Lord of Kashi: his holy lotus feet served by the king of the gods; wearing a serpent as the sacred thread, the moon on his brow, ocean of compassion; praised by Narada and the company of yogis; sky-clad.",
+      "carry": "Respect time today: begin on time and end on time."
+    },
+    {
+      "id": "gita-11-32", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 11.32", "by": "Krishna to Arjuna",
+      "sa": "कालोऽस्मि लोकक्षयकृत्प्रवृद्धो\nलोकान्समाहर्तुमिह प्रवृत्तः ।\nऋतेऽपि त्वां न भविष्यन्ति सर्वे\nयेऽवस्थिताः प्रत्यनीकेषु योधाः ॥",
+      "en": "I am Time, the mighty destroyer of the worlds, here to gather in all beings. Even without you, none of the warriors arrayed in the opposing armies will live.",
+      "carry": "Time is the one resource you cannot earn back. Spend it on purpose."
+    },
+    {
+      "id": "shiva-sutra-1-5", "day": 6, "family": "shiva",
+      "src": "Shiva Sutras 1.5",
+      "sa": "उद्यमो भैरवः ॥",
+      "en": "Udyama, the upsurge of effort, is Bhairava.",
+      "carry": "Start the first block before you feel ready."
+    },
+    {
+      "id": "gita-2-27", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 2.27", "by": "Krishna to Arjuna",
+      "sa": "जातस्य हि ध्रुवो मृत्युर्ध्रुवं जन्म मृतस्य च ।\nतस्मादपरिहार्येऽर्थे न त्वं शोचितुमर्हसि ॥",
+      "en": "For one who is born, death is certain, and for one who has died, birth is certain. So you should not grieve over what cannot be avoided.",
+      "carry": "Let go of what cannot be changed and use the energy on what can."
+    },
+    {
+      "id": "kalabhairavashtakam-9", "day": 6, "family": "shiva",
+      "src": "Kalabhairavashtakam 9 (phalashruti)",
+      "sa": "कालभैरवाष्टकं पठन्ति ये मनोहरं\nज्ञानमुक्तिसाधनं विचित्रपुण्यवर्धनम् ।\nशोकमोहदैन्यलोभकोपतापनाशनं\nते प्रयान्ति कालभैरवाङ्घ्रिसन्निधिं ध्रुवम् ॥",
+      "en": "Those who recite this beautiful Kalabhairava Ashtakam, a means to knowledge and liberation that increases merit and destroys grief, delusion, wretchedness, greed, anger and torment, surely reach the feet of Kalabhairava.",
+      "carry": "Drop one of these today: grief, delusion, greed or anger."
+    },
+    {
+      "id": "vidura-shad-doshah", "day": 6, "family": "mahabharata",
+      "src": "Mahabharata, Udyoga Parva, chapter 33 · Vidura Niti", "by": "Vidura to Dhritarashtra",
+      "sa": "षड्दोषाः पुरुषेणेह हातव्या भूतिमिच्छता ।\nनिद्रा तन्द्री भयं क्रोध आलस्यं दीर्घसूत्रता ॥",
+      "en": "A person who wants to prosper must give up six faults: too much sleep, drowsiness, fear, anger, laziness and procrastination.",
+      "carry": "Pick the one that is yours and beat it for a single day."
+    },
+    {
+      "id": "gita-2-62", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 2.62–63", "by": "Krishna to Arjuna",
+      "sa": "ध्यायतो विषयान्पुंसः सङ्गस्तेषूपजायते ।\nसङ्गात्सञ्जायते कामः कामात्क्रोधोऽभिजायते ॥\nक्रोधाद्भवति सम्मोहः सम्मोहात्स्मृतिविभ्रमः ।\nस्मृतिभ्रंशाद्बुद्धिनाशो बुद्धिनाशात्प्रणश्यति ॥",
+      "en": "Dwelling on objects of the senses breeds attachment; attachment breeds desire; desire breeds anger. From anger comes delusion, from delusion loss of memory, from that the ruin of intelligence, and with that one is lost.",
+      "carry": "Notice where your attention keeps going, and cut the chain at its first link."
+    },
+    {
+      "id": "yaksha-ahanyahani", "day": 6, "family": "mahabharata",
+      "src": "Mahabharata, Vana Parva 313.116 (Gita Press numbering) · Yaksha Prashna", "by": "Yudhishthira to the Yaksha",
+      "sa": "अहन्यहनि भूतानि गच्छन्तीह यमालयम् ।\nशेषाः स्थावरमिच्छन्ति किमाश्चर्यमतः परम् ॥",
+      "en": "Day after day beings go to the abode of Yama, yet those who remain wish to live forever. What greater wonder is there?",
+      "carry": "Do today what you will be glad to have done."
+    },
+    {
+      "id": "gita-17-15", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 17.15", "by": "Krishna to Arjuna",
+      "sa": "अनुद्वेगकरं वाक्यं सत्यं प्रियहितं च यत् ।\nस्वाध्यायाभ्यसनं चैव वाङ्मयं तप उच्यते ॥",
+      "en": "Words that cause no distress, that are truthful, pleasant and beneficial, and the regular practice of one's own study, are called the austerity of speech.",
+      "carry": "Speak once today in a way that is true, kind and useful."
+    },
+    {
+      "id": "manu-4-160", "day": 6, "family": "wisdom",
+      "src": "Manusmriti 4.160",
+      "sa": "सर्वं परवशं दुःखं सर्वमात्मवशं सुखम् ।\nएतद्विद्यात्समासेन लक्षणं सुखदुःखयोः ॥",
+      "en": "All that depends on others is sorrow; all that is within one's own control is happiness. Know this in brief as the mark of happiness and sorrow.",
+      "carry": "Spend today on what is in your control."
+    },
+    {
+      "id": "gita-16-21", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 16.21", "by": "Krishna to Arjuna",
+      "sa": "त्रिविधं नरकस्येदं द्वारं नाशनमात्मनः ।\nकामः क्रोधस्तथा लोभस्तस्मादेतत्त्रयं त्यजेत् ॥",
+      "en": "Threefold is this gate to hell, destroying the self: desire, anger and greed. Therefore one should give up these three.",
+      "carry": "Pause before the next craving, snap or grab."
+    },
+    {
+      "id": "shani-stotra", "day": 6, "family": "surya",
+      "src": "Navagraha Stotra (Shani)",
+      "sa": "नीलाञ्जनसमाभासं रविपुत्रं यमाग्रजम् ।\nछायामार्तण्डसम्भूतं तं नमामि शनैश्चरम् ॥",
+      "en": "I bow to Shani, the slow-moving one, dark as blue collyrium, son of the Sun, elder brother of Yama, born of Chhaya and Martanda.",
+      "carry": "Slow, steady, patient: do one thing with Shani's discipline."
+    },
+    {
+      "id": "gita-6-40", "day": 6, "family": "gita",
+      "src": "Bhagavad Gita 6.40", "by": "Krishna to Arjuna",
+      "sa": "पार्थ नैवेह नामुत्र विनाशस्तस्य विद्यते ।\nन हि कल्याणकृत्कश्चिद्दुर्गतिं तात गच्छति ॥",
+      "en": "O Partha, neither in this world nor the next is there destruction for such a person. No one who does good, my friend, ever comes to grief.",
+      "carry": "Do one good thing today even if no one sees it."
+    },
+    {
+      "id": "kumarasambhava-5-33", "day": 6, "family": "wisdom",
+      "src": "Kumarasambhava 5.33 · Kalidasa", "by": "Shiva, in disguise, to Parvati",
+      "sa": "शरीरमाद्यं खलु धर्मसाधनम् ॥",
+      "en": "The body is indeed the first instrument of dharma.",
+      "carry": "Train, eat and rest as if your body were the instrument of your purpose."
+    }
+  ]
+}

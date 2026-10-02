@@ -135,6 +135,21 @@ if (fs.existsSync(shl)) {
   perDay.forEach((n, i) => { if (n < 7) bad('content/shlokas.json', 'weekday ' + i + ' has only ' + n + ' verses (aim for at least 7)'); });
 }
 
+/* festivals: a real date, a name, no festival listed twice on one day */
+const fest = path.join(ROOT, 'content', 'festivals.json');
+if (fs.existsSync(fest)) {
+  const d = JSON.parse(fs.readFileSync(fest, 'utf8'));
+  const seen = new Set();
+  (d.items || []).forEach((it, i) => {
+    const w = 'content/festivals.json · item ' + (i + 1) + (it.name ? ' (' + it.name + ')' : '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || '') || Number.isNaN(Date.parse(it.date))) bad(w, 'date "' + it.date + '" is not a real YYYY-MM-DD');
+    if (!it.name) bad(w, 'is missing "name"');
+    const key = it.date + '|' + it.name;
+    if (seen.has(key)) bad(w, 'listed twice on ' + it.date);
+    seen.add(key);
+  });
+}
+
 /* ---------- report ---------- */
 console.log('checked ' + pages.length + ' pages, ' + links + ' internal links');
 if (problems.length) {

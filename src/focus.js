@@ -516,6 +516,9 @@
     prog.setAttribute('stroke-dashoffset', (CIRC * (1 - frac)).toFixed(1));
     $('fstate').textContent = { idle: 'Ready', running: 'Focus', paused: 'Paused', alarm: 'Done' }[state];
     app.dataset.state = state;
+    /* the lamp over the clock burns for as long as there is a block */
+    var flame = $('fflame');
+    if (flame) flame.classList.toggle('lit', state !== 'idle');
     if (state === 'running') document.title = clockText(left) + ' · Focus';
     else if (state === 'paused') document.title = '❚❚ ' + clockText(left) + ' · Focus';
     else if (state === 'idle') document.title = baseTitle;
@@ -545,17 +548,24 @@
     if (state !== 'idle') $('fcustombox').hidden = true;
   }
 
-  function ringSvg(frac, size, stroke) {
-    var r = (size - stroke) / 2;
-    var c = 2 * Math.PI * r;
-    var h = size / 2;
-    return '<svg class="ring focusring" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" aria-hidden="true">'
-      + '<circle class="ring-bg" cx="' + h + '" cy="' + h + '" r="' + r + '" stroke-width="' + stroke + '"/>'
-      + '<circle class="ring-fg" cx="' + h + '" cy="' + h + '" r="' + r + '" stroke-width="' + stroke + '" stroke-dasharray="' + c.toFixed(2)
-      + '" stroke-dashoffset="' + (c * (1 - Math.min(1, frac))).toFixed(2) + '" transform="rotate(-90 ' + h + ' ' + h + ')"/></svg>';
-  }
-
   var TARGET = +DATA.target || 7 * 3600;
+
+  /* A lamp for every half hour of focus, lit as the blocks finish. This mirrors
+     diyaRow() in build.mjs, which draws the same row before the page has loaded --
+     keep the two in step (the class names are styled in style.css). */
+  var DIYA_MIN = 1800;
+  var DIYA_SLOTS = Math.max(1, Math.ceil(TARGET / DIYA_MIN));
+  var DIYA_SVG = '<svg viewBox="0 0 40 24" aria-hidden="true"><path class="bowl" d="M2 7C2 16.5 9.5 22 20 22S38 16.5 38 7c0-1-.8-1.6-1.8-1.6H3.8C2.8 5.4 2 6 2 7Z"/>'
+    + '<path class="rim" d="M5.5 7.6Q20 11.2 34.5 7.6"/><circle class="wick" cx="20" cy="5.2" r="1.3"/></svg>';
+  function diyaRow(sec) {
+    var lit = Math.floor((sec || 0) / DIYA_MIN);
+    var html = '';
+    for (var i = 0; i < Math.max(DIYA_SLOTS, lit); i++) {
+      html += '<span class="diya' + (i < lit ? ' lit' : '') + '">' + DIYA_SVG + '<i class="flame"></i></span>';
+    }
+    return '<div class="diyas" role="img" aria-label="' + lit + ' of ' + DIYA_SLOTS
+      + ' lamps lit, one for every half hour of focus">' + html + '</div>';
+  }
 
   function renderToday() {
     if (!app) return;
@@ -565,7 +575,7 @@
     $('ftotal').textContent = dur(total);
     $('fsub').textContent = 'of ' + dur(TARGET) + ' · ' + list.length + ' block' + (list.length === 1 ? '' : 's')
       + (total >= TARGET ? ' · target met' : '');
-    $('fring').innerHTML = ringSvg(total / TARGET, 76, 8);
+    $('fring').innerHTML = diyaRow(total);
 
     var mins = function (ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
     var blocks = list.map(function (s) {
@@ -658,11 +668,11 @@
     cards.forEach(function (card) {
       var t = card.querySelector('[data-f-total]');
       var sub = card.querySelector('[data-f-sub]');
-      var ringBox = card.querySelector('[data-f-ring]');
+      var lamps = card.querySelector('[data-f-diyas]');
       var running = card.querySelector('[data-f-running]');
       if (t) t.textContent = dur(total);
       if (sub) sub.textContent = 'of ' + dur(TARGET) + ' · ' + list.length + ' block' + (list.length === 1 ? '' : 's');
-      if (ringBox) ringBox.innerHTML = ringSvg(total / TARGET, 72, 7);
+      if (lamps) lamps.innerHTML = diyaRow(total);
       if (running) {
         var live = run && run.seg && remaining() > 0;
         running.hidden = !(run && (live || !run.seg));

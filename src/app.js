@@ -520,15 +520,59 @@
     syncAll(true);
   })();
 
+  /* ---------- the greeting ----------
+     Said the way it is said at home, by the hour on the device. The page is
+     static, so this is set here rather than built in. */
+  function greetNow() {
+    var h = new Date().getHours();
+    var g = h < 4 ? 'शुभ रात्रि' : h < 12 ? 'सुप्रभात' : h < 16 ? 'नमस्कार' : h < 20 ? 'शुभ संध्या' : 'शुभ रात्रि';
+    $$('[data-greet]').forEach(function (el) { el.textContent = g; });
+  }
+
+  /* ---------- the festival card ----------
+     "in 9 days" counted from the device's own date, for the same reason as the
+     greeting. The card holds four festivals and shows the first two that have
+     not passed; the page lists them all and dims the ones already gone. */
+  function daysUntil(key, from) {
+    var a = key.split('-'), b = from.split('-');
+    return Math.round((Date.UTC(+a[0], +a[1] - 1, +a[2]) - Date.UTC(+b[0], +b[1] - 1, +b[2])) / 86400000);
+  }
+  function utsavNow() {
+    var t = localToday();
+    $$('[data-utsav]').forEach(function (box) {
+      var card = box.dataset.utsav === 'card';
+      var shown = 0;
+      $$('li[data-date]', box).forEach(function (li) {
+        var n = daysUntil(li.dataset.date, t);
+        if (card) {
+          li.hidden = n < 0 || shown >= 2;
+          if (li.hidden) return;
+          shown++;
+        } else {
+          li.classList.toggle('past', n < 0);
+        }
+        var w = li.querySelector('[data-when]');
+        if (!w) return;
+        w.textContent = n < 0 ? '' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : 'in ' + n + ' days';
+        w.className = 'uw' + (n === 0 ? ' now' : n > 0 && n <= 3 ? ' soon' : '');
+      });
+      if (card) box.hidden = shown === 0;
+    });
+  }
+
   /* ---------- wire it all together ---------- */
   function onWake() {
     showPanel();
     relabel();
+    greetNow();
+    utsavNow();
     freshCheck();
     if (window.__ticksSync) window.__ticksSync();
   }
   showPanel();
   relabel();
+  greetNow();
+  utsavNow();
   setTimeout(freshCheck, 900);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') onWake();
@@ -542,7 +586,54 @@
     if (document.visibilityState !== 'visible') return;
     showPanel();
     relabel();
+    greetNow();
+    utsavNow();
   }, 30000);
+
+  /* ---------- the library of verses ---------- */
+  (function () {
+    var list = document.getElementById('shlokalist');
+    if (!list) return;
+    var items = $$('.sv', list);
+    var chips = $$('#famchips .chip');
+    var box = document.getElementById('sq');
+    var none = document.getElementById('svnone');
+    var fam = '';
+
+    /* a chip narrows by scripture, the box by any word in the Devanagari, the
+       Roman line, the meaning or the source */
+    function apply() {
+      var terms = (box.value || '').toLowerCase().split(/\s+/).filter(Boolean);
+      var shown = 0;
+      items.forEach(function (d) {
+        var text = d.textContent.toLowerCase();
+        var ok = (!fam || d.dataset.fam === fam) && terms.every(function (t) { return text.indexOf(t) >= 0; });
+        d.hidden = !ok;
+        if (ok) shown++;
+      });
+      none.hidden = shown > 0;
+    }
+    chips.forEach(function (c) {
+      c.addEventListener('click', function () {
+        fam = c.dataset.fam;
+        chips.forEach(function (x) { x.classList.toggle('on', x === c); });
+        apply();
+      });
+    });
+    box.addEventListener('input', apply);
+
+    /* /shloka/#gita-2-47 opens that verse */
+    function openHash() {
+      var id = decodeURIComponent(location.hash.slice(1));
+      var d = id ? document.getElementById(id) : null;
+      if (d && d.classList.contains('sv')) {
+        d.open = true;
+        setTimeout(function () { d.scrollIntoView({ block: 'center' }); }, 60);
+      }
+    }
+    openHash();
+    window.addEventListener('hashchange', openHash);
+  })();
 
   /* ---------- search ---------- */
   var q = document.getElementById('q');

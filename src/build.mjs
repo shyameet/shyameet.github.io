@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { marked } from 'marked';
 import { dayFile, weekFile, daySeedText, weekSeedText } from './lib/seed.mjs';
+import { loadShlokas, shlokaFor } from './lib/shlokas.mjs';
+import { loadFestivals, upcoming } from './lib/festivals.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -47,6 +49,18 @@ const WEEK_LETTERS = CFG.weekStartsMonday === false
 /* ---------- helpers ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* Shorten to about n characters at a word boundary, with the ellipsis fastened to
+   the last word (an ellipsis is never broken from what is before it, so it cannot
+   wrap onto a line of its own). Untitled entries are named by their first words,
+   and "while i was in th" is not a name. */
+function clip(s, n) {
+  s = String(s ?? '').trim();
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  const sp = cut.lastIndexOf(' ');
+  return (sp > n * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:.\-–—]+$/, '') + '…';
+}
 
 function slugify(s) {
   return String(s).toLowerCase().trim()
@@ -236,6 +250,11 @@ for (const d of DEITIES) {
   ART[d.id] = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n').trim() : '';
 }
 const deityFor = (k) => DEITIES.find((d) => d.day === weekdayOf(k)) || null;
+
+/* the verses: content/shlokas.json, one pool per weekday (see src/lib/shlokas.mjs) */
+const SHLOKAS = loadShlokas(ROOT);
+/* the festivals: content/festivals.json, a checked table (see src/lib/festivals.mjs) */
+const FESTIVALS = loadFestivals(ROOT);
 
 /* ---------- load posts ---------- */
 const POSTS_DIR = path.join(ROOT, 'content', 'posts');
@@ -432,9 +451,11 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '</header>\n'
     + '<main class="wrap">\n' + body + '\n</main>\n'
     + '<footer class="site">\n'
+    + '  <img class="lotus" src="/art/ornaments/lotus.svg" alt="" width="48" height="29">\n'
+    + '  <p class="shanti" lang="sa">॥ ॐ शान्तिः शान्तिः शान्तिः ॥</p>\n'
     + '  <p class="motto">' + esc(CFG.tagline) + '</p>\n'
-    + '  <p class="flinks"><a href="/archive/">Archive · ' + journal.length + '</a>'
-    + '<a href="/darshan/">Darshan</a><a href="/search/">Search</a><a href="/feed.xml">RSS</a></p>\n'
+    + '  <p class="flinks"><a href="/shloka/">Shloka</a><a href="/utsav/">Utsav</a><a href="/darshan/">Darshan</a>'
+    + '<a href="/archive/">Archive · ' + journal.length + '</a><a href="/search/">Search</a><a href="/feed.xml">RSS</a></p>\n'
     + '</footer>\n'
     + '<nav class="tabbar" aria-label="Main">' + links(true) + '</nav>\n'
     + '<div id="toast" class="toast" role="status" aria-live="polite"></div>\n'
@@ -476,7 +497,7 @@ function relDay(k, base = TODAY) {
 
 function entryRow(p, { showSection = true, showDate = false, excerpt = false } = {}) {
   const sec = SECTION_BY_ID[p.section];
-  const name = p.title || (p.excerpt.length > 90 ? p.excerpt.slice(0, 88) + '…' : p.excerpt) || 'Untitled';
+  const name = p.title || clip(p.excerpt, 88) || 'Untitled';
   const meta = [];
   if (showSection && sec) meta.push('<b>' + esc(sec.name) + '</b>');
   if (showDate) meta.push(esc(shortDate(p.day)));
@@ -591,6 +612,94 @@ function mantraBlock(k) {
   return '<p class="mantra" lang="sa">' + esc(d.mantra) + '</p>'
     + '<p class="roman">' + esc(d.roman) + ' <span class="dot">·</span> ' + esc(d.name) + '</p>';
 }
+
+/* ---------- the Indian touches ---------- */
+
+/* a doorway garland of marigolds and mango leaves -- the toran hung for a new
+   beginning. Drawn in src/make_ornaments.py. */
+const TORAN = '<div class="toran" aria-hidden="true"></div>';
+
+/* "Good morning" the way it is said at home. data-greet is re-set by app.js from
+   the device's clock, because the page is static and the hour is not. The
+   jaikara is the deity's: each weekday has its own call. */
+function greeting(k) {
+  const d = deityFor(k);
+  return '<p class="greet"><span class="hi" lang="hi" data-greet>नमस्ते</span>'
+    + (d && d.jai ? ' <span class="dot">·</span> <span class="jai" lang="hi">' + esc(d.jai) + '</span>' : '')
+    + '</p>';
+}
+
+/* The shloka of the day, set like a leaf of a palm-leaf manuscript (pothi): a
+   cream page, a red inner rule, the two holes the string passes through. The
+   Roman line is generated from the Devanagari (src/lib/translit.mjs). */
+/* a verse as lines. The danda (। ॥ and their Roman | ||) is glued to the word
+   before it with a no-break space, so a wrapped line never leaves a lone ॥ on
+   a row of its own. */
+const verseLines = (t) => esc(t).replace(/ ([।॥|]+)/g, ' $1').split('\n').join('<br>');
+
+function shlokaCard(k, { more = true } = {}) {
+  const s = shlokaFor(SHLOKAS, k);
+  if (!s) return '';
+  const lines = verseLines;
+  return '<section class="shloka" aria-label="Shloka of the day">'
+    + '<span class="hole l"></span><span class="hole r"></span>'
+    + '<img class="lotus" src="/art/ornaments/lotus.svg" alt="" width="64" height="38">'
+    + '<p class="label">Shloka of the day <span lang="hi">· श्लोक</span></p>'
+    + '<p class="sa" lang="sa">' + lines(s.sa) + '</p>'
+    + '<p class="iast">' + lines(s.tr) + '</p>'
+    + '<p class="en">' + esc(s.en) + '</p>'
+    + '<p class="src">' + esc(s.src) + (s.by ? ' · ' + esc(s.by) : '') + '</p>'
+    + '<p class="carry"><b>For today</b> ' + esc(s.carry) + '</p>'
+    + (more ? '<a class="more" href="/shloka/#' + s.id + '">All shlokas →</a>' : '')
+    + '</section>';
+}
+
+/* ---------- utsav: the festivals coming up ----------
+   "in 9 days" is worked out again from the device's date by app.js (utsavNow);
+   what is built here is the same sentence for the day of the build, so the card
+   is right with no script at all. */
+const daysBetween = (a, b) => Math.round((keyDate(b) - keyDate(a)) / 86400000);
+const untilText = (n) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : 'in ' + n + ' days');
+const untilCls = (n) => 'uw' + (n === 0 ? ' now' : n <= 3 ? ' soon' : '');
+const festDate = (k) => DAYS[weekdayOf(k)] + ' ' + +k.slice(8) + ' ' + MONTHS[+k.slice(5, 7) - 1];
+
+function utsavRow(f, k, { hidden = false, note = false } = {}) {
+  const n = daysBetween(k, f.date);
+  return '<li' + (hidden ? ' hidden' : '') + ' data-date="' + f.date + '">'
+    + '<span class="un"><b>' + esc(f.name) + '</b><small>' + esc(festDate(f.date))
+    + (f.hi ? ' · <span lang="hi">' + esc(f.hi) + '</span>' : '') + '</small>'
+    + (note && f.note ? '<small class="unote">' + esc(f.note) + '</small>' : '') + '</span>'
+    + '<span class="' + untilCls(n) + '" data-when>' + untilText(n) + '</span></li>';
+}
+
+/* the next two on the Today page; the two after them wait, hidden, in case the
+   first pair has passed by the time the device's date is looked at */
+function utsavCard(k) {
+  const next = upcoming(FESTIVALS, k, 4);
+  if (!next.length) return '';
+  return '<section class="utsav" data-utsav="card" aria-label="Festivals coming up">'
+    + '<p class="label">Utsav <span lang="hi">· उत्सव</span></p>'
+    + '<ul>' + next.map((f, i) => utsavRow(f, k, { hidden: i >= 2 })).join('') + '</ul>'
+    + '<a class="more" href="/utsav/">All festivals →</a></section>';
+}
+
+/* A lamp for every half hour of focus. Markup is mirrored in focus.js (diyaRow),
+   which redraws the row live as a block finishes -- keep the two in step. */
+const DIYA_MIN = 1800;
+const DIYA_SLOTS = Math.max(1, Math.ceil(((CFG.focus && CFG.focus.dailyTargetHours) || 7) * 3600 / DIYA_MIN));
+const DIYA_SVG = '<svg viewBox="0 0 40 24" aria-hidden="true"><path class="bowl" d="M2 7C2 16.5 9.5 22 20 22S38 16.5 38 7c0-1-.8-1.6-1.8-1.6H3.8C2.8 5.4 2 6 2 7Z"/>'
+  + '<path class="rim" d="M5.5 7.6Q20 11.2 34.5 7.6"/><circle class="wick" cx="20" cy="5.2" r="1.3"/></svg>';
+const diya = (lit) => '<span class="diya' + (lit ? ' lit' : '') + '">' + DIYA_SVG + '<i class="flame"></i></span>';
+function diyaRow(sec) {
+  const lit = Math.floor((sec || 0) / DIYA_MIN);
+  let h = '';
+  for (let i = 0; i < Math.max(DIYA_SLOTS, lit); i++) h += diya(i < lit);
+  return '<div class="diyas" role="img" aria-label="' + lit + ' of ' + DIYA_SLOTS
+    + ' lamps lit, one for every half hour of focus">' + h + '</div>';
+}
+
+/* a page title with its Devanagari beside it */
+const titled = (en, hi) => '<h1>' + esc(en) + (hi ? ' <small lang="hi">' + hi + '</small>' : '') + '</h1>';
 
 function weekStrip(k) {
   const keys = weekKeys(k);
@@ -707,7 +816,7 @@ const focusCard = (k) => {
     + '<p class="big" data-f-total>' + fmtDur(f.sec) + '</p>'
     + '<p class="sub"><span data-f-sub>of ' + fmtDur(FOCUS_TARGET) + ' · ' + f.n + ' block' + (f.n === 1 ? '' : 's') + '</span>'
     + '<span class="running" data-f-running hidden></span></p></div>\n'
-    + '  <div class="fc-ring" data-f-ring>' + ring(f.sec / FOCUS_TARGET, 72, 7, 'focusring') + '</div>\n'
+    + '  <div class="fc-diyas" data-f-diyas>' + diyaRow(f.sec) + '</div>\n'
     + '  <a class="btn primary" href="/focus/">Start a block</a>\n'
     + '</section>';
 };
@@ -737,8 +846,9 @@ function todayPanel(k) {
   const page = dayPageFor(k);
   const week = weekPageFor(k);
   const yday = DAY_PAGES.get(addDays(k, -1));
-  return '<section class="hero">\n'
+  return TORAN + '\n<section class="hero">\n'
     + '  <div class="herotext">\n'
+    + '    ' + greeting(k) + '\n'
     + '    <p class="kicker">' + esc(VAAR[weekdayOf(k)]) + ' <span lang="hi">' + VAAR_DEVA[weekdayOf(k)] + '</span></p>\n'
     + '    <h1>' + esc(FULLDAYS[weekdayOf(k)]) + '<span>' + +k.slice(8) + ' ' + FULLMONTHS[+k.slice(5, 7) - 1] + '</span></h1>\n'
     + '    ' + mantraBlock(k) + '\n'
@@ -749,7 +859,9 @@ function todayPanel(k) {
     + (page
       ? taskCard(page, 'Today', { link: false, cls: 'today' })
       : '<section class="card"><p class="muted">No daily routine is set up yet. It lives in site.config.json.</p></section>')
-    + '\n' + (yday ? yesterdayCard(yday) + '\n' : '')
+    + '\n' + shlokaCard(k) + '\n'
+    + utsavCard(k) + '\n'
+    + (yday ? yesterdayCard(yday) + '\n' : '')
     + focusCard(k) + '\n'
     + (week ? taskCard(week, 'This week', { link: !week.virtual }) + '\n' : '')
     + '<div class="rowhead"><h2>Journal</h2><a href="/journal/">Everything →</a></div>\n'
@@ -770,7 +882,7 @@ function todayPanel(k) {
 /* ---------- habits ---------- */
 write('habits/index.html', shell({
   title: 'Habits', canonical: '/habits/', nav: 'habits',
-  body: '<div class="pagehead"><h1>Habits</h1><p class="muted">This week, ' + esc(shortDate(weekKeys(TODAY)[0]))
+  body: '<div class="pagehead">' + titled('Habits', 'आदतें') + '<p class="muted">This week, ' + esc(shortDate(weekKeys(TODAY)[0]))
     + ' – ' + esc(shortDate(weekKeys(TODAY)[6])) + '. Tap a circle to tick a day, even a past one.</p></div>\n'
     + '<section class="card">' + habitGrid(TODAY) + '</section>\n'
     + '<div class="rowhead"><h2>Last four weeks</h2></div>\n'
@@ -790,7 +902,9 @@ write('focus/index.html', shell({
     + '  <div class="dial">\n'
     + '    <svg class="dialring" viewBox="0 0 240 240" aria-hidden="true"><circle class="track" cx="120" cy="120" r="108"/>'
     + '<circle class="prog" id="fprog" cx="120" cy="120" r="108" transform="rotate(-90 120 120)"/></svg>\n'
-    + '    <div class="dialtext"><div class="clock" id="fclock">30:00</div><div class="fstate" id="fstate">Ready</div></div>\n'
+    /* the lamp over the clock: lit while a block runs, dim when paused, flaring at the bell */
+    + '    <div class="dialtext"><span class="diya dial-flame" id="fflame">' + DIYA_SVG + '<i class="flame"></i></span>'
+    + '<div class="clock" id="fclock">30:00</div><div class="fstate" id="fstate">Ready</div></div>\n'
     + '  </div>\n'
     + '  <div class="presets" id="fpresets" role="group" aria-label="Block length"></div>\n'
     + '  <div class="custom" id="fcustombox" hidden><input id="fcustom" type="number" inputmode="numeric" min="1" max="240" placeholder="minutes">'
@@ -810,7 +924,8 @@ write('focus/index.html', shell({
     + '</section>\n'
     + '<section class="card ftoday">\n'
     + '  <div class="ftodayhead"><div><p class="label">Focused today</p><p class="big" id="ftotal">0m</p>'
-    + '<p class="sub" id="fsub"></p></div><div id="fring"></div></div>\n'
+    + '<p class="sub" id="fsub"></p></div></div>\n'
+    + '  <div class="fc-diyas" id="fring"></div>\n'
     + '  <div class="timeline"><div class="tl-track" id="ftimeline"></div>'
     + '<div class="tl-hours"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div></div>\n'
     + '  <ul class="sessions" id="fsessions"></ul>\n'
@@ -838,7 +953,7 @@ write('focus/index.html', shell({
   const shown = recentDays(journal, 14);
   write('journal/index.html', shell({
     title: 'Journal', canonical: '/journal/', nav: 'journal',
-    body: '<div class="pagehead"><h1>Journal</h1><p class="muted">Everything written, under the day it is about.</p></div>\n'
+    body: '<div class="pagehead">' + titled('Journal', 'चिंतन') + '<p class="muted">Everything written, under the day it is about.</p></div>\n'
       + '<nav class="secchips" aria-label="Sections">' + chips + '</nav>\n'
       + dayGroups(shown) + '\n'
       + (journal.length > shown.length ? '<p class="more"><a href="/archive/">Older days are in the archive →</a></p>' : ''),
@@ -848,7 +963,7 @@ write('focus/index.html', shell({
 /* ---------- darshan: all seven, one per weekday ---------- */
 write('darshan/index.html', shell({
   title: 'Darshan', canonical: '/darshan/',
-  body: '<div class="pagehead"><h1>Darshan</h1><p class="muted">One for each day of the week. Today\'s sits at the top of the Today page.</p></div>\n'
+  body: TORAN + '<div class="pagehead">' + titled('Darshan', 'दर्शन') + '<p class="muted">One for each day of the week. Today\'s sits at the top of the Today page.</p></div>\n'
     + '<div class="darshan">' + [1, 2, 3, 4, 5, 6, 0].map((dow) => {
       const d = DEITIES.find((x) => x.day === dow);
       if (!d) return '';
@@ -865,6 +980,73 @@ write('darshan/index.html', shell({
         + credit + '</section>';
     }).join('') + '</div>',
 }));
+
+/* ---------- shloka: the whole collection ---------- */
+if (SHLOKAS.items.length) {
+  const pick = shlokaFor(SHLOKAS, TODAY);
+  const lines = verseLines;
+  const famOrder = Object.keys(SHLOKAS.families);
+  const counts = {};
+  for (const s of SHLOKAS.items) counts[s.family] = (counts[s.family] || 0) + 1;
+  const chips = '<button type="button" class="chip on" data-fam="">All <b>' + SHLOKAS.items.length + '</b></button>'
+    + famOrder.filter((f) => counts[f]).map((f) => '<button type="button" class="chip" data-fam="' + f + '">'
+      + esc(SHLOKAS.families[f]) + ' <b>' + counts[f] + '</b></button>').join('');
+  const dayLine = (d) => {
+    const x = DEITIES.find((e) => e.day === d);
+    return 'Comes round on ' + FULLDAYS[d] + 's' + (x ? ' · ' + x.name : '');
+  };
+  const rows = [...SHLOKAS.items]
+    .sort((a, b) => famOrder.indexOf(a.family) - famOrder.indexOf(b.family))
+    .map((s) => '<details class="sv" id="' + s.id + '" data-fam="' + s.family + '">'
+      + '<summary><span class="svsrc">' + esc(s.src) + (pick && s.id === pick.id ? ' <b class="todaytag">Today</b>' : '') + '</span>'
+      + '<span class="svfirst" lang="sa">' + esc(s.sa.split('\n')[0]) + '</span></summary>'
+      + '<div class="svbody"><p class="sa" lang="sa">' + lines(s.sa) + '</p><p class="iast">' + lines(s.tr) + '</p>'
+      + '<p class="en">' + esc(s.en) + '</p>' + (s.by ? '<p class="by">' + esc(s.by) + '</p>' : '')
+      + '<p class="carry"><b>For today</b> ' + esc(s.carry) + '</p>'
+      + '<p class="when">' + esc(dayLine(s.day)) + '</p></div></details>').join('\n');
+  write('shloka/index.html', shell({
+    title: 'Shloka', canonical: '/shloka/', nav: 'journal', cls: 'shlokapage',
+    desc: 'One verse a day from the Gita, the Mahabharata, the Upanishads and the stotras.',
+    body: TORAN + '<div class="pagehead">' + titled('Shloka', 'श्लोक')
+      + '<p class="muted">' + SHLOKAS.items.length + ' verses. Each weekday draws from its own deity\'s pool, so today\'s was picked for '
+      + FULLDAYS[weekdayOf(TODAY)] + '.</p></div>\n'
+      + '<input id="sq" type="search" placeholder="Search a word, a source, a feeling…" autocomplete="off">\n'
+      + '<nav class="secchips famchips" id="famchips" aria-label="Scripture">' + chips + '</nav>\n'
+      + '<div id="shlokalist">' + rows + '</div>\n'
+      + '<p class="muted small" id="svnone" hidden>No verse matches that.</p>',
+  }));
+}
+
+/* ---------- utsav: the festival calendar ---------- */
+if (FESTIVALS.items.length) {
+  const ahead = FESTIVALS.items.filter((f) => f.date >= TODAY);
+  let groups = '';
+  let month = '';
+  for (const f of ahead) {
+    const m = f.date.slice(0, 7);
+    if (m !== month) {
+      if (month) groups += '</ul>\n';
+      month = m;
+      groups += '<h2 class="umonth">' + FULLMONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4) + '</h2>\n<ul class="ulist">\n';
+    }
+    groups += utsavRow(f, TODAY, { note: true }) + '\n';
+  }
+  if (month) groups += '</ul>\n';
+  write('utsav/index.html', shell({
+    title: 'Utsav', canonical: '/utsav/', nav: 'journal', cls: 'utsavpage',
+    desc: 'The festivals coming up, with Mumbai dates.',
+    body: TORAN + '<div class="pagehead">' + titled('Utsav', 'उत्सव')
+      + '<p class="muted">The festivals that are coming round, with their Mumbai dates.</p></div>\n'
+      + '<div class="card utsav" data-utsav="list">\n'
+      + (ahead.length ? groups : '<p class="muted">The list has run out. It needs the next year added.</p>')
+      + '</div>\n'
+      + (FESTIVALS.about ? '<p class="muted small utsavabout">' + esc(FESTIVALS.about) + '</p>' : ''),
+  }));
+  const last = FESTIVALS.items[FESTIVALS.items.length - 1].date;
+  if (last < addDays(TODAY, 60)) {
+    console.log('  ! content/festivals.json ends on ' + last + ' -- time to add the next year');
+  }
+}
 
 /* ---------- section pages ---------- */
 for (const s of SECTIONS) {
@@ -893,7 +1075,7 @@ for (const p of posts) {
   const at = sibs.indexOf(p);
   const prev = sibs[at + 1];
   const next = sibs[at - 1];
-  const label = (q) => esc((q.title || fullDate(q.iso)).slice(0, 44));
+  const label = (q) => esc(clip(q.title || fullDate(q.iso), 44));
   const pager = '<nav class="pager">'
     + (prev ? '<a href="' + prev.url + '">← ' + label(prev) + '</a>' : '<span></span>')
     + (next ? '<a href="' + next.url + '">' + label(next) + ' →</a>' : '<span></span>')
@@ -915,6 +1097,7 @@ for (const p of posts) {
       + '  ' + medal(k) + '\n'
       + '</section>\n'
       + taskCard(p, 'Habits', { link: false }) + '\n'
+      + shlokaCard(k) + '\n'
       + '<section class="card"><div class="cardhead"><h3>Focus</h3><span class="count">'
       + (f && f.sec ? fmtDur(f.sec) + ' · ' + f.n + ' block' + (f.n === 1 ? '' : 's') : 'none logged') + '</span></div>'
       + focusTimeline(k) + '</section>\n'
@@ -975,12 +1158,12 @@ for (const [t, ps] of Object.entries(byTag)) {
     : '';
   write('archive/index.html', shell({
     title: 'Archive', canonical: '/archive/', nav: 'journal',
-    body: '<div class="pagehead"><h1>Archive</h1><p class="muted">Everything written, newest first. Day pages live under <a href="/s/daytasks/">Day Tasks</a>.</p></div>\n'
+    body: '<div class="pagehead">' + titled('Archive', 'संग्रह') + '<p class="muted">Everything written, newest first. Day pages live under <a href="/s/daytasks/">Day Tasks</a>.</p></div>\n'
       + cloud + '\n'
       + Object.keys(byMonth).sort().reverse().map((mk) => '<section class="card month">\n'
         + '  <h2>' + esc(monthLabel(mk)) + '</h2>\n'
         + '  <ul>' + byMonth[mk].map((p) => '<li><span class="d">' + pad2(clockParts(p.iso).d) + '</span>'
-          + '<a href="' + p.url + '">' + esc(p.title || p.excerpt.slice(0, 70) || 'Untitled') + '</a>'
+          + '<a href="' + p.url + '">' + esc(p.title || clip(p.excerpt, 70) || 'Untitled') + '</a>'
           + secChip(p.section) + '</li>').join('') + '</ul>\n'
         + '</section>').join('\n'),
   }));
@@ -989,7 +1172,7 @@ for (const [t, ps] of Object.entries(byTag)) {
 /* ---------- search ---------- */
 write('search/index.html', shell({
   title: 'Search', canonical: '/search/',
-  body: '<div class="pagehead"><h1>Search</h1><p class="muted">Every word of every entry. Section names work too.</p></div>\n'
+  body: '<div class="pagehead">' + titled('Search', 'खोज') + '<p class="muted">Every word of every entry. Section names work too.</p></div>\n'
     + '<input id="q" type="search" placeholder="Type to search…" autocomplete="off" autofocus>\n'
     + '<div id="results"></div>',
 }));
