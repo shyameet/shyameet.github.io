@@ -204,6 +204,29 @@ Language is `speechLang` in `site.config.json` (default `en-IN`). Hit Publish. A
 the home screen once and it opens like an app. The draft saves to the phone as you speak,
 so losing signal costs nothing.
 
+The editor (`public/admin/index.html`, one self-contained file, so a half-deployed
+version can never mix) is built for one-handed, spoken, several-minute sessions:
+
+- **Talk, Discard and Publish live in a dock that never scrolls away.** The writing box
+  scrolls inside itself, so a long dictation cannot push the stop button off the screen.
+  The whole app is sized to the *visible* screen (`visualViewport`), so the dock rides
+  above the keyboard; with the keyboard up the day and the tags fold away to leave the
+  box room. (At a desk, Ctrl/Cmd + Enter publishes.)
+- **Section** is one pill; tapping it opens a sheet that says what each section is for,
+  with the habit pages (Day/Week Tasks) set apart under *Checklists*. **About** picks the
+  day an entry is about (Today, Yesterday, or any date).
+- **Status strip** above the dock says what just happened: *Publishing… → Saved, building
+  the site… → Live ✓* with links to the entry (it watches `/build.json`), or the error
+  and that the draft is safe. *Discard* is undoable for ten seconds.
+- **Recent** lists entries from the site's own search index (title, section, time), so it
+  opens at once and works before the phone is connected; the GitHub listing only adds
+  what is newer than the last build. *Edit* loads an entry (keeping its date, `day:`,
+  `breaks:`) and *Update* writes it back.
+- The empty page shows the day's shloka (`verses` in `/admin/config.json`, from
+  `content/shlokas.json`), and gets out of the way the moment there is a word on it.
+- **Setup** (⚙) says plainly whether this browser is connected; the mic diagnostics are
+  folded under *Microphone not working?*.
+
 **From the desk.** Drop a `.md` file into `content/posts/` and push. Same result. The
 folder is plain markdown, so Obsidian can open it as a vault.
 

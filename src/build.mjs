@@ -635,7 +635,8 @@ function greeting(k) {
 /* a verse as lines. The danda (। ॥ and their Roman | ||) is glued to the word
    before it with a no-break space, so a wrapped line never leaves a lone ॥ on
    a row of its own. */
-const verseLines = (t) => esc(t).replace(/ ([।॥|]+)/g, ' $1').split('\n').join('<br>');
+const NBSP = String.fromCharCode(160);
+const verseLines = (t) => esc(t).replace(/ ([।॥|]+)/g, NBSP + '$1').split('\n').join('<br>');
 
 function shlokaCard(k, { more = true } = {}) {
   const s = shlokaFor(SHLOKAS, k);
@@ -1176,9 +1177,12 @@ write('search/index.html', shell({
     + '<input id="q" type="search" placeholder="Type to search…" autocomplete="off" autofocus>\n'
     + '<div id="results"></div>',
 }));
+/* f (the file) and o (when it was written) are for the Write page's Recent list,
+   which can then show titles, sections and times without asking the GitHub API */
 write('search.json', JSON.stringify(posts.map((p) => ({
   t: p.title || (isTaskSection(p.section) ? fullDate(p.iso) : ''), u: p.url, d: fmtDate(p.iso, false), g: p.tags,
   s: (SECTION_BY_ID[p.section] || {}).name || '', i: p.section,
+  f: p.file, o: p.iso,
   x: p.text.slice(0, 1500),
 }))));
 
@@ -1222,6 +1226,12 @@ write('admin/config.json', JSON.stringify({
   repo: CFG.repo, branch: CFG.branch, quickTags: CFG.quickTags || [],
   url: CFG.url, sections: SECTIONS, speechLang: CFG.speechLang || 'en-IN',
   routine: CFG.routine || [], weeklyRoutine: CFG.weeklyRoutine || [],
+  /* the verse for today and tomorrow: the editor shows the one matching the
+     phone's date on its empty page, so the day it opens on is the day's own */
+  verses: [TODAY, TOMORROW].map((k) => {
+    const s = shlokaFor(SHLOKAS, k);
+    return s ? { date: k, sa: s.sa, en: s.en, src: s.src, carry: s.carry } : null;
+  }).filter(Boolean),
 }));
 
 for (const f of ['style.css', 'app.js', 'focus.js', 'sw.js']) {
