@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "node src/build.mjs",
-    "serve": "node src/build.mjs && node src/serve.mjs"
+    "serve": "node src/build.mjs && node src/serve.mjs",
+    "check": "node src/check.mjs"
   },
   "dependencies": {
     "marked": "^15.0.7"

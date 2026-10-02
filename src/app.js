@@ -1,10 +1,38 @@
-/* Theme toggle, ticking tasks off from any page, and search. No dependencies,
-   no build step. The focus timer lives in its own file (focus.js). */
+/* Site-wide script: theme, "is this page stale?", the home page's day rollover,
+   ticking tasks off from any page, and search. No dependencies, no build step.
+   The focus timer lives in its own file (focus.js).
+
+   The site is static HTML built at deploy time. That is fine for reading, but
+   three things it cannot do on its own, and this file does for it:
+     1. notice it is old   -- a page opened from cache, or a phone resumed after a
+                              night asleep, is still showing the build it came from;
+     2. turn the day over  -- the home page ships a panel for today AND tomorrow
+                              and shows the one that matches the device's date;
+     3. make the day's file -- if the nightly job has not, the browser holding the
+                              token creates it. */
 (function () {
   'use strict';
 
   var $$ = function (sel, root) { return [].slice.call((root || document).querySelectorAll(sel)); };
   var norm = function (s) { return String(s || '').trim().toLowerCase(); };
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  var meta = function (name) {
+    var m = document.querySelector('meta[name="' + name + '"]');
+    return m ? m.content : '';
+  };
+
+  /* the device's own calendar date -- what "today" means to the person holding it */
+  function localToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function dayBefore(key) {
+    var d = new Date(key + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  var BUILT = meta('built');
 
   /* ---------- theme ---------- */
   var btn = document.getElementById('themetoggle');
@@ -19,36 +47,141 @@
     });
   }
 
-  /* ---------- toast ---------- */
+  /* ---------- toast ----------
+     target: a string turns the toast into a link; a function makes it a button */
   var toastEl = document.getElementById('toast');
   var toastTimer = null;
-  /* href turns the toast into a link -- "not connected: connect" */
-  function toast(text, kind, ms, href) {
+  function toast(text, kind, ms, target) {
     if (!toastEl) return;
     toastEl.innerHTML = '';
-    if (href) {
+    if (target) {
       var a = document.createElement('a');
-      a.href = href;
       a.textContent = text;
+      if (typeof target === 'function') {
+        a.href = '#';
+        a.addEventListener('click', function (e) { e.preventDefault(); target(); });
+      } else {
+        a.href = target;
+      }
       toastEl.appendChild(a);
     } else {
       toastEl.textContent = text;
     }
-    toastEl.className = 'toast show' + (kind === 'err' ? ' err' : '') + (href ? ' act' : '');
+    toastEl.className = 'toast show' + (kind === 'err' ? ' err' : '') + (target ? ' act' : '');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.className = 'toast'; }, ms || 2200);
   }
   window.journalToast = toast;
+
+  /* ---------- is this page stale? ----------
+     GitHub Pages lets a browser keep a page for ten minutes, a deploy takes a
+     minute or two after a post or a tick, and a phone app resumed from the
+     background does not reload at all. So the page asks, now and then, whether a
+     newer build exists (build.json is tiny and never cached) and, if so and the
+     person is not in the middle of something, simply reloads. */
+  var lastFresh = 0;
+  var lastTouch = 0;        // 0 = not touched yet: a page that has only just loaded may reload at once
+  ['pointerdown', 'keydown', 'input', 'change'].forEach(function (ev) {
+    document.addEventListener(ev, function () { lastTouch = Date.now(); }, true);
+  });
+
+  function busy() {
+    if (Date.now() - lastTouch < 20000) return true;           // touched it a moment ago
+    try {
+      /* never pull the page out from under a running focus block */
+      if (document.body.classList.contains('focuspage') && localStorage.getItem('focus_running_v1')) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function refreshNow() {
+    var last = 0;
+    try { last = +sessionStorage.getItem('fresh_at') || 0; } catch (e) {}
+    if (Date.now() - last < 25000) return;                      // never loop
+    try { sessionStorage.setItem('fresh_at', String(Date.now())); } catch (e) {}
+    var go = function () { location.reload(); };
+    /* cache:'reload' refreshes the browser's copy of this page first, so the
+       reload that follows cannot be answered from the stale one */
+    fetch(location.href, { cache: 'reload' }).then(go, go);
+  }
+
+  function freshCheck(force) {
+    if (!BUILT) return;
+    var now = Date.now();
+    if (!force && now - lastFresh < 15000) return;
+    lastFresh = now;
+    fetch('/build.json?t=' + now, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.built || j.built <= BUILT) return;
+        if (busy()) toast('A newer version is ready — tap to refresh', '', 12000, refreshNow);
+        else refreshNow();
+      })
+      .catch(function () { /* offline: what is on screen stands */ });
+  }
+
+  /* ---------- the day turns over ---------- */
+  var panels = $$('.daypanel');
+  var shownPanel = null;
+
+  /* Today / Yesterday / the "today" highlight, worked out from the device's date.
+     Anything inside a home-page panel is already right for its panel's date. */
+  function relabel() {
+    var t = localToday();
+    var y = dayBefore(t);
+    $$('[data-day]').forEach(function (el) {
+      if (el.closest('.daypanel')) return;
+      var d = el.dataset.day;
+      var c = el.classList;
+      if (c.contains('hg-d')) {
+        c.toggle('today', d === t);
+      } else if (c.contains('fcell')) {
+        c.toggle('now', d === t);
+      } else if (c.contains('cell')) {
+        c.toggle('future', d > t);
+        if (el.tagName === 'SPAN') c.toggle('none', d <= t);
+        else { c.toggle('now', d === t); c.toggle('past', d < t); }
+      } else if (c.contains('dghead')) {
+        var rel = d === t ? 'Today' : d === y ? 'Yesterday' : '';
+        var b = el.querySelector('b');
+        if (rel) {
+          if (!b) { b = document.createElement('b'); el.insertBefore(b, el.firstChild); }
+          b.textContent = rel;
+        } else if (b) {
+          b.remove();
+        }
+      }
+    });
+  }
+
+  function showPanel() {
+    if (!panels.length) return;
+    var t = localToday();
+    var hit = panels.filter(function (p) { return p.dataset.date === t; })[0];
+    if (!hit) {
+      hit = panels[0];
+      /* the device is past everything that was built in: a build from days ago */
+      if (t > panels[panels.length - 1].dataset.date) freshCheck(true);
+    }
+    if (hit === shownPanel) return;
+    var turned = shownPanel !== null;          // false on the first call: the page just loaded
+    panels.forEach(function (p) { p.hidden = (p !== hit); });
+    shownPanel = hit;
+    document.documentElement.dataset.today = hit.dataset.date;
+    if (turned) {
+      /* the new day's numbers: focus total, and the live state of its habit page */
+      if (window.__focusRender) window.__focusRender();
+      if (window.__ticksSync) window.__ticksSync(true);
+    }
+  }
 
   /* ---------- tappable tasks ----------
      The site and /admin/ share an origin, so a token pasted into the editor is
      readable here too. If one exists this is the owner, and ticking a box
      rewrites the markdown in the repo.
 
-     The pages are static and GitHub Pages lets a browser keep one for ten
-     minutes, while a tick takes a minute or two to rebuild the site -- so the
-     HTML is often older than the truth. Two things close that gap, for the
-     owner only:
+     The pages are static, so the HTML is often older than the truth. Two things
+     close that gap, for the owner only:
        1. every page with ticks asks the GitHub API for the live files and
           shows what they actually say, whatever the HTML was built with;
        2. every tick is also remembered here for a while, so it shows at once
@@ -58,7 +191,6 @@
      by that text rather than by position. */
   (function () {
     var controls = $$('input[type="checkbox"][data-task], button.cell[data-task]');
-    if (!controls.length) return;
 
     var token;
     try { token = localStorage.getItem('gh_token'); } catch (e) { token = null; }
@@ -67,6 +199,11 @@
       if (el.dataset.file) return el.dataset.file;
       var block = el.closest('[data-file]');
       return block ? block.dataset.file : '';
+    }
+
+    /* a day that has not started cannot be ticked early */
+    function tooEarly(el) {
+      return el.tagName === 'BUTTON' && el.classList.contains('future');
     }
 
     /* Not connected in this browser. Say so, rather than doing nothing: a box
@@ -80,9 +217,11 @@
         el.classList.add('locked');
         el.addEventListener('click', function (e) {
           e.preventDefault();
+          if (tooEarly(el)) { toast('That day has not started yet'); return; }
           toast('This browser isn’t connected — tap to connect it once', 'err', 5000, '/admin/#setup');
         });
       });
+      window.__ticksSync = function () {};
       return;
     }
 
@@ -90,6 +229,7 @@
     var chain = Promise.resolve();   // one write at a time; each refetches the sha
     var inflight = {};               // "file\ntask" -> true while a write is on its way
     var known = {};                  // file -> { task: done } as the repo last said
+    var ensuring = {};               // file -> promise while its page is being made
     var OVR = 'tick_overrides_v1';
     var OVR_TTL = 30 * 60 * 1000;
 
@@ -151,9 +291,59 @@
       return state;
     }
 
+    /* ---- making a day's file when the nightly job has not ----
+       The card carries the very text the job would have written (data-seed). If
+       the file is not in the repo, put it there. A file that appeared in the
+       meantime (the job, or another device) is fine -- 422 means "already there". */
+    function niceName(file) {
+      var m = file.match(/(\d{4}-\d{2}-\d{2})-\d{4}-(day|week)\.md$/);
+      if (!m) return file;
+      var d = new Date(m[1] + 'T12:00:00');
+      var s = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      return m[2] === 'week' ? 'weektasks: week of ' + s : 'daytasks: ' + s;
+    }
+    function ensureFile(file, seed) {
+      if (ensuring[file]) return ensuring[file];
+      ensuring[file] = config().then(function (c) {
+        return gh('GET', contentsUrl(c, file) + '?ref=' + c.branch).then(function () {
+          return 'exists';
+        }, function (err) {
+          if (err.status !== 404) throw err;
+          return gh('PUT', contentsUrl(c, file), {
+            message: niceName(file), content: b64encode(seed), branch: c.branch
+          }).then(function () { return 'created'; }, function (e2) {
+            if (e2.status === 422 || e2.status === 409) return 'exists';
+            throw e2;
+          });
+        });
+      }).then(function (what) {
+        delete ensuring[file];
+        return what;
+      }, function () {
+        delete ensuring[file];       // offline or refused: the card still works from its seed
+        return 'failed';
+      });
+      return ensuring[file];
+    }
+    function ensureSeeded() {
+      $$('[data-seed]').forEach(function (card) {
+        var file = card.dataset.file;
+        if (!file || !card.dataset.seed) return;
+        ensureFile(file, card.dataset.seed).then(function (what) {
+          if (what === 'created') {
+            card.removeAttribute('data-seed');
+            if (!card.closest('[hidden]')) toast('Made the page for this day ✓');
+          } else if (what === 'exists') {
+            card.removeAttribute('data-seed');
+          }
+        });
+      });
+    }
+
     function writeTask(path, task, checked, tries) {
       if (tries == null) tries = 2;
-      return config().then(function (c) {
+      /* a tick on a page that is still being made waits for it */
+      return Promise.resolve(ensuring[path]).then(config).then(function (c) {
         return gh('GET', contentsUrl(c, path) + '?ref=' + c.branch).then(function (file) {
           var lines = b64decode(file.content).split('\n');
           for (var i = 0; i < lines.length; i++) {
@@ -271,20 +461,34 @@
         saveOvr(o);
         refresh(file);
         return changed;
-      }).catch(function () { /* offline: the remembered ticks stand */ });
+      }).catch(function () { /* offline, or no such file yet: what is on screen stands */ });
     }
-    function syncAll() {
+
+    var lastSync = 0;
+    function syncAll(force) {
+      var now = Date.now();
+      if (!force && now - lastSync < 20000) return;
+      lastSync = now;
       var files = {};
       controls.forEach(function (el) { var f = fileOf(el); if (f) files[f] = 1; });
       $$('[data-ring]').forEach(function (a) { files[a.dataset.ring] = 1; });
+      /* a page that is about to be made is made first; its GET would only 404 */
+      $$('[data-seed]').forEach(function (card) { delete files[card.dataset.file]; });
       Object.keys(files).forEach(syncFile);
+      ensureSeeded();
     }
+    window.__ticksSync = syncAll;
 
     controls.forEach(function (el) {
       var file = fileOf(el);
       if (!file) return;
       el.disabled = false;
-      el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'click', function () {
+      el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'click', function (ev) {
+        if (tooEarly(el)) {
+          if (ev) ev.preventDefault();
+          toast('That day has not started yet');
+          return;
+        }
         var task = el.dataset.task;
         var next = el.tagName === 'INPUT' ? el.checked : !isOn(el);
         var k = keyOf(file, task);
@@ -313,12 +517,32 @@
       });
     });
 
-    syncAll();
-    /* coming back to a tab that sat open overnight: ask again */
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') syncAll();
-    });
+    syncAll(true);
   })();
+
+  /* ---------- wire it all together ---------- */
+  function onWake() {
+    showPanel();
+    relabel();
+    freshCheck();
+    if (window.__ticksSync) window.__ticksSync();
+  }
+  showPanel();
+  relabel();
+  setTimeout(freshCheck, 900);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') onWake();
+  });
+  /* a page restored from the back/forward cache never reloads, so it never runs
+     any of the above on its own */
+  window.addEventListener('pageshow', function (e) { if (e.persisted) onWake(); });
+  window.addEventListener('online', function () { freshCheck(true); });
+  /* a tab left open across midnight turns over without anyone touching it */
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;
+    showPanel();
+    relabel();
+  }, 30000);
 
   /* ---------- search ---------- */
   var q = document.getElementById('q');

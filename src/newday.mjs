@@ -1,25 +1,26 @@
-/* Creates today's Day Tasks page if it does not exist yet.
-   Run from the daily workflow (and safe to run by hand). Doing nothing when the
-   page is already there means it can run as often as it likes. */
+/* Creates the Day Tasks page for today AND tomorrow (and the week page on the day
+   a week starts) if they do not exist yet. Safe to run as often as you like:
+   a page that is already there is left alone.
+
+   Tomorrow's page is made a day ahead on purpose. GitHub runs scheduled
+   workflows hours late (this one has been landing between 07:00 and 08:10 IST
+   instead of 05:00), so a page made "just in time" leaves the early morning with
+   no page for the new day. With tomorrow's page already in the repo, the new day
+   starts with its page waiting whatever the scheduler does. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dayFile, weekFile, daySeedText, weekSeedText, isWeekStart } from './lib/seed.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CFG = JSON.parse(fs.readFileSync(path.join(ROOT, 'site.config.json'), 'utf8'));
 const POSTS = path.join(ROOT, 'content', 'posts');
 
-/* The day is whatever it is where he lives, not on the runner. Offsets come
-   from the configured zone rather than a hardcoded +5:30 so moving zones is a
-   config change, not a code change. */
+/* The day is whatever it is where he lives, not on the runner. */
 const ZONE = CFG.timezone || 'Asia/Kolkata';
-const now = new Date();
 const parts = Object.fromEntries(
-  new Intl.DateTimeFormat('en-GB', {
-    timeZone: ZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(now).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
+  new Intl.DateTimeFormat('en-GB', { timeZone: ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date()).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
 );
 /* NEWDAY_DATE=2026-09-14 forces the date -- used to test the week-start branch
    and to backfill a day that was missed. */
@@ -29,15 +30,17 @@ if (override && !/^\d{4}-\d{2}-\d{2}$/.test(override)) {
   process.exit(1);
 }
 const today = override || `${parts.year}-${parts.month}-${parts.day}`;
+const addDays = (k, n) => {
+  const d = new Date(`${k}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 
-/* the zone's current UTC offset, as +HH:MM */
-const asUTC = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute);
-const offsetMin = Math.round((asUTC - now.setSeconds(0, 0)) / 60000);
-const sign = offsetMin >= 0 ? '+' : '-';
-const pad = (n) => String(n).padStart(2, '0');
-const offset = `${sign}${pad(Math.floor(Math.abs(offsetMin) / 60))}:${pad(Math.abs(offsetMin) % 60)}`;
-
-const names = (list) => (list || []).map((r) => (typeof r === 'string' ? r : r.name));
+fs.mkdirSync(POSTS, { recursive: true });
+const FULLDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
+const nice = (k) => `${FULLDAYS[new Date(`${k}T12:00:00Z`).getUTCDay()]} ${+k.slice(8)} ${MON[+k.slice(5, 7) - 1]}`;
 
 function hasPageFor(section, datePrefix) {
   return fs.readdirSync(POSTS)
@@ -46,45 +49,33 @@ function hasPageFor(section, datePrefix) {
       .test(fs.readFileSync(path.join(POSTS, f), 'utf8')));
 }
 
-function create(section, datePrefix, hhmm, slug, items, title) {
-  const file = path.join(POSTS, `${datePrefix}-${hhmm}-${slug}.md`);
-  const front = ['---', `date: ${datePrefix}T${hhmm.slice(0, 2)}:${hhmm.slice(2)}:00${offset}`];
-  if (title) front.push(`title: "${title}"`);
-  front.push(`section: ${section}`, '---', '');
-  fs.writeFileSync(file, front.concat(items.map((t) => `- [ ] ${t}`), '').join('\n'));
-  console.log(`created ${path.relative(ROOT, file)} with ${items.length} items`);
+const made = [];
+function create(file, text) {
+  fs.writeFileSync(path.join(POSTS, file), text);
+  console.log(`created content/posts/${file}`);
 }
 
-let made = 0;
+for (const k of [today, addDays(today, 1)]) {
+  if (hasPageFor('daytasks', k)) {
+    console.log(`day page for ${k} already exists`);
+  } else if (!(CFG.routine || []).length) {
+    console.log('no daily routine configured');
+  } else {
+    create(dayFile(k), daySeedText(CFG, k));
+    made.push(nice(k));
+  }
 
-/* ---- today's day page ---- */
-if (hasPageFor('daytasks', today)) {
-  console.log(`day page for ${today} already exists — nothing to do`);
-} else if (!names(CFG.routine).length) {
-  console.log('no daily routine configured');
-} else {
-  create('daytasks', today, '0600', 'day', names(CFG.routine));
-  made++;
+  if (!isWeekStart(CFG, k)) continue;
+  if (hasPageFor('weektasks', k)) {
+    console.log(`week page for ${k} already exists`);
+  } else if (!(CFG.weeklyRoutine || []).length) {
+    console.log('no weekly routine configured');
+  } else {
+    create(weekFile(k), weekSeedText(CFG, k));
+    made.push(`week of ${nice(k)}`);
+  }
 }
 
-/* ---- the week's page, on the day the week starts ---- */
-const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();       // 0 = Sunday
-const isWeekStart = CFG.weekStartsMonday === false ? weekday === 0 : weekday === 1;
-const weekly = names(CFG.weeklyRoutine);
-
-if (!isWeekStart) {
-  console.log('not the start of the week — no week page');
-} else if (hasPageFor('weektasks', today)) {
-  console.log(`week page for ${today} already exists — nothing to do`);
-} else if (!weekly.length) {
-  console.log('no weekly routine configured');
-} else {
-  const [y, m, d] = today.split('-').map(Number);
-  const MON = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
-  create('weektasks', today, '0600', 'week', weekly, `Week of ${d} ${MON[m - 1]}`);
-  made++;
-}
-
-process.exitCode = 0;
-console.log(made ? `${made} page(s) created` : 'nothing created');
+/* the workflow reads this for its commit message, then deletes it */
+if (made.length) fs.writeFileSync(path.join(ROOT, '.newday-message'), 'daytasks: ' + made.join(' + ') + '\n');
+console.log(made.length ? `${made.length} page(s) created` : 'nothing created');

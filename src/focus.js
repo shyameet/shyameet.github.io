@@ -647,26 +647,30 @@
     b.hidden = p !== 'default';
   }
 
-  /* the Focus card on Today (and anywhere else it is dropped in) */
+  /* The Focus card on Today. The home page carries one per day panel (today's and
+     tomorrow's), only one of them visible, so every card is updated -- each shows
+     the device's today, not the date its HTML was built for. */
   function renderCard() {
-    var card = document.querySelector('[data-focus-card]');
-    if (!card) return;
+    var cards = [].slice.call(document.querySelectorAll('[data-focus-card]'));
+    if (!cards.length) return;
     var list = dayList(today());
     var total = sumSec(list);
-    var t = card.querySelector('[data-f-total]');
-    var sub = card.querySelector('[data-f-sub]');
-    var ringBox = card.querySelector('[data-f-ring]');
-    var running = card.querySelector('[data-f-running]');
-    if (t) t.textContent = dur(total);
-    if (sub) sub.textContent = 'of ' + dur(TARGET) + ' · ' + list.length + ' block' + (list.length === 1 ? '' : 's');
-    if (ringBox) ringBox.innerHTML = ringSvg(total / TARGET, 72, 7);
-    if (running) {
-      var live = run && run.seg && remaining() > 0;
-      running.hidden = !(run && (live || !run.seg));
-      running.textContent = !run ? '' : run.seg
-        ? '● ' + Math.ceil(remaining() / 60) + ' min left in this block'
-        : '❚❚ block paused';
-    }
+    cards.forEach(function (card) {
+      var t = card.querySelector('[data-f-total]');
+      var sub = card.querySelector('[data-f-sub]');
+      var ringBox = card.querySelector('[data-f-ring]');
+      var running = card.querySelector('[data-f-running]');
+      if (t) t.textContent = dur(total);
+      if (sub) sub.textContent = 'of ' + dur(TARGET) + ' · ' + list.length + ' block' + (list.length === 1 ? '' : 's');
+      if (ringBox) ringBox.innerHTML = ringSvg(total / TARGET, 72, 7);
+      if (running) {
+        var live = run && run.seg && remaining() > 0;
+        running.hidden = !(run && (live || !run.seg));
+        running.textContent = !run ? '' : run.seg
+          ? '● ' + Math.ceil(remaining() / 60) + ' min left in this block'
+          : '❚❚ block paused';
+      }
+    });
   }
 
   function renderAll() {
@@ -792,6 +796,9 @@
       renderAll();
     }
   });
+
+  /* app.js calls this when the home page turns over to a new day's panel */
+  window.__focusRender = renderAll;
 
   /* ---------- boot ---------- */
   if (run) {

@@ -245,6 +245,17 @@
     background: none; border: 1.5px solid var(--rule-2); color: var(--ink-2); cursor: pointer;
     font: 700 13px/1 var(--sans); padding: 8px 13px; border-radius: 99px;
   }
+
+  /* which day this entry is ABOUT -- most dictation is about yesterday */
+  .aboutrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -2px 0 12px; }
+  .aboutlabel { font-size: 12.5px; font-weight: 700; color: var(--muted); margin-right: 2px; }
+  .aboutrow button, .aboutpick {
+    border: 1.5px solid var(--rule-2); background: none; color: var(--muted); cursor: pointer;
+    font: 700 13px/1 var(--sans); padding: 8px 12px; border-radius: 99px;
+  }
+  .aboutrow button[aria-pressed="true"], .aboutpick.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .aboutpick { position: relative; overflow: hidden; }
+  .aboutpick input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -266,6 +277,12 @@
   <section class="view" id="view-new">
     <div id="msg"></div>
     <div class="secpick" id="secpick"></div>
+    <div class="aboutrow" id="aboutrow">
+      <span class="aboutlabel">About</span>
+      <button type="button" data-about="today" aria-pressed="true">Today</button>
+      <button type="button" data-about="yesterday" aria-pressed="false">Yesterday</button>
+      <label class="aboutpick" id="aboutpick"><span id="aboutother">Another day</span><input type="date" id="aboutdate" aria-label="Pick the day this is about"></label>
+    </div>
     <div class="compose">
       <input id="title" placeholder="Title — optional" autocomplete="off">
       <textarea id="body" placeholder="Hit Talk and start speaking."></textarea>
@@ -340,7 +357,8 @@
 
   var CFG = { repo: '', branch: 'main', quickTags: [], url: '', sections: [], speechLang: 'en-IN', routine: [] };
   var LS = { token: 'gh_token', draft: 'draft_v1', lastSection: 'last_section' };
-  var state = { tags: [], editing: null, busy: false, section: '' };
+  /* day: '' means "today"; otherwise YYYY-MM-DD, the day the entry is ABOUT */
+  var state = { tags: [], editing: null, busy: false, section: '', day: '' };
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -422,7 +440,7 @@
       try {
         localStorage.setItem(LS.draft, JSON.stringify({
           title: $('title').value, body: $('body').value, lesson: $('lesson').value,
-          tags: state.tags, editing: state.editing, section: state.section
+          tags: state.tags, editing: state.editing, section: state.section, day: state.day
         }));
       } catch (e) {}
       updateInfo();
@@ -437,6 +455,7 @@
       $('lesson').value = d.lesson || '';
       state.tags = d.tags || [];
       state.editing = d.editing || null;
+      state.day = /^\d{4}-\d{2}-\d{2}$/.test(d.day || '') ? d.day : '';
       if (d.section) state.section = d.section;
     } catch (e) {}
   }
@@ -447,6 +466,7 @@
     $('lesson').value = '';
     state.tags = [];
     state.editing = null;
+    state.day = '';
     insertAt = 0;
     if (wantOn) stopMic();
     if (sprinting) endSprint(false);
@@ -784,6 +804,7 @@
     else $('lesson').value = '';
 
     $('tasktools').hidden = !(sec && sec.tasks);
+    renderAbout();
     $('addroutine').hidden = !(sec && sec.routine
       && routineList(sec.routine === 'weekly' ? 'weeklyRoutine' : 'routine').length);
 
@@ -851,6 +872,45 @@
     saveDraft();
   });
 
+  /* ---------- which day it is about ----------
+     Most of what gets dictated is about yesterday. Filed as "today" it lands under
+     the wrong day in the Journal; this tags it with the day it is about (day: in
+     the header). A Day Tasks / Week Tasks page IS a day, so the row hides there. */
+  var MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function dateKeyOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function yesterdayKey() { var d = new Date(); d.setDate(d.getDate() - 1); return dateKeyOf(d); }
+
+  function renderAbout() {
+    var sec = currentSection();
+    $('aboutrow').hidden = !!(sec && sec.tasks);
+    var today = dateKeyOf(new Date());
+    var d = state.day;
+    var isToday = !d || d === today;
+    var isYest = d === yesterdayKey();
+    var other = !!d && !isToday && !isYest;
+    [].slice.call($('aboutrow').querySelectorAll('button[data-about]')).forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.about === 'today' ? isToday : isYest));
+    });
+    $('aboutpick').classList.toggle('on', other);
+    $('aboutother').textContent = other ? (+d.slice(8)) + ' ' + MON3[+d.slice(5, 7) - 1] : 'Another day';
+    $('aboutdate').value = other ? d : '';
+    $('aboutdate').max = today;
+  }
+
+  $('aboutrow').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-about]');
+    if (!b) return;
+    state.day = b.dataset.about === 'yesterday' ? yesterdayKey() : '';
+    renderAbout();
+    saveDraft();
+  });
+  $('aboutdate').addEventListener('change', function () {
+    var v = $('aboutdate').value;
+    state.day = (/^\d{4}-\d{2}-\d{2}$/.test(v) && v !== dateKeyOf(new Date())) ? v : '';
+    renderAbout();
+    saveDraft();
+  });
+
   /* ---------- tags ---------- */
   function renderChips() {
     var all = CFG.quickTags.slice();
@@ -902,6 +962,7 @@
     fm.push('section: ' + (state.section || 'blabber'));
     if (lesson) fm.push('lesson: "' + lesson.replace(/"/g, '\\"') + '"');
     if (state.tags.length) fm.push('tags: [' + state.tags.join(', ') + ']');
+    if (state.day && !isTaskSec(state.section) && state.day !== iso.slice(0, 10)) fm.push('day: ' + state.day);
     /* breaks: true keeps the line breaks as typed or dictated. An edited post
        carries over whatever else its file had (day:, slug:, breaks:) -- rebuilding
        the header from only the known fields used to drop them silently. */
@@ -959,12 +1020,13 @@
       };
     }
 
+    var wasEdit = !!state.editing;
+    var fileName = path.split('/').pop();
     gh('PUT', '/repos/' + CFG.repo + '/contents/' + path, payload)
       .then(function () {
         clearDraft();
-        say($('msg'), 'ok', 'Committed. The site rebuilds itself — usually live in under a minute. '
-          + '<a href="' + CFG.url + '" target="_blank" rel="noopener">Open the site</a>');
         setConnected(true);
+        watchLive(fileName, wasEdit);
       })
       .catch(function (err) {
         say($('msg'), 'err', err.message + '<br><small>Your draft is safe on this device — try again when you have signal.</small>');
@@ -974,6 +1036,47 @@
         $('publish').disabled = false;
       });
   });
+
+  /* ---------- is it live yet? ----------
+     Saving is instant but the site takes a minute or two to rebuild, and until it
+     does the entry is simply not there -- which reads as "it didn't save". So say
+     what is happening, and say when it is done. A NEW entry is certain to be live
+     once build.json lists its file; an edit has no such marker, so it only gets a
+     plain note. */
+  var liveRun = 0;
+  function watchLive(file, wasEdit) {
+    var run = ++liveRun;
+    if (wasEdit) {
+      say($('msg'), 'ok', 'Saved ✓ The page updates in a minute or two. <a href="/">Open the site</a>');
+      return;
+    }
+    var started = Date.now();
+    var building = function (s) {
+      say($('msg'), 'ok', 'Saved ✓ Building the site… ' + s + 's. <small>Your entry is safe; it appears when this finishes.</small>');
+    };
+    building(0);
+    (function poll() {
+      if (run !== liveRun) return;                       // a newer publish took over the message
+      fetch('/build.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (run !== liveRun) return;
+          var url = j && j.posts && j.posts[file];
+          if (url) {
+            say($('msg'), 'ok', 'Live ✓ <a href="' + url + '">Open the entry</a> · <a href="/">Today</a> · <a href="/journal/">Journal</a>');
+            return;
+          }
+          var secs = Math.round((Date.now() - started) / 1000);
+          if (secs > 240) {
+            say($('msg'), 'ok', 'Saved ✓ The site is slower than usual to rebuild. Your entry is safe; check back in a few minutes. <a href="/">Open the site</a>');
+            return;
+          }
+          building(secs);
+          setTimeout(poll, 6000);
+        })
+        .catch(function () { setTimeout(poll, 8000); });
+    })();
+  }
 
   $('discard').addEventListener('click', function () {
     if (!$('body').value.trim() || confirm('Throw this draft away?')) {
@@ -1030,8 +1133,10 @@
         var unq = function (s) { return String(s).replace(/\\"/g, '"'); };
         var extra = head.split(/\r?\n/).filter(function (l) {
           var k = l.match(/^([A-Za-z_][\w-]*)\s*:/);
-          return k && ['title', 'date', 'section', 'lesson', 'tags'].indexOf(k[1]) < 0;
+          return k && ['title', 'date', 'section', 'lesson', 'tags', 'day'].indexOf(k[1]) < 0;
         });
+        var dy = head.match(/^day:\s*(\d{4}-\d{2}-\d{2})\s*$/m);
+        state.day = dy ? dy[1] : '';
         $('title').value = t ? unq(t[1]) : '';
         $('body').value = rest.trim();
         state.tags = tg ? tg[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];

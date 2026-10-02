@@ -13,7 +13,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { marked } from 'marked';
+import { dayFile, weekFile, daySeedText, weekSeedText } from './lib/seed.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -153,6 +155,19 @@ function todayInZone() {
 /* BUILD_TODAY=2026-09-23 pins the date -- for checking a build as it will look
    on a given morning */
 const TODAY = /^\d{4}-\d{2}-\d{2}$/.test(process.env.BUILD_TODAY || '') ? process.env.BUILD_TODAY : todayInZone();
+const TOMORROW = addDays(TODAY, 1);
+
+/* When this build ran. Every page carries it, and /build.json says what the
+   newest build is, so a page opened from cache (or resumed on a phone after a
+   night asleep) can tell it is out of date and refresh itself. */
+const BUILT = new Date().toISOString();
+
+/* The stylesheet and scripts are cached by the browser for ten minutes, but the
+   HTML that uses them can change on every deploy. Keyed by content, so a changed
+   file is a new URL and old CSS can never meet new markup. */
+const ASSET_V = crypto.createHash('sha1')
+  .update(['style.css', 'app.js', 'focus.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
+  .digest('hex').slice(0, 8);
 
 /* ---------- tasks ----------
    "- [ ] thing" / "- [x] thing". Counted so a task post shows its own
@@ -396,13 +411,15 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<link rel="manifest" href="/manifest.webmanifest">\n'
     + '<meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">\n'
     + '<meta name="theme-color" content="#11121b" media="(prefers-color-scheme: dark)">\n'
+    + '<meta name="built" content="' + BUILT + '">\n'
+    + '<meta name="site-today" content="' + TODAY + '">\n'
     + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
     + 'family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400'
     + '&family=Plus+Jakarta+Sans:wght@400;500;600;700'
     + '&family=Tiro+Devanagari+Sanskrit&display=swap">\n'
-    + '<link rel="stylesheet" href="/style.css">\n'
+    + '<link rel="stylesheet" href="/style.css?v=' + ASSET_V + '">\n'
     + '<script>(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}})();</script>\n'
     + '</head>\n<body class="' + esc(cls) + '">\n'
     + '<header class="top">\n'
@@ -421,8 +438,8 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '</footer>\n'
     + '<nav class="tabbar" aria-label="Main">' + links(true) + '</nav>\n'
     + '<div id="toast" class="toast" role="status" aria-live="polite"></div>\n'
-    + '<script src="/app.js" defer></script>\n'
-    + scripts.map((s) => '<script src="' + s + '" defer></script>\n').join('')
+    + '<script src="/app.js?v=' + ASSET_V + '" defer></script>\n'
+    + scripts.map((s) => '<script src="' + s + '?v=' + ASSET_V + '" defer></script>\n').join('')
     + '</body>\n</html>\n';
 }
 
@@ -449,9 +466,11 @@ const aboutDay = (p) => (p.day && p.day !== keyOf(p.iso)
    where the detail lives. */
 const SEC_ORDER = Object.fromEntries(SECTIONS.map((s, i) => [s.id, i]));
 
-function relDay(k) {
-  if (k === TODAY) return 'Today';
-  if (k === addDays(TODAY, -1)) return 'Yesterday';
+/* "Today" / "Yesterday" relative to `base` -- the panel being drawn, which is
+   tomorrow's for the hidden second panel on the home page */
+function relDay(k, base = TODAY) {
+  if (k === base) return 'Today';
+  if (k === addDays(base, -1)) return 'Yesterday';
   return '';
 }
 
@@ -474,12 +493,14 @@ function entryRow(p, { showSection = true, showDate = false, excerpt = false } =
 /* within a day: the Daily story first, then goals, wins, mistakes... */
 const byDiaryOrder = (a, b) => (SEC_ORDER[a.section] - SEC_ORDER[b.section]) || (a.ts - b.ts);
 
-function dayGroups(list, opts = {}) {
+function dayGroups(list, opts = {}, base = TODAY) {
   const groups = new Map();
   for (const p of list) (groups.get(p.day) || groups.set(p.day, []).get(p.day)).push(p);
   return [...groups.keys()].sort().reverse().map((k) => {
-    const rel = relDay(k);
-    return '<section class="dgroup"><h3 class="dghead">' + (rel ? '<b>' + rel + '</b>' : '')
+    const rel = relDay(k, base);
+    /* data-day lets the page re-label Today/Yesterday if the device's date has
+       moved on since this was built */
+    return '<section class="dgroup"><h3 class="dghead" data-day="' + k + '">' + (rel ? '<b>' + rel + '</b>' : '')
       + '<span>' + esc(fullDate(k)) + '</span></h3>'
       + '<div class="rows">' + groups.get(k).sort(byDiaryOrder).map((p) => entryRow(p, opts)).join('') + '</div></section>';
   }).join('');
@@ -493,11 +514,35 @@ function recentDays(list, n) {
 
 const rowList = (list, opts) => '<div class="rows">' + list.map((p) => entryRow(p, opts)).join('') + '</div>';
 
+/* ---------- a page that does not exist yet ----------
+   The day page is a file in the repo. Normally the nightly job has made it (and
+   tomorrow's) before the day starts; when it has not -- the scheduler ran late,
+   or failed -- the page is drawn anyway from the same seed, and carries that
+   seed so the browser, if it holds the token, can create the file itself. */
+function virtualPage(file, url, iso, text) {
+  const body = text.replace(/^---\n[\s\S]*?\n---\n/, '');
+  return { file, url, iso, body, tasks: countTasks(body), seed: text, virtual: true };
+}
+function dayPageFor(k) {
+  const real = DAY_PAGES.get(k);
+  if (real) return real;
+  if (!ROUTINE.length) return null;
+  return virtualPage(dayFile(k), '/posts/daytasks-' + k + '/', k + 'T06:00:00', daySeedText(CFG, k));
+}
+function weekPageFor(k) {
+  const ws = weekStartKey(k);
+  const real = WEEK_PAGES.find((p) => weekStartKey(keyOf(p.iso)) === ws);
+  if (real) return real;
+  if (!(CFG.weeklyRoutine || []).length) return null;
+  return virtualPage(weekFile(ws), '/posts/week-of-' + ws + '/', ws + 'T06:00:00', weekSeedText(CFG, ws));
+}
+
 /* a day (or week) of tasks, as a card whose boxes can be ticked in place */
 function taskCard(p, heading, { link = true, cls = '' } = {}) {
   const t = p.tasks;
   const pct = t.total ? t.done / t.total : 0;
-  return '<section class="card taskcard' + (cls ? ' ' + cls : '') + '" data-file="content/posts/' + esc(p.file) + '">\n'
+  return '<section class="card taskcard' + (cls ? ' ' + cls : '') + '" data-file="content/posts/' + esc(p.file) + '"'
+    + (p.seed ? ' data-seed="' + esc(p.seed) + '"' : '') + '>\n'
     + '  <div class="cardhead"><h3>' + (link ? '<a href="' + p.url + '">' + esc(heading) + '</a>' : esc(heading)) + '</h3>'
     + '<span class="count" data-count>' + t.done + ' / ' + t.total + '</span></div>\n'
     + '  <div class="bar"><i data-bar style="width:' + Math.round(pct * 100) + '%"></i></div>\n'
@@ -510,7 +555,8 @@ function taskCard(p, heading, { link = true, cls = '' } = {}) {
 function yesterdayCard(p) {
   const t = p.tasks;
   const pct = t.total ? t.done / t.total : 0;
-  return '<details class="card taskcard yday" data-file="content/posts/' + esc(p.file) + '">\n'
+  return '<details class="card taskcard yday" data-file="content/posts/' + esc(p.file) + '"'
+    + (p.seed ? ' data-seed="' + esc(p.seed) + '"' : '') + '>\n'
     + '  <summary class="cardhead"><h3>Yesterday <span class="muted">· ' + esc(fullDate(p.iso)) + '</span></h3>'
     + '<span class="count" data-count>' + t.done + ' / ' + t.total + '</span></summary>\n'
     + '  <div class="bar"><i data-bar style="width:' + Math.round(pct * 100) + '%"></i></div>\n'
@@ -557,9 +603,9 @@ function weekStrip(k) {
     const inner = '<span class="wl">' + WEEK_LETTERS[i] + '</span>'
       + '<span class="wr">' + ring(pct, 44, 3.6) + '<span class="wn">' + +key.slice(8) + '</span></span>';
     return page
-      ? '<a class="' + cls + '" href="' + page.url + '" data-ring="content/posts/' + esc(page.file) + '"'
+      ? '<a class="' + cls + '" href="' + page.url + '" data-day="' + key + '" data-ring="content/posts/' + esc(page.file) + '"'
         + ' title="' + esc(fullDate(key)) + ' — ' + t.done + ' of ' + t.total + '">' + inner + '</a>'
-      : '<span class="' + cls + '">' + inner + '</span>';
+      : '<span class="' + cls + '" data-day="' + key + '">' + inner + '</span>';
   }).join('') + '</nav>';
 }
 
@@ -567,16 +613,21 @@ function weekStrip(k) {
    Past cells can still be tapped -- the usual fix is ticking yesterday. */
 function habitGrid(k) {
   const keys = weekKeys(k);
+  /* data-day on every date-dependent element lets the page move the "today"
+     highlight itself when the device's date is not the one this was built on */
   const head = '<div class="hg-row hg-head"><span class="hg-name"></span>'
-    + keys.map((key, i) => '<span class="hg-d' + (key === k ? ' today' : '') + '">' + WEEK_LETTERS[i]
+    + keys.map((key, i) => '<span class="hg-d' + (key === k ? ' today' : '') + '" data-day="' + key + '">' + WEEK_LETTERS[i]
       + '<small>' + +key.slice(8) + '</small></span>').join('')
     + '<span class="hg-sum">Week</span></div>';
   const rows = ROUTINE.map((item) => {
     const cells = keys.map((key) => {
       const page = DAY_PAGES.get(key);
       const it = page && taskItems(page.body).find((t) => norm(t.text) === norm(item.name));
-      if (!it) return '<span class="cell ' + (key > k ? 'future' : 'none') + '"></span>';
-      return '<button type="button" class="cell' + (key < k ? ' past' : '') + (key === k ? ' now' : '') + '"'
+      if (!it) return '<span class="cell ' + (key > k ? 'future' : 'none') + '" data-day="' + key + '"></span>';
+      /* a day that has not started yet can exist (tomorrow's page is made a day
+         ahead) but must not be tickable early */
+      return '<button type="button" class="cell' + (key < k ? ' past' : '') + (key === k ? ' now' : '') + (key > k ? ' future' : '') + '"'
+        + ' data-day="' + key + '"'
         + ' data-file="content/posts/' + esc(page.file) + '" data-task="' + esc(it.text) + '"'
         + ' aria-pressed="' + it.done + '" aria-label="' + esc(item.name + ', ' + fullDate(key)) + '" disabled></button>';
     }).join('');
@@ -595,7 +646,7 @@ function habitGrid(k) {
   const focusRow = '<div class="hg-row hg-focus"><span class="hg-name">Focus<small>hours, from the timer</small></span>'
     + keys.map((key) => {
       const f = FOCUS.get(key);
-      return '<span class="fcell' + (key === k ? ' now' : '') + '">' + (f && f.sec ? fmtShort(f.sec) : '') + '</span>';
+      return '<span class="fcell' + (key === k ? ' now' : '') + '" data-day="' + key + '">' + (f && f.sec ? fmtShort(f.sec) : '') + '</span>';
     }).join('')
     + '<span class="hg-sum"><b>' + fmtShort(keys.reduce((t, key) => t + ((FOCUS.get(key) || {}).sec || 0), 0)) + '</b></span></div>';
   return '<div class="hgrid">' + head + rows + focusRow + '</div>';
@@ -674,14 +725,19 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
   sessions: todayFocus.sessions,
 }) + '</script>';
 
-/* ---------- home: today ---------- */
-{
-  const k = TODAY;
-  const page = DAY_PAGES.get(k);
-  const d = deityFor(k);
-  const week = WEEK_PAGES.find((p) => weekStartKey(keyOf(p.iso)) === weekStartKey(k));
+/* ---------- home: today ----------
+   The home page is built TWICE, once for today and once for tomorrow, and the
+   page shows whichever matches the device's date. The page is static, but a phone
+   resumed in the morning (or a tab left open overnight) is still showing last
+   night's HTML; with tomorrow's panel already in it, the day turns over the moment
+   the clock does -- right date, right deity, right day's habits -- instead of
+   showing yesterday as "Today" until the next deploy lands. app.js does the
+   switching (showPanel); with no JS the first panel simply shows. */
+function todayPanel(k) {
+  const page = dayPageFor(k);
+  const week = weekPageFor(k);
   const yday = DAY_PAGES.get(addDays(k, -1));
-  const body = '<section class="hero">\n'
+  return '<section class="hero">\n'
     + '  <div class="herotext">\n'
     + '    <p class="kicker">' + esc(VAAR[weekdayOf(k)]) + ' <span lang="hi">' + VAAR_DEVA[weekdayOf(k)] + '</span></p>\n'
     + '    <h1>' + esc(FULLDAYS[weekdayOf(k)]) + '<span>' + +k.slice(8) + ' ' + FULLMONTHS[+k.slice(5, 7) - 1] + '</span></h1>\n'
@@ -692,12 +748,17 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
     + weekStrip(k) + '\n'
     + (page
       ? taskCard(page, 'Today', { link: false, cls: 'today' })
-      : '<section class="card"><p class="muted">Today\'s page appears at 5am. <a href="/admin/">Make it now</a> — pick Day Tasks and the routine fills itself in.</p></section>')
+      : '<section class="card"><p class="muted">No daily routine is set up yet. It lives in site.config.json.</p></section>')
     + '\n' + (yday ? yesterdayCard(yday) + '\n' : '')
     + focusCard(k) + '\n'
-    + (week ? taskCard(week, 'This week') + '\n' : '')
+    + (week ? taskCard(week, 'This week', { link: !week.virtual }) + '\n' : '')
     + '<div class="rowhead"><h2>Journal</h2><a href="/journal/">Everything →</a></div>\n'
-    + (journal.length ? dayGroups(recentDays(journal, 3)) : '<p class="muted">Nothing written yet.</p>') + '\n'
+    + (journal.length ? dayGroups(recentDays(journal, 3), {}, k) : '<p class="muted">Nothing written yet.</p>') + '\n';
+}
+{
+  const d = deityFor(TODAY);
+  const body = '<div class="daypanel" data-date="' + TODAY + '">\n' + todayPanel(TODAY) + '</div>\n'
+    + '<div class="daypanel" data-date="' + TOMORROW + '" hidden>\n' + todayPanel(TOMORROW) + '</div>\n'
     + focusEmbed();
   write('index.html', shell({
     canonical: '/', nav: 'today', cls: 'home',
@@ -983,6 +1044,15 @@ write('admin/config.json', JSON.stringify({
 for (const f of ['style.css', 'app.js', 'focus.js', 'sw.js']) {
   fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
 }
+
+/* What the newest build is. Pages compare their own <meta name="built"> to this to
+   notice they are stale; the Write page watches it to tell him when a post is live
+   (posts maps each content file to its page). Never cached, so always asked fresh. */
+write('build.json', JSON.stringify({
+  built: BUILT,
+  today: TODAY,
+  posts: Object.fromEntries(posts.map((p) => [p.file, p.url])),
+}));
 write('.nojekyll', '');
 write('404.html', shell({
   title: 'Not found',

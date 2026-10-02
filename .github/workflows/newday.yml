@@ -2,13 +2,22 @@ name: new day
 
 on:
   schedule:
-    # 23:30 UTC = 05:00 IST, so the page is waiting before he is awake
-    - cron: '30 23 * * *'
+    # GitHub runs scheduled workflows hours late -- a 23:30 UTC (05:00 IST) trigger
+    # has been starting between 01:30 and 02:40 UTC, i.e. 07:00-08:10 IST. So the
+    # triggers sit well before he wakes, and two of them are a second chance. The
+    # job makes today's AND tomorrow's page, and is a no-op when they exist.
+    - cron: '30 20 * * *'   # 02:00 IST
+    - cron: '30 22 * * *'   # 04:00 IST
   workflow_dispatch:
 
 permissions:
   contents: write
   actions: write
+
+# Two runs at once (or one racing his phone) must not both try to push.
+concurrency:
+  group: newday
+  cancel-in-progress: false
 
 jobs:
   newday:
@@ -28,13 +37,22 @@ jobs:
             echo "created=no" >> "$GITHUB_OUTPUT"
           fi
 
+      # His phone commits to this branch all day (ticks, focus blocks, posts), so a
+      # plain push can be rejected. Rebase onto whatever landed and try again, rather
+      # than failing and leaving the day with no page.
       - if: steps.make.outputs.created == 'yes'
         run: |
           git config user.name  "day pages"
           git config user.email "noreply@github.com"
           git add content/posts
-          git commit -m "daytasks: $(date -u -d '+5 hours 30 minutes' +%A\ %-d\ %B)"
-          git push
+          git commit -m "$(cat .newday-message 2>/dev/null || echo 'daytasks: new day')"
+          for i in 1 2 3 4 5; do
+            git pull --rebase -q origin main && git push && exit 0
+            echo "push attempt $i did not go through; retrying"
+            sleep $((i * 4))
+          done
+          echo "could not push after 5 attempts" >&2
+          exit 1
 
       # A push made with GITHUB_TOKEN does not trigger other workflows, so the
       # site would never rebuild. Kick the deploy explicitly.
