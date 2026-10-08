@@ -445,6 +445,8 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '  <a class="brand" href="/" title="' + esc(CFG.tagline) + '"><span class="om" lang="sa">ॐ</span></a>\n'
     + '  <nav class="topnav" aria-label="Main">' + links(false) + '</nav>\n'
     + '  <div class="topicons">\n'
+    /* whether this browser is connected to the journal, and in step with it (app.js) */
+    + '    <button id="syncdot" class="iconbtn syncdot" type="button" data-state="off" aria-label="Connection status"><i></i></button>\n'
     + '    <a class="iconbtn" href="/search/" aria-label="Search">' + ICON.search + '</a>\n'
     + '    <button id="themetoggle" class="iconbtn" type="button" aria-label="Switch light or dark">' + ICON.theme + '</button>\n'
     + '  </div>\n'
@@ -829,6 +831,9 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
   defaultMinutes: (CFG.focus && CFG.focus.defaultMinutes) || 30,
   repo: CFG.repo,
   branch: CFG.branch,
+  /* where the running timer is shared (focus-run.json); its own branch, so that a
+     pause does not rebuild the site */
+  syncBranch: CFG.syncBranch || 'sync',
   weekStartsMonday: CFG.weekStartsMonday !== false,
   days: Object.fromEntries([...FOCUS].filter(([key]) => key >= addDays(TODAY, -40))
     .map(([key, v]) => [key, { sec: v.sec, n: v.n }])),
@@ -921,6 +926,7 @@ write('focus/index.html', shell({
     + '    <div class="controls"><button type="button" class="btn primary big" id="fagain">Another block</button>'
     + '<button type="button" class="btn big" id="fdone">Done for now</button></div>\n'
     + '  </div>\n'
+    + '  <p class="fdev" id="fdev" hidden></p>\n'
     + '  <p class="fnote" id="fnote"></p>\n'
     + '</section>\n'
     + '<section class="card ftoday">\n'

@@ -6,17 +6,31 @@
       tab title. Every finished (or stopped) block goes into the log.
    2. On any page with [data-focus-card] -- keep "Focus today" live.
 
-   Where the log lives:
-   - localStorage first, always: instant, offline, survives a reload.
-   - Then, if this browser holds the journal token, content/focus/YYYY-MM-DD.json
-     in the repo -- so the total follows him from the desk to the phone, and
-     the site can show it on every day page.
+   What is shared between devices, and how
+   ---------------------------------------
+   Everything lives in the repo, so a block follows him from phone to laptop:
+
+   - The LOG of finished blocks: content/focus/YYYY-MM-DD.json on main, merged by
+     block id, so every device adds up to one total. localStorage holds the same
+     log first (instant, offline) and anything not yet uploaded.
+   - The RUNNING block -- started, paused, resumed, extended, stopped -- is
+     focus-run.json on a branch called "sync". Start it on the phone, pause it,
+     resume it on the laptop: both show the same clock. It sits on its own branch
+     so that a pause does not trigger a deploy of the whole site.
+   - Whoever finds a block that has run out (any device that is open, or the next
+     one to open) logs it, with the time it REALLY ended -- not the time somebody
+     happened to open the page.
+
+   A device that has no token cannot write, so it stays local and says so. Each
+   device keeps its own sound / screen-on / block-length choices.
 
    Timing never counts ticks. A block is a start time plus a length, and the
-   clock is recomputed from Date.now() -- so a throttled background tab, a
-   sleeping laptop or a closed page cannot make it drift. The tick itself comes
-   from a Worker, because browsers slow a hidden tab's own timers to about once
-   a minute and the bell would ring late. */
+   clock is recomputed from the time -- so a throttled background tab, a
+   sleeping laptop or a closed page cannot make it drift. The time is the
+   server's, not the device's (the offset is measured against the site itself),
+   so two devices whose clocks disagree still show the same minutes left. The
+   tick comes from a Worker, because browsers slow a hidden tab's own timers to
+   about once a minute and the bell would ring late. */
 (function () {
   'use strict';
 
@@ -27,8 +41,11 @@
 
   var LS_SESSIONS = 'focus_sessions_v1';
   var LS_RUN = 'focus_running_v1';
+  var LS_META = 'focus_runmeta_v1';
   var LS_PREFS = 'focus_prefs_v1';
   var LS_GONE = 'focus_deleted_v1';
+  var RUN_PATH = 'focus-run.json';
+  var SYNC_BRANCH = DATA.syncBranch || 'sync';
 
   function load(k, dflt) {
     try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? dflt : v; } catch (e) { return dflt; }
@@ -38,6 +55,7 @@
   }
   var token = '';
   try { token = localStorage.getItem('gh_token') || ''; } catch (e) {}
+  var canSync = function () { return !!(token && DATA.repo); };
 
   var $ = function (id) { return document.getElementById(id); };
   var pad = function (n) { return String(n).padStart(2, '0'); };
@@ -65,26 +83,60 @@
   }
   function hm(ms) { var d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-  var today = function () { return dayKey(Date.now()); };
+
+  /* ---------- the clock ----------
+     "Now" is the server's now: the device's clock plus a measured offset. */
+  var skew = 0;
+  var nowMs = function () { return Date.now() + skew; };
+  var today = function () { return dayKey(nowMs()); };
+  function measureSkew() {
+    var t0 = Date.now();
+    return fetch('/build.json?t=' + t0, { cache: 'no-store' }).then(function (r) {
+      var t1 = Date.now();
+      var d = Date.parse(r.headers.get('date'));
+      var age = +r.headers.get('age') || 0;
+      if (isNaN(d) || age > 5) return;
+      /* the header has whole seconds; the middle of the request is the best guess */
+      var s = Math.round(d + 500 + age * 1000 - (t0 + t1) / 2);
+      skew = (Math.abs(s) < 2000 || Math.abs(s) > 6 * 3600 * 1000) ? 0 : s;
+    }).catch(function () {});
+  }
+
+  /* what to call this device when another one shows the block */
+  var DEV = (function () {
+    var ua = navigator.userAgent || '';
+    var touch = navigator.maxTouchPoints > 1;
+    var kind = /iPhone/.test(ua) ? 'iPhone'
+      : (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) ? 'iPad'
+        : /Android/.test(ua) ? 'Android phone'
+          : /Windows/.test(ua) ? 'Windows PC'
+            : /Macintosh/.test(ua) ? 'Mac'
+              : /Linux|X11/.test(ua) ? 'Linux PC' : 'another device';
+    var app = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    return kind + (app ? ' app' : '');
+  })();
 
   /* ---------- the log ----------
-     a session: { id, start, end (ms), sec (focused seconds), day, synced } */
+     a session: { id, start, end (ms), sec (focused seconds), day, synced, syncedAt }
+     Its day is the day it ENDED: a block that ran across midnight, or sat paused
+     overnight, counts where it was finished. */
   var sessions = load(LS_SESSIONS, []);
   var gone = load(LS_GONE, []);            // [{id, day}] deleted here, not yet in the repo
   var remote = {};                          // day -> sessions as the repo has them
 
-  function fromRepo(s) {
+  function fromRepo(s, day) {
     var a = Date.parse(s && s.start);
     if (!s || !s.id || isNaN(a) || !(+s.sec > 0)) return null;
     var b = Date.parse(s.end);
-    return { id: s.id, start: a, end: isNaN(b) ? a + s.sec * 1000 : b, sec: +s.sec, day: dayKey(a), synced: true };
+    var end = isNaN(b) ? a + s.sec * 1000 : b;
+    return { id: s.id, start: a, end: end, sec: +s.sec, day: day || dayKey(end), synced: true };
   }
   function toRepo(s) {
     return { id: s.id, start: localIso(s.start), end: localIso(s.end), sec: Math.round(s.sec) };
   }
   /* what the build already knew about its "today" */
   if (DATA.today && Array.isArray(DATA.sessions)) {
-    remote[DATA.today] = DATA.sessions.map(fromRepo).filter(Boolean);
+    remote[DATA.today] = DATA.sessions.map(function (s) { return fromRepo(s, DATA.today); }).filter(Boolean);
   }
 
   function persist() {
@@ -101,16 +153,30 @@
     var goneIds = gone.map(function (g) { return g.id; });
     return Object.keys(byId).map(function (k) { return byId[k]; })
       .filter(function (s) { return goneIds.indexOf(s.id) < 0; })
-      .sort(function (a, b) { return a.start - b.start; });
+      .sort(function (a, b) { return a.end - b.end; });
   }
   var sumSec = function (list) { return list.reduce(function (t, s) { return t + s.sec; }, 0); };
 
-  /* A past day: the build's total, plus anything logged here that has not
-     reached the repo yet. Today: the full de-duplicated list. */
+  /* A day this device has read from the repo: that list, plus anything logged here
+     that has not reached it yet. Otherwise the build's total for the day. */
   function secOn(day) {
     if (day === today() || remote[day]) return sumSec(dayList(day));
     var base = (DATA.days && DATA.days[day] && DATA.days[day].sec) || 0;
     return base + sumSec(sessions.filter(function (s) { return s.day === day && !s.synced; }));
+  }
+
+  /* the repo's list for a day, taken as the truth: a block this device thought was
+     saved but the repo no longer has was deleted on another device */
+  function reconcile(day, list) {
+    var seen = {};
+    remote[day] = list.map(function (s) { return fromRepo(s, day); }).filter(Boolean);
+    remote[day].forEach(function (s) { seen[s.id] = 1; });
+    var now = Date.now();
+    sessions = sessions.filter(function (s) {
+      /* give a fresh upload two minutes to be visible to a read that may be stale */
+      return !(s.day === day && s.synced && !seen[s.id] && now - (s.syncedAt || 0) > 120000);
+    });
+    persist();
   }
 
   /* ---------- the repo ---------- */
@@ -126,57 +192,89 @@
     for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
     return btoa(bin);
   }
-  function api(method, url, body) {
+  var backoffUntil = 0;
+  function api(method, url, body, etag) {
+    var headers = {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+    if (etag) headers['If-None-Match'] = etag;
     return fetch(url, {
       method: method,
       cache: 'no-store',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28'
-      },
+      headers: headers,
       body: body ? JSON.stringify(body) : undefined
     }).then(function (r) {
+      if (r.status === 304) return { notModified: true, etag: etag };
       return r.text().then(function (t) {
         var data = null;
         try { data = t ? JSON.parse(t) : null; } catch (e) {}
         if (!r.ok) {
           var err = new Error((data && data.message) || ('HTTP ' + r.status));
           err.status = r.status;
+          /* out of requests: stop asking for a minute rather than make it worse */
+          if (r.status === 429 || (r.status === 403 && r.headers.get('x-ratelimit-remaining') === '0')) {
+            backoffUntil = Date.now() + 60000;
+          }
           throw err;
         }
+        if (data && typeof data === 'object') data.__etag = r.headers.get('etag');
         return data;
       });
+    }, function (e) {
+      var err = new Error('No connection');
+      err.offline = true;
+      throw err;
     });
   }
-  var fileUrl = function (day) {
-    return 'https://api.github.com/repos/' + DATA.repo + '/contents/content/focus/' + day + '.json';
-  };
-  function getDay(day) {
-    return api('GET', fileUrl(day) + '?ref=' + encodeURIComponent(DATA.branch || 'main'))
+  var base = function () { return 'https://api.github.com/repos/' + DATA.repo; };
+  var fileUrl = function (day) { return base() + '/contents/content/focus/' + day + '.json'; };
+  /* A read for looking (useEtag) asks "has it changed?" and is answered 304 -- which
+     GitHub does not count against the hourly allowance -- when it has not. A read
+     before a write must be the whole file, for its sha. */
+  var dayEtag = {};
+  function getDay(day, useEtag) {
+    return api('GET', fileUrl(day) + '?ref=' + encodeURIComponent(DATA.branch || 'main'), null, useEtag ? dayEtag[day] : null)
       .then(function (file) {
+        if (file.notModified) return { same: true };
+        if (useEtag) dayEtag[day] = file.__etag || null;
         var list = [];
         try { list = (JSON.parse(b64decode(file.content)).sessions || []); } catch (e) { list = []; }
         return { sha: file.sha, list: list };
       })
-      .catch(function (err) { if (err.status === 404) return { sha: null, list: [] }; throw err; });
+      .catch(function (err) {
+        if (err.status === 404) { if (useEtag) dayEtag[day] = null; return { sha: null, list: [] }; }
+        throw err;
+      });
   }
 
   var chain = Promise.resolve();
   var syncState = token ? 'ok' : 'local';
+  var lastSyncAt = 0;
+  function setSync(st) {
+    syncState = st;
+    if (st === 'ok') lastSyncAt = Date.now();
+    if (window.__rdx) window.__rdx.mark('focus', st === 'syncing' ? 'ok' : st);
+  }
 
   /* Merge this device's blocks for one day into the repo's file, one write at
-     a time. A 409 means another device wrote in between: fetch and merge again. */
+     a time. A 409 means another device wrote in between: fetch and merge again.
+     Only blocks this device has not uploaded yet are added; one that was uploaded
+     and has since vanished from the file was deleted somewhere else, and stays
+     deleted. */
   function syncDay(day) {
-    if (!token || !DATA.repo) { syncState = 'local'; renderSync(); return Promise.resolve(false); }
+    if (!canSync()) { setSync('local'); renderSync(); return Promise.resolve(false); }
     var attempt = function (triesLeft) {
       return getDay(day).then(function (got) {
         var byId = {};
         got.list.forEach(function (s) { if (s && s.id) byId[s.id] = s; });
+        var inRepo = {};
+        Object.keys(byId).forEach(function (k) { inRepo[k] = 1; });
         var addedSec = 0;
         var removed = 0;
         sessions.forEach(function (s) {
-          if (s.day === day && !byId[s.id]) { byId[s.id] = toRepo(s); addedSec += s.sec; }
+          if (s.day === day && !s.synced && !byId[s.id]) { byId[s.id] = toRepo(s); addedSec += s.sec; }
         });
         gone.forEach(function (g) {
           if (g.day === day && byId[g.id]) { delete byId[g.id]; removed++; }
@@ -184,11 +282,17 @@
         var list = Object.keys(byId).map(function (k) { return byId[k]; })
           .sort(function (a, b) { return String(a.start).localeCompare(String(b.start)); });
         var finish = function () {
-          remote[day] = list.map(fromRepo).filter(Boolean);
-          sessions.forEach(function (s) { if (s.day === day) s.synced = true; });
+          var now = Date.now();
+          remote[day] = list.map(function (s) { return fromRepo(s, day); }).filter(Boolean);
+          sessions.forEach(function (s) {
+            if (s.day === day && !s.synced) { s.synced = true; s.syncedAt = now; }
+          });
+          sessions = sessions.filter(function (s) {
+            return !(s.day === day && s.synced && !byId[s.id] && now - (s.syncedAt || 0) > 120000);
+          });
           gone = gone.filter(function (g) { return g.day !== day; });
           persist();
-          syncState = 'ok';
+          setSync('ok');
           return true;
         };
         if (!addedSec && !removed) return finish();
@@ -205,8 +309,9 @@
         });
       });
     };
+    setSync('syncing');
     chain = chain.then(function () { return attempt(2); }).catch(function (err) {
-      syncState = err.status === 401 ? 'badtoken' : 'offline';
+      setSync(err.status === 401 ? 'badtoken' : 'offline');
       return false;
     }).then(function (ok) { renderAll(); return ok; });
     return chain;
@@ -219,19 +324,32 @@
     Object.keys(days).forEach(syncDay);
   }
 
-  var lastFetch = 0;
-  function fetchToday() {
-    if (!token || !DATA.repo || Date.now() - lastFetch < 20000) return;
-    lastFetch = Date.now();
-    var day = today();
-    getDay(day).then(function (got) {
-      remote[day] = got.list.map(fromRepo).filter(Boolean);
-      syncState = 'ok';
+  /* read a day from the repo (not more than once per `every` ms) */
+  var fetched = {};
+  function fetchDay(day, force, every) {
+    if (!canSync() || Date.now() < backoffUntil) return;
+    var now = Date.now();
+    if (!force && now - (fetched[day] || 0) < (every || 15000)) return;
+    fetched[day] = now;
+    getDay(day, !force).then(function (got) {
+      setSync('ok');
+      if (got.same) return;
+      reconcile(day, got.list);
       renderAll();
     }, function (err) {
-      syncState = err.status === 401 ? 'badtoken' : 'offline';
+      setSync(err.status === 401 ? 'badtoken' : 'offline');
       renderSync();
     });
+  }
+  var fetchToday = function (force) { fetchDay(today(), force, 15000); };
+  /* the other days of this week, for the bars */
+  function fetchWeek() {
+    var now = new Date(nowMs());
+    var back = DATA.weekStartsMonday === false ? now.getDay() : (now.getDay() + 6) % 7;
+    for (var i = 1; i <= back; i++) {
+      var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      fetchDay(dayKey(d.getTime()), false, 5 * 60 * 1000);
+    }
   }
 
   /* ---------- the timer ---------- */
@@ -242,7 +360,8 @@
   var minutes = +prefs.minutes || +DATA.defaultMinutes || 30;
 
   /* the running block: { id, startedAt, planned (sec), acc (sec banked before
-     the current stretch), seg (ms the current stretch began, null = paused) } */
+     the current stretch), seg (ms the current stretch began, null = paused),
+     dev (which device started it) } -- all times are server time */
   var run = load(LS_RUN, null);
   var state = 'idle';
   var alarmAt = 0;
@@ -250,11 +369,220 @@
 
   function elapsed() {
     if (!run) return 0;
-    return run.acc + (run.seg ? (Date.now() - run.seg) / 1000 : 0);
+    return run.acc + (run.seg ? (nowMs() - run.seg) / 1000 : 0);
   }
   function remaining() { return run ? run.planned - elapsed() : minutes * 60; }
 
   var app = $('focusapp');
+
+  /* ---------- the running block, shared ----------
+     meta: what this device last agreed with the repo, and whether it has a
+     change waiting to go up.
+       rev        the revision of focus-run.json it last read or wrote
+       updated    when that revision was written
+       localAt    when THIS device last changed the block
+       dirty      a change that has not been written yet
+       pendingClose  id of a block this device finished and has not reported
+       ended      { id, at, ack } the block that just ran out, and whether the
+                  alarm has been dismissed (so another device stops ringing) */
+  var meta = load(LS_META, null) || { rev: 0, updated: 0, localAt: 0, dirty: false, pendingClose: null, ended: null };
+  var runEtag = null;
+  var runChain = Promise.resolve();
+  var lastPoll = 0;
+
+  var runUrl = function () { return base() + '/contents/' + RUN_PATH; };
+  var runOut = function (r) {
+    return r ? { id: r.id, startedAt: r.startedAt, planned: r.planned, acc: Math.round(r.acc * 1000) / 1000, seg: r.seg || null, dev: r.dev || '' } : null;
+  };
+  var runIn = function (o) {
+    return o && o.id ? { id: o.id, startedAt: +o.startedAt, planned: +o.planned, acc: +o.acc || 0, seg: o.seg ? +o.seg : null, dev: o.dev || '' } : null;
+  };
+
+  function getRunDoc(useEtag) {
+    return api('GET', runUrl() + '?ref=' + encodeURIComponent(SYNC_BRANCH), null, useEtag ? runEtag : null).then(function (f) {
+      if (f.notModified) return { same: true };
+      var doc = null;
+      try { doc = JSON.parse(b64decode(f.content)); } catch (e) { doc = null; }
+      return { sha: f.sha, doc: doc, etag: f.__etag };
+    }, function (err) {
+      if (err.status === 404) return { missing: true };
+      throw err;
+    });
+  }
+  /* the branch is made on first use */
+  function ensureSyncBranch() {
+    var g = base() + '/git/';
+    return api('GET', g + 'ref/heads/' + encodeURIComponent(SYNC_BRANCH)).then(function () { return true; }, function (err) {
+      if (err.status !== 404) throw err;
+      return api('GET', g + 'ref/heads/' + encodeURIComponent(DATA.branch || 'main')).then(function (ref) {
+        return api('POST', g + 'refs', { ref: 'refs/heads/' + SYNC_BRANCH, sha: ref.object.sha });
+      }).then(function () { return true; }, function (e2) { if (e2.status === 422) return true; throw e2; });
+    });
+  }
+  function putRunDoc(doc, sha, retry) {
+    var body = {
+      message: 'timer: ' + (doc.run ? (doc.run.seg ? 'running' : 'paused') + ' ' + dur(doc.run.planned) : 'idle') + ' (' + DEV + ')',
+      content: b64encode(JSON.stringify(doc) + '\n'),
+      branch: SYNC_BRANCH
+    };
+    if (sha) body.sha = sha;
+    return api('PUT', runUrl(), body).catch(function (err) {
+      if (err.status === 404 && retry !== false) return ensureSyncBranch().then(function () { return putRunDoc(doc, sha, false); });
+      throw err;
+    });
+  }
+
+  /* a change this device just made: remember it, and send it */
+  function touch(extra) {
+    meta.localAt = nowMs();
+    meta.dirty = true;
+    if (extra) Object.keys(extra).forEach(function (k) { meta[k] = extra[k]; });
+    save(LS_META, meta);
+    pushRun();
+  }
+
+  function pushRun() {
+    if (!canSync()) return runChain;
+    runChain = runChain.then(function () { return pushOnce(3); }).catch(function (err) {
+      if (err && !err.status && !err.offline && window.console) console.warn('focus: push failed', err);
+      setSync(err && err.status === 401 ? 'badtoken' : 'offline');
+    }).then(function () { renderSync(); });
+    return runChain;
+  }
+
+  function pushOnce(tries) {
+    if (!meta.dirty) return Promise.resolve();
+    return getRunDoc(false).then(function (got) {
+      var remoteDoc = got.doc || { rev: 0, updated: 0, run: null, ended: null };
+      var sha = got.sha || null;
+      var theirs = remoteDoc.run;
+      if (meta.pendingClose) {
+        /* I finished block X. That is only news if the shared timer still shows X --
+           if it shows another block, someone has moved on and must not be undone */
+        if (!(theirs && theirs.id === meta.pendingClose)) {
+          adoptRemote(remoteDoc, got.etag);
+          meta.dirty = false; meta.pendingClose = null; save(LS_META, meta);
+          return;
+        }
+      } else if (remoteDoc.rev !== meta.rev && remoteDoc.updated > meta.localAt) {
+        /* the shared timer was changed after I last looked AND after my own change:
+           the later action wins, so take theirs */
+        adoptRemote(remoteDoc, got.etag);
+        meta.dirty = false; save(LS_META, meta);
+        return;
+      }
+      var doc = { v: 1, rev: remoteDoc.rev + 1, updated: nowMs(), by: DEV, run: runOut(run), ended: meta.ended || null };
+      return putRunDoc(doc, sha).then(function () {
+        meta.rev = doc.rev; meta.updated = doc.updated; meta.dirty = false; meta.pendingClose = null;
+        save(LS_META, meta);
+        runEtag = null;
+        setSync('ok');
+      }, function (err) {
+        if ((err.status === 409 || err.status === 422) && tries > 0) return pushOnce(tries - 1);
+        throw err;
+      });
+    });
+  }
+
+  /* look at the shared timer; send my own change first if I have one */
+  function pollRun(force) {
+    if (!canSync() || Date.now() < backoffUntil) return;
+    var now = Date.now();
+    var fast = state === 'alarm' ? 2500 : (state === 'running' || state === 'paused' || app) ? 7000 : 25000;
+    if (!force && now - lastPoll < fast) return;
+    lastPoll = now;
+    runChain = runChain.then(function () {
+      if (meta.dirty) return pushOnce(3);
+      return getRunDoc(true).then(function (got) {
+        setSync('ok');
+        if (got.same) return;
+        if (got.missing || !got.doc) {
+          /* nothing shared yet: if this device has a block running, put it there */
+          if (run) { meta.dirty = true; meta.localAt = meta.localAt || nowMs(); save(LS_META, meta); return pushOnce(3); }
+          return;
+        }
+        runEtag = got.etag || null;
+        if (got.doc.rev !== meta.rev || stateOf(got.doc) !== state) adoptRemote(got.doc, got.etag);
+      });
+    }).catch(function (err) {
+      /* a bug of ours is not an outage: say so where a developer can see it */
+      if (err && !err.status && !err.offline && window.console) console.warn('focus: poll failed', err);
+      setSync(err && err.status === 401 ? 'badtoken' : 'offline');
+    }).then(function () { settle(); renderSync(); });
+  }
+
+  /* On opening, a block of this device's own that has already run out is not closed
+     at once: another device may have extended it, or finished it. The shared timer
+     is asked first (and if it cannot be reached, the block is closed on its own
+     evidence after a few seconds). */
+  var settling = false;
+  function settle() {
+    if (!settling) return;
+    settling = false;
+    if (run && run.seg && remaining() <= 0 && state !== 'alarm') complete(true);
+  }
+  /* what state the page would be in for this shared document */
+  function stateOf(doc) {
+    var r = doc.run;
+    if (!r) return state === 'alarm' && !(doc.ended && doc.ended.ack) ? 'alarm' : 'idle';
+    return r.seg ? 'running' : 'paused';
+  }
+
+  /* A block this device was running that the shared timer no longer shows. If it was
+     reported finished, log it from that report (any device can, so the block is not
+     lost if the one that finished it never got to write it); if the shared timer
+     never heard of it, keep what was focused rather than drop it. */
+  function leave(had, doc) {
+    var e = doc && doc.ended && doc.ended.id === had.id ? doc.ended : null;
+    if (e) { logSession(had.id, had.startedAt, +e.sec || 0, +e.at || nowMs()); return; }
+    var spent = Math.min(had.planned, had.acc + (had.seg ? (nowMs() - had.seg) / 1000 : 0));
+    var end = had.seg ? Math.min(nowMs(), had.seg + (had.planned - had.acc) * 1000) : nowMs();
+    logSession(had.id, had.startedAt, spent, end);
+  }
+
+  /* take the shared timer as this device's own */
+  function adoptRemote(doc, etag) {
+    var next = runIn(doc.run);
+    var had = run;
+    if (had && (!next || next.id !== had.id)) leave(had, doc);
+    run = next;
+    save(LS_RUN, run);
+    meta.rev = doc.rev || 0; meta.updated = doc.updated || 0; meta.ended = doc.ended || null;
+    save(LS_META, meta);
+    runEtag = etag || null;
+
+    if (next) {
+      if (state === 'alarm') stopAlarm();
+      if (next.seg && remaining() <= 0) {
+        /* it ran out while nobody had it open */
+        complete(true);
+        return;
+      }
+      state = next.seg ? 'running' : 'paused';
+      ticking(!!next.seg);
+      wake(state === 'running');
+      if (had && had.id === next.id && (had.seg ? 1 : 0) !== (next.seg ? 1 : 0)) {
+        note(next.seg ? 'Resumed on ' + (doc.by || 'another device') + '.' : 'Paused on ' + (doc.by || 'another device') + '.');
+      } else if (!had || had.id !== next.id) {
+        note('This block was started on ' + (next.dev || doc.by || 'another device') + '.');
+      }
+    } else {
+      if (state === 'running' || state === 'paused') {
+        state = 'idle';
+        ticking(false);
+        wake(false);
+        note(had && doc.ended && doc.ended.id === had.id
+          ? 'That block was finished on ' + (doc.by || 'another device') + '.'
+          : 'The shared timer had moved on — what you focused here was kept.');
+        fetchToday(true);
+      } else if (state === 'alarm' && doc.ended && doc.ended.ack) {
+        stopAlarm();
+        state = 'idle';
+        ticking(false);
+      }
+    }
+    renderAll();
+  }
 
   function start(mins) {
     unlockAudio();
@@ -262,8 +590,8 @@
     if (mins) minutes = mins;
     prefs.minutes = minutes;
     save(LS_PREFS, prefs);
-    var now = Date.now();
-    run = { id: uid(), startedAt: now, planned: minutes * 60, acc: 0, seg: now };
+    var now = nowMs();
+    run = { id: uid(), startedAt: now, planned: minutes * 60, acc: 0, seg: now, dev: DEV };
     save(LS_RUN, run);
     stopAlarm();
     state = 'running';
@@ -271,6 +599,7 @@
     softBell();
     wake(true);
     ticking(true);
+    touch({ pendingClose: null, ended: null });
     renderAll();
   }
   function pause() {
@@ -280,23 +609,41 @@
     save(LS_RUN, run);
     state = 'paused';
     wake(false);
+    touch();
     renderAll();
   }
   function resume() {
     if (!run || run.seg) return;
     unlockAudio();
-    run.seg = Date.now();
+    run.seg = nowMs();
     save(LS_RUN, run);
     state = 'running';
     wake(true);
     ticking(true);
+    touch();
     renderAll();
   }
   function extend() {
     if (!run) return;
     run.planned += 300;
     save(LS_RUN, run);
+    touch();
     renderAll();
+  }
+
+  /* a finished block into the log (worth logging from a minute up; the same block is
+     never logged twice, whichever device or tab gets there first) */
+  function logSession(id, startedAt, sec, end) {
+    sessions = load(LS_SESSIONS, sessions);
+    var day = dayKey(end);
+    if (sec < 60) return null;
+    if (sessions.some(function (s) { return s.id === id; })) return null;
+    if ((remote[day] || []).some(function (s) { return s.id === id; })) return null;
+    var s = { id: id, start: startedAt, end: end, sec: Math.round(sec), day: day, synced: false };
+    sessions.push(s);
+    persist();
+    syncDay(day);
+    return s;
   }
 
   /* close the running block and log it (if it is worth logging) */
@@ -306,14 +653,10 @@
     save(LS_RUN, null);
     wake(false);
     if (!r) return null;
-    /* another tab may have closed this same block already */
-    sessions = load(LS_SESSIONS, sessions);
-    if (sec < 60 || sessions.some(function (s) { return s.id === r.id; })) return null;
-    var s = { id: r.id, start: r.startedAt, end: endMs || Date.now(), sec: Math.round(sec), day: dayKey(r.startedAt), synced: false };
-    sessions.push(s);
-    persist();
-    syncDay(s.day);
-    return s;
+    var end = endMs || nowMs();
+    /* the shared timer learns of it either way, with what was focused */
+    touch({ pendingClose: r.id, ended: { id: r.id, at: end, sec: Math.round(sec), ack: false } });
+    return logSession(r.id, r.startedAt, sec, end);
   }
 
   function stopAndLog() {
@@ -328,7 +671,7 @@
 
   function complete(late) {
     var r = run;
-    var endMs = r.seg ? r.seg + (r.planned - r.acc) * 1000 : Date.now();
+    var endMs = r.seg ? r.seg + (r.planned - r.acc) * 1000 : nowMs();
     var s = closeRun(r.planned, endMs);
     if (late) {
       state = 'idle';
@@ -367,6 +710,8 @@
     stopAlarm();
     state = 'idle';
     ticking(false);
+    /* tell the other devices it was heard, so they stop ringing too */
+    if (meta.ended && !meta.ended.ack) touch({ ended: { id: meta.ended.id, at: meta.ended.at, sec: meta.ended.sec, ack: true } });
     renderAll();
   }
 
@@ -478,6 +823,7 @@
   var baseTitle = document.title;
   var lastCard = 0;
   function tick() {
+    if (settling) { renderClock(); return; }
     if (state === 'running' && run && run.seg && remaining() <= 0) { complete(false); return; }
     if (state === 'alarm') {
       if (alarmAt) {
@@ -485,6 +831,7 @@
         document.title = Math.floor(since / 900) % 2 ? baseTitle : '⏰ Time!';
         if (prefs.sound && bellsRung < 7 && since > bellsRung * 7000) { bells(2); bellsRung++; }
         if (since > 70000) alarmAt = 0;
+        pollRun(false);          // another device may have dismissed it
       } else {
         document.title = baseTitle;
       }
@@ -519,6 +866,13 @@
     /* the lamp over the clock burns for as long as there is a block */
     var flame = $('fflame');
     if (flame) flame.classList.toggle('lit', state !== 'idle');
+    /* a block that another device started says so */
+    var fdev = $('fdev');
+    if (fdev) {
+      var other = run && run.dev && run.dev !== DEV;
+      fdev.hidden = !other;
+      if (other) fdev.textContent = 'Started on ' + run.dev + ' — you can pause, resume or stop it from here.';
+    }
     if (state === 'running') document.title = clockText(left) + ' · Focus';
     else if (state === 'paused') document.title = '❚❚ ' + clockText(left) + ' · Focus';
     else if (state === 'idle') document.title = baseTitle;
@@ -567,6 +921,12 @@
       + ' lamps lit, one for every half hour of focus">' + html + '</div>';
   }
 
+  /* where a block sits on the day's 24-hour strip: at its start, unless it began on
+     another day (a block left paused overnight), when it sits where it ended */
+  function stripStart(s, day) {
+    return dayKey(s.start) === day ? s.start : s.end - s.sec * 1000;
+  }
+
   function renderToday() {
     if (!app) return;
     var day = today();
@@ -577,9 +937,12 @@
       + (total >= TARGET ? ' · target met' : '');
     $('fring').innerHTML = diyaRow(total);
 
-    var mins = function (ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
+    var mins = function (ms) {
+      var d = new Date(ms);
+      return dayKey(ms) === day ? d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60 : 0;
+    };
     var blocks = list.map(function (s) {
-      return '<i style="left:' + (mins(s.start) / 14.4).toFixed(2) + '%;width:' + (Math.max(s.sec / 60, 4) / 14.4).toFixed(2) + '%"></i>';
+      return '<i style="left:' + (mins(stripStart(s, day)) / 14.4).toFixed(2) + '%;width:' + (Math.max(s.sec / 60, 4) / 14.4).toFixed(2) + '%"></i>';
     });
     if (run && (state === 'running' || state === 'paused') && dayKey(run.startedAt) === day) {
       blocks.push('<i class="live" style="left:' + (mins(run.startedAt) / 14.4).toFixed(2) + '%;width:'
@@ -589,7 +952,8 @@
 
     $('fsessions').innerHTML = list.length
       ? list.slice().reverse().map(function (s) {
-        return '<li><span>' + hm(s.start) + ' – ' + hm(s.end) + '</span>'
+        var when = dayKey(s.start) === day ? hm(s.start) + ' – ' + hm(s.end) : 'finished ' + hm(s.end);
+        return '<li><span>' + when + '</span>'
           + (s.synced ? '' : '<span class="tagx">this device</span>')
           + '<span class="len">' + dur(s.sec) + '</span>'
           + '<button type="button" class="del" data-del="' + s.id + '" aria-label="Delete this block">×</button></li>';
@@ -599,7 +963,7 @@
 
   function renderWeek() {
     if (!app) return;
-    var now = new Date();
+    var now = new Date(nowMs());
     var dow = now.getDay();
     var back = DATA.weekStartsMonday === false ? dow : (dow + 6) % 7;
     var first = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
@@ -630,13 +994,17 @@
   function renderSync() {
     var el = $('fsync');
     if (!el) return;
-    var unsynced = sessions.filter(function (s) { return !s.synced; }).length + gone.length;
-    el.textContent = {
-      local: 'Saved on this device only. Connect once under Write → ⚙ and blocks also go into the journal, so the total shows on your phone too.',
-      ok: unsynced ? 'Saving to the journal…' : 'Blocks are saved to the journal as they finish.',
-      offline: 'Could not reach GitHub — blocks are safe on this device and will be saved next time.',
-      badtoken: 'The token was rejected — reconnect under Write → ⚙. Blocks are safe on this device.'
+    var unsynced = sessions.filter(function (s) { return !s.synced; }).length + gone.length + (meta.dirty ? 1 : 0);
+    var last = lastSyncAt ? '<small>Last synced ' + hm(lastSyncAt) + '.</small>' : '';
+    var text = {
+      local: 'This browser isn’t connected, so the timer and your blocks stay on this device only. '
+        + '<a href="/admin/#setup">Connect it once</a> and they follow you to every device.',
+      ok: unsynced ? 'Saving…' : 'In sync — the timer and your blocks follow you to your other devices. ' + last,
+      syncing: 'Saving…',
+      offline: 'Can’t reach GitHub right now. Blocks are safe on this device and go up as soon as there is signal.',
+      badtoken: 'GitHub rejected the token — <a href="/admin/#setup">reconnect</a>. Blocks are safe on this device.'
     }[syncState] || '';
+    el.innerHTML = text;
   }
 
   function renderNotify() {
@@ -676,9 +1044,10 @@
       if (running) {
         var live = run && run.seg && remaining() > 0;
         running.hidden = !(run && (live || !run.seg));
+        var where = run && run.dev && run.dev !== DEV ? ' · on ' + run.dev : '';
         running.textContent = !run ? '' : run.seg
-          ? '● ' + Math.ceil(remaining() / 60) + ' min left in this block'
-          : '❚❚ block paused';
+          ? '● ' + Math.ceil(remaining() / 60) + ' min left in this block' + where
+          : '❚❚ block paused' + where;
       }
     });
   }
@@ -788,7 +1157,9 @@
     if (document.visibilityState !== 'visible') return;
     tick();
     if (state === 'running') wake(true);
-    fetchToday();
+    pollRun(true);
+    fetchToday(true);
+    if (app) fetchWeek();
     renderAll();
   });
 
@@ -800,6 +1171,9 @@
       if (run) state = run.seg ? 'running' : 'paused';
       ticking(state === 'running' || state === 'alarm');
       renderAll();
+    } else if (e.key === LS_META) {
+      var m = load(LS_META, null);
+      if (m && m.rev >= meta.rev) { meta.rev = m.rev; meta.updated = m.updated; meta.ended = m.ended; }
     } else if (e.key === LS_SESSIONS || e.key === LS_GONE) {
       sessions = load(LS_SESSIONS, []);
       gone = load(LS_GONE, []);
@@ -809,12 +1183,21 @@
 
   /* app.js calls this when the home page turns over to a new day's panel */
   window.__focusRender = renderAll;
+  /* ...and when a device is woken or its connection comes back */
+  window.__focusSync = function () { pollRun(true); fetchToday(true); syncPending(); };
 
   /* ---------- boot ---------- */
   if (run) {
-    if (run.seg && remaining() <= 0) complete(true);     // it ended while the page was closed
-    else state = run.seg ? 'running' : 'paused';
+    if (run.seg && remaining() <= 0) {
+      /* it ran out while the page was closed */
+      if (canSync()) { settling = true; state = 'running'; setTimeout(settle, 6000); }
+      else complete(true);
+    } else {
+      state = run.seg ? 'running' : 'paused';
+    }
   }
+  /* a block started before the timer was shared: put it where the others can see it */
+  if (canSync() && run && !meta.rev && !meta.dirty) { meta.dirty = true; meta.localAt = nowMs(); save(LS_META, meta); }
   if (state === 'running') {
     ticking(true);
     if (app && prefs.sound) note('Tap anywhere once so the bell can ring when this block ends.');
@@ -826,7 +1209,19 @@
     if (state === 'idle') start();
   }
   renderAll();
-  syncPending();
-  fetchToday();
-  setInterval(function () { if (document.visibilityState === 'visible') fetchToday(); }, 5 * 60 * 1000);
+  /* the offset first: every time below is the server's */
+  measureSkew().then(function () {
+    renderAll();
+    syncPending();
+    pollRun(true);
+    fetchToday(true);
+    if (app) fetchWeek();
+  });
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;
+    pollRun(false);
+    fetchToday(false);
+  }, 3000);
+  setInterval(measureSkew, 10 * 60 * 1000);
+  window.addEventListener('online', function () { syncPending(); pollRun(true); fetchToday(true); });
 })();

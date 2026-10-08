@@ -529,6 +529,24 @@
           <button class="ghost danger" id="forget" type="button">Forget token</button>
         </div>
       </div>
+      <div class="card" id="pair" hidden>
+        <h3>Connect another device</h3>
+        <p class="note" style="margin:0 0 10px">
+          Saving needs this one-time connection on <b>every</b> browser you use — your laptop, your
+          phone's browser, and (on an iPhone) the Home Screen app separately, because they do not
+          share storage. A browser that is not connected only shows the site as last published; that is
+          why two devices can disagree. This link connects one:
+        </p>
+        <div class="row">
+          <button class="primary" id="copylink" type="button">Copy connect link</button>
+        </div>
+        <input id="linkbox" readonly hidden aria-label="Connect link">
+        <p class="note small" style="margin-top:10px">
+          Open it on the other device, or paste it into the box above (that is how a Home Screen app
+          is connected). It carries your token, so treat it like a password; to cut a device off,
+          delete the token at GitHub.
+        </p>
+      </div>
       <div class="card">
         <details>
           <summary>Microphone not working?</summary>
@@ -739,6 +757,7 @@
       : 'Add a token below so this browser can publish, tick habits and save focus blocks.';
     $('connh').textContent = on ? 'Replace or remove the token' : 'Connect this browser';
     $('connect').textContent = on ? 'Replace' : 'Connect';
+    $('pair').hidden = !on;
     /* the notice bar: not on Setup itself, and not while a saved token is still being checked */
     $('conn').hidden = on || (has && connected === null) || tabNow === 'setup';
   }
@@ -1737,18 +1756,56 @@
       });
   }
 
-  $('connect').addEventListener('click', function () {
-    var v = $('token').value.trim();
-    if (!v) { say($('setup-msg'), 'err', 'Paste a token first.'); return; }
+  /* what was pasted: the token itself, or the connect link that carries it */
+  function tokenFrom(text) {
+    var s = String(text || '').trim();
+    var m = s.match(/[#&?]connect=([A-Za-z0-9_\-]+)/);
+    return m ? m[1] : s.replace(/\s+/g, '');
+  }
+  var connectLink = function () { return location.origin + '/admin/#connect=' + getToken(); };
+
+  /* try a token: keep it if GitHub accepts it and it can write, drop it if not */
+  function tryToken(v, doneMsg) {
+    var before = getToken();
     setToken(v);
     connected = null;
     renderConn();
     say($('setup-msg'), 'ok', 'Checking…');
-    checkConnection(function (r) {
+    return checkConnection(function (r) {
       $('token').value = '';
       $('howto').open = false;
-      return 'Connected to ' + esc(r.full_name) + '. This browser can now write, tick habits and save focus blocks. <a href="/">Back to Today →</a>';
-    }).catch(function (e) { setConnected(false); setToken(''); say($('setup-msg'), 'err', esc(e.message)); });
+      return doneMsg(r);
+    }).catch(function (e) {
+      /* a token that does not work must not throw away one that did */
+      setToken(before);
+      say($('setup-msg'), 'err', esc(e.message));
+      if (before) checkConnection().catch(function () { setConnected(false); });
+      else setConnected(false);
+    });
+  }
+
+  $('connect').addEventListener('click', function () {
+    var v = tokenFrom($('token').value);
+    if (!v) { say($('setup-msg'), 'err', 'Paste a token first.'); return; }
+    tryToken(v, function (r) {
+      return 'Connected to ' + esc(r.full_name) + '. This browser now shares your ticks, focus blocks and timer with your other devices. <a href="/">Back to Today →</a>';
+    });
+  });
+
+  $('copylink').addEventListener('click', function () {
+    var link = connectLink();
+    var show = function () {
+      $('linkbox').hidden = false;
+      $('linkbox').value = link;
+      $('linkbox').focus();
+      $('linkbox').select();
+      say($('setup-msg'), 'ok', 'Copy the link from the box below and open it on the other device.');
+    };
+    try {
+      navigator.clipboard.writeText(link).then(function () {
+        say($('setup-msg'), 'ok', 'Link copied. Open it on the other device — it connects that browser straight away. Keep it to yourself: it carries your token.');
+      }, show);
+    } catch (e) { show(); }
   });
 
   $('forget').addEventListener('click', function () {
@@ -1854,7 +1911,15 @@
       if ($('body').value) $('saved').textContent = 'Saved on this phone';
       document.body.classList.remove('booting');
 
-      if (location.hash === '#setup') {
+      var link = location.hash.match(/^#connect=([A-Za-z0-9_\-]+)$/);
+      if (link) {
+        /* a connect link: take the token, and wipe it from the address bar at once */
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+        showTab('setup');
+        tryToken(link[1], function (r) {
+          return 'Connected to ' + esc(r.full_name) + '. This browser now shares your ticks, focus blocks and timer with your other devices. <a href="/">Back to Today →</a>';
+        });
+      } else if (location.hash === '#setup') {
         showTab('setup');
         if (getToken()) {
           checkConnection(function () { return 'This browser is already connected. <a href="/">Back to Today →</a>'; })

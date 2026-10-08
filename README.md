@@ -93,13 +93,19 @@ file), a notification with an *Another block* button, a vibration on phones, and
 flashing tab title. Space starts and pauses.
 
 - **Timing never counts ticks.** A block is a start time and a length; the clock is
-  recomputed from `Date.now()`, so a background tab or a sleeping laptop cannot make it
+  recomputed from the time, so a background tab or a sleeping laptop cannot make it
   drift. The tick comes from a Worker, because browsers slow a hidden tab's own timers
-  to about once a minute. A block that finished while the page was closed is logged
-  when the page next opens.
+  to about once a minute. The time is the *site's* time (the device's clock plus an offset
+  measured against the site), so two devices with different clocks show the same minutes left.
+- **The running block is shared.** Start it on the phone, pause it, resume it on the laptop:
+  `focus-run.json` on a branch called `sync` holds it (a branch of its own, so a pause does
+  not rebuild the site). Any device that finds a block that has run out logs it with the time
+  it really ended — not the time somebody opened the page — and a device that rings tells the
+  others when the bell has been dismissed.
 - **Where blocks go.** Local storage first, always. Then — if the browser holds the token —
   `content/focus/YYYY-MM-DD.json`, merged by block id, so the phone and the desk add up
-  to one total. A write that races another device (409) refetches and merges again.
+  to one total. A block counts on the day it *ended*. A write that races another device (409)
+  refetches and merges again; a block deleted on one device stays deleted on the others.
   Offline, blocks wait on the device and go up next time.
 - **Where the total shows.** Live on `/focus/` and on Today's focus card; per day on the
   Habits grid and on each day page, with a timeline of the blocks.
@@ -175,6 +181,28 @@ palm-leaf manuscript (pothi); and the footer closes the way a recitation closes.
 counted in **lamps** — a diya lights for every half hour of focus, and the timer's own
 lamp burns while a block runs. All of that artwork is drawn in code by
 `src/make_ornaments.py` into `public/art/ornaments/`, so none of it is a borrowed image.
+
+## Several devices, one set of data
+
+The site is static, so *reading* needs nothing and *saving* needs the journal token. Every
+browser that should save — the laptop, the phone's browser, and on an iPhone the Home Screen
+app separately (it has its own storage) — is connected **once**, from Write → ⚙, and then:
+
+- ticks, the focus log and the running timer are read from and written to the repo, so every
+  connected device shows the same thing: a page that stays open looks again every 20 seconds
+  (habits) and every few seconds (the timer), and the moment it is woken or comes back online;
+- those looks ask GitHub "has it changed?" and are answered `304`, which does not count against
+  the hourly allowance, so leaving a tab open is cheap;
+- a browser that is **not** connected can only show the site as it was last published, and
+  cannot save. It says so: the lamp in the header is grey (green = connected and in step,
+  amber = cannot reach GitHub, red = the token was refused), and the Focus page spells it out.
+  This is the usual reason two devices disagree.
+
+To connect another device, Write → ⚙ → *Copy connect link* on one that is already connected,
+and open the link on the new one (or paste it into the token box — that is how a Home Screen
+app is connected). The link carries the token, and the page removes it from the address bar
+the moment it has read it. Drafts in the Write page are **not** synced: the repo is public, and
+a half-written entry should not be.
 
 ## Keeping the page current
 

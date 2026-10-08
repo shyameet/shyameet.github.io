@@ -513,6 +513,32 @@ button.cell:not(:disabled):hover { border-color: var(--done); }
 .alarmtitle { margin: 0 0 12px; font-size: 18px; font-weight: 700; }
 .fnote { margin: 14px 0 0; min-height: 1.3em; font-size: 13.5px; color: var(--muted); }
 .fnote.err { color: var(--miss); }
+/* a block that another device started */
+.fdev { margin: 12px 0 0; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45;
+  color: var(--ink-2); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+#fsync a { font-weight: 700; }
+#fsync small { display: block; margin-top: 2px; }
+
+/* the lamp in the header: is this browser connected, and in step with the journal? */
+.syncdot i {
+  display: block; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--sync, var(--muted)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sync, var(--muted)) 20%, transparent);
+}
+.syncdot[data-state="off"] { --sync: #a99a85; }
+.syncdot[data-state="off"] i { opacity: .8; background: transparent; box-shadow: inset 0 0 0 2px var(--sync); }
+.syncdot[data-state="ok"] { --sync: #4f9a3b; }
+.syncdot[data-state="warn"] { --sync: #d39a21; }
+.syncdot[data-state="bad"] { --sync: #cf4c39; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .syncdot[data-state="off"] { --sync: #8d86a0; }
+  :root:not([data-theme="light"]) .syncdot[data-state="ok"] { --sync: #8cc275; }
+  :root:not([data-theme="light"]) .syncdot[data-state="warn"] { --sync: #e6b44f; }
+  :root:not([data-theme="light"]) .syncdot[data-state="bad"] { --sync: #ee7a66; }
+}
+:root[data-theme="dark"] .syncdot[data-state="off"] { --sync: #8d86a0; }
+:root[data-theme="dark"] .syncdot[data-state="ok"] { --sync: #8cc275; }
+:root[data-theme="dark"] .syncdot[data-state="warn"] { --sync: #e6b44f; }
+:root[data-theme="dark"] .syncdot[data-state="bad"] { --sync: #ee7a66; }
 .ftodayhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .timeline { margin: 16px 0 4px; }
 .tl-track { position: relative; height: 14px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }

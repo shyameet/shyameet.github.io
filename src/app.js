@@ -73,6 +73,52 @@
   }
   window.journalToast = toast;
 
+  /* ---------- is this browser connected, and in step? ----------
+     Reading the site needs nothing, but SAVING does: a tick, a focus block, the
+     running timer all go to the repo through the journal token, and a browser that
+     does not hold one can only show the site as it was last published. That is the
+     usual reason two devices disagree, so it is shown, not hidden: a small lamp in
+     the header. The parts that keep themselves in step (ticks, focus) report here;
+     the lamp shows the worst of what they say. */
+  var HAS_TOKEN = false;
+  try { HAS_TOKEN = !!localStorage.getItem('gh_token'); } catch (e) {}
+  var subs = {};
+  var SYNC_NOTE = {
+    off: ['This browser isn’t connected, so it shows the site as last published and can’t save. Tap to connect it once.', '/admin/#setup'],
+    ok: ['Connected — your ticks, focus blocks and timer are shared with your other devices.', ''],
+    warn: ['Can’t reach GitHub right now. What you do here goes up when the connection is back.', ''],
+    bad: ['GitHub rejected this browser’s token. Tap to reconnect it.', '/admin/#setup']
+  };
+  function syncLevel() {
+    if (!HAS_TOKEN) return 'off';
+    var level = 'ok';
+    Object.keys(subs).forEach(function (k) {
+      if (subs[k] === 'badtoken') level = 'bad';
+      else if (subs[k] === 'offline' && level !== 'bad') level = 'warn';
+    });
+    return level;
+  }
+  function paintSync() {
+    var el = document.getElementById('syncdot');
+    if (!el) return;
+    var lv = syncLevel();
+    el.dataset.state = lv;
+    el.title = SYNC_NOTE[lv][0];
+    el.setAttribute('aria-label', SYNC_NOTE[lv][0]);
+  }
+  window.__rdx = {
+    mark: function (name, st) { subs[name] = st; paintSync(); }
+  };
+  (function () {
+    var el = document.getElementById('syncdot');
+    if (!el) return;
+    paintSync();
+    el.addEventListener('click', function () {
+      var n = SYNC_NOTE[syncLevel()];
+      toast(n[0], n[1] ? 'err' : '', 6000, n[1] || undefined);
+    });
+  })();
+
   /* ---------- is this page stale? ----------
      GitHub Pages lets a browser keep a page for ten minutes, a deploy takes a
      minute or two after a post or a tick, and a phone app resumed from the
@@ -88,8 +134,13 @@
   function busy() {
     if (Date.now() - lastTouch < 20000) return true;           // touched it a moment ago
     try {
-      /* never pull the page out from under a running focus block */
-      if (document.body.classList.contains('focuspage') && localStorage.getItem('focus_running_v1')) return true;
+      /* never pull the page out from under a focus block: running, paused, or ringing
+         (a block that has just ended has no stored run, but its prompt is on screen) */
+      if (document.body.classList.contains('focuspage')) {
+        if (localStorage.getItem('focus_running_v1')) return true;
+        var fa = document.getElementById('focusapp');
+        if (fa && fa.dataset.state && fa.dataset.state !== 'idle') return true;
+      }
     } catch (e) {}
     return false;
   }
@@ -222,6 +273,7 @@
         });
       });
       window.__ticksSync = function () {};
+      window.__rdx.mark('ticks', 'local');
       return;
     }
 
@@ -251,17 +303,22 @@
       for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       return btoa(bin);
     }
-    function gh(method, url, body) {
+    /* etag: ask "has it changed?" -- answered 304, which GitHub does not count
+       against the hourly allowance, when it has not */
+    function gh(method, url, body, etag) {
+      var headers = {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      };
+      if (etag) headers['If-None-Match'] = etag;
       return fetch(url, {
         method: method,
         cache: 'no-store',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28'
-        },
+        headers: headers,
         body: body ? JSON.stringify(body) : undefined
       }).then(function (r) {
+        if (r.status === 304) return { notModified: true };
         return r.text().then(function (t) {
           var data = null;
           try { data = t ? JSON.parse(t) : null; } catch (e) {}
@@ -272,6 +329,7 @@
             err.status = r.status;
             throw err;
           }
+          if (data && typeof data === 'object') data.__etag = r.headers.get('etag');
           return data;
         });
       });
@@ -439,10 +497,16 @@
     })();
 
     /* ---- the live files ---- */
+    var etags = {};                  // file -> the version last read
     function syncFile(file) {
       return config().then(function (c) {
-        return gh('GET', contentsUrl(c, file) + '?ref=' + c.branch);
+        return gh('GET', contentsUrl(c, file) + '?ref=' + c.branch, null, etags[file]);
       }).then(function (f) {
+        if (f.notModified) {                       // unchanged since the last look
+          window.__rdx.mark('ticks', 'ok');
+          return false;
+        }
+        etags[file] = f.__etag || null;
         var state = parseTasks(b64decode(f.content));
         known[file] = state;
         var changed = false;
@@ -460,18 +524,29 @@
         });
         saveOvr(o);
         refresh(file);
+        window.__rdx.mark('ticks', 'ok');
         return changed;
-      }).catch(function () { /* offline, or no such file yet: what is on screen stands */ });
+      }).catch(function (err) {
+        /* what is on screen stands. A missing file is not an outage; no answer at
+           all is, and so is a refused token */
+        window.__rdx.mark('ticks', err && err.status === 401 ? 'badtoken' : (err && err.status ? 'ok' : 'offline'));
+      });
     }
 
     var lastSync = 0;
-    function syncAll(force) {
+    /* quick: the periodic look while the page sits open -- only the pages whose boxes
+       are on screen, not the week strip's rings (those are refreshed on load/wake) */
+    function syncAll(force, quick) {
       var now = Date.now();
       if (!force && now - lastSync < 20000) return;
       lastSync = now;
       var files = {};
-      controls.forEach(function (el) { var f = fileOf(el); if (f) files[f] = 1; });
-      $$('[data-ring]').forEach(function (a) { files[a.dataset.ring] = 1; });
+      controls.forEach(function (el) {
+        if (quick && el.closest('[hidden]')) return;
+        var f = fileOf(el);
+        if (f) files[f] = 1;
+      });
+      if (!quick) $$('[data-ring]').forEach(function (a) { files[a.dataset.ring] = 1; });
       /* a page that is about to be made is made first; its GET would only 404 */
       $$('[data-seed]').forEach(function (card) { delete files[card.dataset.file]; });
       Object.keys(files).forEach(syncFile);
@@ -568,6 +643,7 @@
     utsavNow();
     freshCheck();
     if (window.__ticksSync) window.__ticksSync();
+    if (window.__focusSync) window.__focusSync();
   }
   showPanel();
   relabel();
@@ -580,7 +656,17 @@
   /* a page restored from the back/forward cache never reloads, so it never runs
      any of the above on its own */
   window.addEventListener('pageshow', function (e) { if (e.persisted) onWake(); });
-  window.addEventListener('online', function () { freshCheck(true); });
+  window.addEventListener('online', function () {
+    freshCheck(true);
+    if (window.__ticksSync) window.__ticksSync(true);
+  });
+  /* a page that stays open on a desk keeps itself current too: a newer build of
+     the site, a tick made on the phone */
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;
+    freshCheck();
+    if (window.__ticksSync) window.__ticksSync(true, true);
+  }, 20000);
   /* a tab left open across midnight turns over without anyone touching it */
   setInterval(function () {
     if (document.visibilityState !== 'visible') return;
