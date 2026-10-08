@@ -106,17 +106,114 @@
     el.title = SYNC_NOTE[lv][0];
     el.setAttribute('aria-label', SYNC_NOTE[lv][0]);
   }
+  /* when each part last agreed with the repo, for the panel below */
+  var seenAt = {};
   window.__rdx = {
-    mark: function (name, st) { subs[name] = st; paintSync(); }
+    mark: function (name, st) {
+      subs[name] = st;
+      if (st === 'ok') seenAt[name] = Date.now();
+      paintSync();
+      renderSheet();
+    }
   };
+
+  /* ---------- the lamp's panel ----------
+     Two devices that disagree is the question this answers: is this one connected,
+     which version of the site is it showing (and is there a newer one), and when did
+     its ticks, focus and tasks last agree with the repo. Open the same panel on the
+     other device and compare. "Refresh now" asks everything again. */
+  var PARTS = { ticks: 'Habit ticks', focus: 'Focus timer', todo: 'Tasks' };
+  var sheetEl = null;
+  var latestBuilt = '';
+  var hhmm = function (ms) { var d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); };
+  function builtText(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return '—';
+    return d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]
+      + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  var escHtml = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  function renderSheet() {
+    if (!sheetEl || sheetEl.hidden) return;
+    var lv = syncLevel();
+    var head = { off: 'This browser is not connected', ok: 'Connected — in step', warn: 'Connected, but GitHub can’t be reached', bad: 'GitHub refused this browser’s token' }[lv];
+    var note = {
+      off: 'It shows the site as last published and cannot save: ticks, focus and tasks done here stay on this device. Connect it once and it shares everything.',
+      ok: 'Ticks, focus and tasks here are shared with your other connected devices.',
+      warn: 'What you do here is kept on this device and goes up when the connection is back.',
+      bad: 'Reconnect it to keep saving. Nothing done here is lost meanwhile.'
+    }[lv];
+    var newer = latestBuilt && latestBuilt > BUILT;
+    var rows = '<dt>This page</dt><dd>' + builtText(BUILT) + '</dd>'
+      + '<dt>Site</dt><dd class="' + (newer ? 'bad' : latestBuilt ? 'ok' : '') + '">'
+      + (!latestBuilt ? 'checking…' : newer ? 'a newer version is out' : 'newest version') + '</dd>';
+    Object.keys(PARTS).forEach(function (k) {
+      if (!(k in subs)) return;
+      var st = subs[k];
+      var text = st === 'local' ? 'on this device only' : st === 'ok' ? 'in step' + (seenAt[k] ? ' · ' + hhmm(seenAt[k]) : '')
+        : st === 'offline' ? 'can’t reach GitHub' : 'token refused';
+      rows += '<dt>' + PARTS[k] + '</dt><dd class="' + (st === 'ok' ? '' : 'bad') + '">' + text + '</dd>';
+    });
+    var name = '';
+    try { name = localStorage.getItem('device_name') || ''; } catch (e) {}
+    sheetEl.innerHTML = '<h4>' + head + '</h4><p class="ssnote">' + note + '</p><dl>' + rows + '</dl>'
+      + '<div class="ssname"><input id="ssname" maxlength="24" placeholder="Name this device (e.g. Desk PC)" value="' + escHtml(name) + '">'
+      + '<button type="button" class="btn small" data-ss="name">Save</button></div>'
+      + '<div class="ssacts"><button type="button" class="btn primary" data-ss="refresh">Refresh now</button>'
+      + (lv === 'off' || lv === 'bad' ? '<a class="btn" href="/admin/#setup">Connect this browser</a>' : '') + '</div>';
+  }
+  function refreshAll() {
+    if (window.__ticksSync) window.__ticksSync(true);
+    if (window.__focusSync) window.__focusSync();
+    if (window.__todoSync) window.__todoSync();
+    fetch('/build.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        latestBuilt = j.built || latestBuilt;
+        if (j.built && j.built > BUILT) {
+          var go = function () { location.reload(); };
+          fetch(location.href, { cache: 'reload' }).then(go, go);
+        } else {
+          toast('Up to date');
+          renderSheet();
+        }
+      })
+      .catch(function () { toast('Can’t reach the site right now', 'err'); });
+  }
   (function () {
     var el = document.getElementById('syncdot');
     if (!el) return;
     paintSync();
-    el.addEventListener('click', function () {
-      var n = SYNC_NOTE[syncLevel()];
-      toast(n[0], n[1] ? 'err' : '', 6000, n[1] || undefined);
+    sheetEl = document.createElement('div');
+    sheetEl.className = 'syncsheet';
+    sheetEl.id = 'syncsheet';
+    sheetEl.hidden = true;
+    sheetEl.setAttribute('role', 'dialog');
+    sheetEl.setAttribute('aria-label', 'Connection');
+    document.body.appendChild(sheetEl);
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      sheetEl.hidden = !sheetEl.hidden;
+      if (!sheetEl.hidden) { renderSheet(); freshCheck(true); }
     });
+    sheetEl.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var b = e.target.closest('[data-ss]');
+      if (!b) return;
+      if (b.dataset.ss === 'refresh') refreshAll();
+      if (b.dataset.ss === 'name') {
+        var v = (document.getElementById('ssname').value || '').trim().slice(0, 24);
+        try { if (v) localStorage.setItem('device_name', v); else localStorage.removeItem('device_name'); } catch (err) {}
+        toast(v ? 'This device is “' + v + '” now' : 'Name cleared');
+      }
+    });
+    document.addEventListener('click', function () { if (!sheetEl.hidden) sheetEl.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') sheetEl.hidden = true; });
+  })();
+  /* the version in the footer too, so two screens can be compared at a glance */
+  (function () {
+    var ba = document.getElementById('builtat');
+    if (ba && BUILT) ba.textContent = 'This version of the site: ' + builtText(BUILT);
   })();
 
   /* ---------- is this page stale? ----------
@@ -132,7 +229,7 @@
   });
 
   function busy() {
-    if (Date.now() - lastTouch < 20000) return true;           // touched it a moment ago
+    if (Date.now() - lastTouch < 8000) return true;            // touched it a moment ago
     try {
       /* never pull the page out from under a focus block: running, paused, or ringing
          (a block that has just ended has no stored run, but its prompt is on screen) */
@@ -151,10 +248,10 @@
     return false;
   }
 
-  function refreshNow() {
+  function refreshNow(asked) {
     var last = 0;
     try { last = +sessionStorage.getItem('fresh_at') || 0; } catch (e) {}
-    if (Date.now() - last < 25000) return;                      // never loop
+    if (!asked && Date.now() - last < 25000) return;            // never loop (unless he asked)
     try { sessionStorage.setItem('fresh_at', String(Date.now())); } catch (e) {}
     var go = function () { location.reload(); };
     /* cache:'reload' refreshes the browser's copy of this page first, so the
@@ -162,6 +259,20 @@
     fetch(location.href, { cache: 'reload' }).then(go, go);
   }
 
+  /* While he is in the middle of something the page is not pulled away; a button says a
+     newer version is ready, and STAYS until tapped -- a toast that vanished after a few
+     seconds was how two devices went on disagreeing. The next look reloads it anyway
+     once the page has been left alone for a few seconds. */
+  var pill = null;
+  function showPill() {
+    if (pill) return;
+    pill = document.createElement('a');
+    pill.href = '#';
+    pill.className = 'toast show act freshpill';
+    pill.textContent = 'A newer version is ready — tap to refresh';
+    pill.addEventListener('click', function (e) { e.preventDefault(); refreshNow(true); });
+    document.body.appendChild(pill);
+  }
   function freshCheck(force) {
     if (!BUILT) return;
     var now = Date.now();
@@ -170,8 +281,10 @@
     fetch('/build.json?t=' + now, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
+        if (j && j.built) latestBuilt = j.built;
+        renderSheet();
         if (!j || !j.built || j.built <= BUILT) return;
-        if (busy()) toast('A newer version is ready — tap to refresh', '', 12000, refreshNow);
+        if (busy()) showPill();
         else refreshNow();
       })
       .catch(function () { /* offline: what is on screen stands */ });

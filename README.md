@@ -12,7 +12,7 @@ Live at **https://shyameet.github.io**
 |---|---|
 | **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's tasks, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
-| **Tasks** (`/tasks/`) | What has to be done: say it or type it ("call the bank at 5 pm tomorrow"), tick it, push it later. A time gives it a bell, and it nudges until it is done. The same short list sits on Today |
+| **Tasks** (`/tasks/`) | What has to be done, as Today · Upcoming · Done: say it or type it ("call the bank at 5 pm tomorrow", "gym every weekday at 7"), tick it, open it to change it. A time gives it a bell that nudges until it is done — and, with phone alerts on, a notification on the phone even with the site closed. The same short list sits on Today |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
 | **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
 | **Shloka** (`/shloka/`) | Every verse in the collection, searchable, with a chip per scripture |
@@ -122,29 +122,42 @@ refuses the plain `Notification` constructor). It has no fetch handler and cache
 Habits are the routine that repeats; **Tasks** are the things that have to happen once —
 `/tasks/`, and a short list under the week strip on Today. (`src/todo.js`.)
 
-- **Adding.** Type or dictate. *"call the bank at 5 pm tomorrow"* becomes the task *Call the
-  bank*, tomorrow, 17:00 — and what was understood is shown before it is added, so a wrong
-  guess is one tap to fix. It understands today / tomorrow / weekdays / `on the 15th` /
-  `15 october`, `at 5`, `5:30 pm`, `17:30`, `noon`, `in 20 minutes`, `2 hours from now`,
-  `tomorrow morning`, `tonight`. A bare "at 5" is the next 5 o'clock today, and on another
-  day a morning from 7 and an afternoon before. Anything it does not understand stays in
-  the words of the task. There is no repeat option — repeating things are Habits.
-- **Overdue** things sit on top in red, and wait there. *Move all to today* clears the
-  times that have gone. Tap a task's words to edit it, push it ten minutes, an hour or to
-  tomorrow, or delete it (with an undo). Done tasks stay a week under *Done this week*.
-- **Reminders** — a task with a time rings at that time: the temple bell, a banner with
-  *Done · 10 min · 1 hour · Tomorrow*, a notification with buttons, a vibration. If it is
-  still open it nudges again every 30 minutes (15 / 30 / 60 / never) for four hours. At
-  20:00 an *evening check-in* names whatever is still open and offers to move it to
-  tomorrow. Quiet hours (23:00–06:30) hold back the nudges and the check-in — a time you
-  set always rings, even at 05:30. Ringing is per device (`todo_prefs_v1`).
-- **What a reminder cannot do.** It rings while the site is open — a tab, or the Home
-  Screen app. A web page cannot wake a closed phone; only a server can, and this site has
-  none. So the page *catches up the moment it is opened* (a task that came due while it was
-  closed rings once, then nudges on its schedule — never more than once per nudge interval,
-  however many pages are opened), but for something that must not be missed, the phone's own
-  Reminders are the safety net. Closed-phone reminders would need a push service (ntfy.sh
-  is the one that fits) — not set up.
+- **The page.** An add box (words, a mic, *Add*), then *Today · Tomorrow* chips and real
+  **Day / Time / Repeat** boxes — real inputs, so a mouse opens their pickers on a desk
+  (`showPicker()` on click; the first version hid the inputs under the chips, and on a desk
+  Chrome only opens a picker from its little icon, so clicking a chip did nothing). Below,
+  three views: **Today** (overdue on top, in red), **Upcoming** (by day), **Done** (two weeks).
+  Tap a task to open it in a sheet: change the words, day, time or repeat, push it on
+  10 min / 1 hour / tomorrow, tick it, delete it (with an undo).
+- **Adding by saying it.** *"call the bank at 5 pm tomorrow"* becomes *Call the bank*,
+  tomorrow, 17:00, and what was understood is shown before it is added. It understands today /
+  tomorrow / weekdays / `on the 15th` / `15 october`, `at 5`, `5:30 pm`, `17:30`, `noon`,
+  `in 20 minutes`, `2 hours from now`, `tomorrow morning`, `tonight`, and repeats: `every day`,
+  `daily`, `every weekday`, `every monday`, `weekly`, `monthly`, `every evening`. A bare
+  "at 5" is the next 5 o'clock today; on another day, or for something that repeats, 7–11 is
+  the morning and 1–6 the afternoon. What it does not understand stays in the words.
+- **Repeating tasks** (every day / weekdays / every week / every month). Ticking one keeps a
+  finished copy under Done and moves the task to its next day, time and all (a missed day is
+  not piled up: the next day is counted from today). The toast has an undo. Habits are still
+  the place for the fixed daily routine; a repeating task is for anything else that comes round.
+- **Reminders in the page** — a task with a time rings at that time: the temple bell, a
+  banner with *Done · 10 min · 1 hour · Tomorrow*, a browser notification, a vibration. Still
+  open, it nudges every 30 minutes (15 / 30 / 60 / never) for four hours. At 20:00 an *evening
+  check-in* names what is still open and offers to move it to tomorrow. Quiet hours
+  (23:00–06:30) hold back the nudges and the check-in — a time you set always rings. These
+  ring while the site is open (a tab, or the Home Screen app), and catch up the moment it is
+  opened. Per device (`todo_prefs_v1`).
+- **Phone alerts** (Reminders → *Phone alerts, even with the site closed*; off until turned
+  on). A web page cannot wake a closed phone, so each open task with a time, due within three
+  days, is scheduled with **ntfy** (ntfy.sh, a free relay; the ntfy app on the phone shows it,
+  closed or not): one message at the time, one 30 minutes later, each with a sequence id
+  `<task>-a` / `<task>-b` — editing the task REPLACES them, ticking or deleting it DELETES
+  them — plus the evening check-in as `ck-<date>`. He installs ntfy and subscribes to the
+  topic shown (random, kept with the list; *Copy*, and on Android a one-tap `ntfy://` link),
+  then *Send a test*. Any connected device does the scheduling; what is on the phone is
+  written into the task (`ps` = the version sent or `-` for taken back, `pt` = when — merged
+  by its own time, not by `mod`), so another device neither sends it again nor undoes a
+  take-back. ntfy.sh allows 250 messages a day; a busy day uses a few dozen.
 - **Where the list is kept.** `todos.json` on the `sync` branch (the one the focus timer
   uses), **not** in `content/` — so a tick does not rebuild the site and the list is not
   part of any published page. It is still a file in a public repo, so a task is public:
@@ -250,6 +263,11 @@ app separately (it has its own storage) — is connected **once**, from Write �
   cannot save. It says so: the lamp in the header is grey (green = connected and in step,
   amber = cannot reach GitHub, red = the token was refused), and the Focus page spells it out.
   This is the usual reason two devices disagree.
+- **Tap the lamp** for the panel that answers "why do these two screens differ?": whether this
+  browser is connected, which version of the site this page is (and whether a newer one is
+  out), when its habit ticks, focus and tasks last agreed with the repo, *Refresh now*, and a
+  box to name the device (two Windows PCs were both "Windows PC" on the shared timer). The
+  footer carries the page's version too, so two screens can be compared at a glance.
 
 To connect another device, Write → ⚙ → *Copy connect link* on one that is already connected,
 and open the link on the new one (or paste it into the token box — that is how a Home Screen
@@ -263,8 +281,11 @@ A static site is only as fresh as its last build, and a phone resumed in the mor
 still showing last night's HTML. So:
 
 - **`/build.json`** (never cached) says when the live build was made and what today is.
-  Every page carries its own build time; if the live one is newer the page reloads itself
-  (or, if you are mid-sentence or a focus block is running, offers a tap-to-refresh).
+  Every page carries its own build time; if the live one is newer the page reloads itself —
+  or, if it was touched in the last 8 seconds, something is being typed, a reminder is ringing
+  or a focus block is running, shows a *tap to refresh* button that STAYS until tapped (it used
+  to be a toast that vanished after 12 seconds, so a page in use could go on showing an old
+  build) and reloads by itself once it is left alone.
 - **Two panels on Today.** The page holds today *and* tomorrow and shows the one that
   matches the device's date, so the day turns over the moment the clock does.
 - **CSS and JS are content-hashed** (`?v=…`), so a new deploy can never be paired with an
@@ -384,7 +405,8 @@ src/style.css           all the styling
 src/app.js              theme, freshness, day rollover, tappable tasks, search, the verse
                         library, the greeting and the festival countdown
 src/focus.js            the timer, and the live focus total (as lamps)
-src/todo.js             the task list, the spoken-phrase parser and the reminders
+src/todo.js             the task list, the spoken-phrase parser, repeats, the reminders and
+                        phone alerts (ntfy)
 src/sw.js               notifications for the timer and the tasks
 src/art/*.svg           the medallions (made by src/make_art.py)
 public/art/ornaments/   the toran, rangoli and lotus (made by src/make_ornaments.py)

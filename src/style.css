@@ -915,26 +915,25 @@ footer.site .lotus { display: block; margin: 0 auto 8px; width: 44px; height: au
 .trow.late .tick { border-color: color-mix(in srgb, var(--miss) 70%, var(--line-2)); }
 .tbody {
   flex: 1; min-width: 0; display: block; padding: 0; border: 0; background: none; text-align: left;
-  font: inherit; color: inherit;
+  font: inherit; color: inherit; text-decoration: none; cursor: pointer;
 }
-button.tbody { cursor: pointer; }
+.tbody:hover .ttitle { color: var(--accent); }
 .ttitle { display: block; font-size: 16.5px; line-height: 1.35; overflow-wrap: anywhere; }
-.tmeta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tmeta .tm { color: var(--accent); font-weight: 700; }
 .tmeta .tlate { color: var(--miss); font-weight: 700; }
+.tmeta .trep { display: inline-flex; align-items: center; gap: 3px; }
+.tmeta .trep svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .trow.done .ttitle { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 55%, transparent); }
 .trow.ringing { background: var(--accent-soft); }
 .tmore { padding: 8px 4px 2px; font-size: 13.5px; font-weight: 700; }
 .tmore a { text-decoration: none; }
 .tempty { margin: 4px 0 2px; }
 .tday { margin: 14px 4px 2px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.tday:first-of-type { margin-top: 4px; }
+.todolist .tday:first-of-type { margin-top: 2px; }
 .todolist.lates { border-color: color-mix(in srgb, var(--miss) 45%, var(--line)); }
 .todolist.lates .cardhead h3 { color: var(--miss); }
 .tbulk { margin-top: 8px; }
-.tdone > summary { list-style: none; cursor: pointer; margin: 0; }
-.tdone > summary::-webkit-details-marker { display: none; }
-.tdone[open] > summary { margin-bottom: 6px; }
 .count.met { color: var(--done); }
 
 /* the short list on Today */
@@ -949,10 +948,11 @@ button.tbody { cursor: pointer; }
 .todolocal { margin: 10px 2px 0; }
 .todolocal a { font-weight: 700; }
 
-/* adding one */
+/* adding one: the words on one line, when on the next */
 .todoadd { padding: 14px; }
 .todoin { display: flex; gap: 8px; align-items: center; }
 .todoin input { font-size: 17px; padding: 13px 16px; }
+.todoin .btn { flex: none; padding: 13px 20px; }
 .micbtn {
   flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; padding: 0;
   border: 1.5px solid var(--line-2); background: transparent; color: var(--muted); cursor: pointer;
@@ -960,33 +960,81 @@ button.tbody { cursor: pointer; }
 .micbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .micbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; animation: listen 1.3s ease-in-out infinite; }
 @keyframes listen { 0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); } 50% { box-shadow: 0 0 0 9px var(--accent-soft); } }
-.tchips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.twhen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .tchip {
-  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 6px;
   font: 700 14px/1 var(--sans); padding: 10px 14px; border-radius: 99px; cursor: pointer;
   border: 1.5px solid var(--line-2); background: transparent; color: var(--ink-2);
 }
 .tchip[data-on="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.tchip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+/* a real date / time / repeat box, with its name in small capitals above */
+.tfield {
+  position: relative; display: inline-flex; flex-direction: column; gap: 1px;
+  padding: 5px 12px 6px; border-radius: 14px; border: 1.5px solid var(--line-2); background: var(--bg);
+}
+.tfield:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tfield > span { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tfield input, .tfield select {
+  font: 600 15px var(--sans); color: var(--ink); background: transparent; border: 0; padding: 0; margin: 0;
+  min-width: 0; outline: none; cursor: pointer; color-scheme: inherit;
+}
+.tfield input[type="date"] { width: 9.4rem; }
+.tfield input[type="time"] { width: 7.6rem; }
+.tfield .tclear { position: absolute; right: 4px; top: 4px; padding: 0 6px; font-size: 18px; }
 .tclear { border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 4px 8px; cursor: pointer; border-radius: 8px; }
 .tclear:hover { color: var(--miss); background: var(--miss-soft); }
 .tparsed { margin: 10px 2px 0; font-size: 13.5px; color: var(--ink-2); }
 .tparsed b { color: var(--accent); }
-.tsubmit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
-.tsubmit .fnote { margin: 0; flex: 1; min-width: 0; min-height: 0; }
+.todoadd .fnote { margin: 8px 2px 0; min-height: 0; }
+.todoadd .fnote:empty { display: none; }
 
-/* changing one */
-.trow.editing { display: block; padding: 8px 0 12px; }
-.tedit .tx {
-  width: 100%; font: 500 17px var(--sans); padding: 12px 14px; border-radius: 12px;
-  border: 1.5px solid var(--accent); background: var(--bg); color: var(--ink); box-shadow: 0 0 0 3px var(--accent-soft);
+/* Today / Upcoming / Done */
+.tviews {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 16px 0 4px; padding: 4px;
+  border-radius: 14px; background: var(--surface-2);
 }
-.tedit .tx:focus { outline: none; }
-.tedit .tchips { margin-top: 10px; }
-.tactions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.tactions .btn { padding: 10px 14px; font-size: 14px; }
+.tviews button {
+  font: 700 14px/1 var(--sans); padding: 10px 6px; border: 0; border-radius: 10px; cursor: pointer;
+  background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.tviews button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.tviews b { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tviews b:empty { display: none; }
+.tviews button.haslate b { color: #fff; background: var(--miss); border-radius: 99px; padding: 2px 7px; font-size: 12px; }
+.tsoundhint { margin: 8px 4px 0; }
 
-/* the reminder settings */
+/* one task, opened: a sheet from the bottom on a phone, a dialog on a desk */
+.tsheet {
+  width: min(32rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; border: 1px solid var(--line);
+  border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .55);
+}
+.tsheet::backdrop { background: rgba(20, 14, 6, .45); }
+.tsheet form { padding: 16px 18px 18px; }
+.sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sheethead h3 { margin: 0; font-size: 17px; }
+.tsheet .tx {
+  width: 100%; font: 500 17px var(--sans); padding: 12px 14px; border-radius: 12px;
+  border: 1.5px solid var(--line-2); background: var(--bg); color: var(--ink);
+}
+.tsheet .tx:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tsheet #esmeta { margin: 10px 2px 0; }
+.tsheet #esmeta:empty { display: none; }
+.tquick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.tquick .btn, .sheetfoot .btn { padding: 10px 14px; font-size: 14px; }
+.sheetfoot { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.sheetfoot .grow { flex: 1; }
+.btn.danger { color: var(--miss); border-color: color-mix(in srgb, var(--miss) 40%, var(--line-2)); }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+@media (max-width: 559px) {
+  .tsheet { width: 100%; max-width: none; margin: auto 0 0; border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* the reminder settings, folded */
+.todoset > summary { list-style: none; cursor: pointer; margin: 0; }
+.todoset > summary::-webkit-details-marker { display: none; }
+.todoset > summary h3::after { content: " ▾"; color: var(--muted); font-size: 13px; }
+.todoset[open] > summary { margin-bottom: 8px; }
+.todoset[open] > summary h3::after { content: " ▴"; }
 .todoset .switch { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 15px; cursor: pointer; }
 .todoset .switch input:checked { background: var(--accent); }
 .setrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 4px 0; font-size: 15px; }
@@ -996,6 +1044,14 @@ button.tbody { cursor: pointer; }
 }
 .setrow input[type="time"] { width: 7.4rem; min-width: 0; }
 .quietat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.tpush { margin: 14px 0 6px; padding: 14px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.tpush h4 { margin: 0 0 6px; font-size: 15px; }
+.tpush p { margin: 0 0 8px; }
+.tpushstate { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.tpush[data-state="on"] .tpushstate { color: var(--done); }
+.tpushsteps { margin: 8px 0 12px; padding-left: 20px; font-size: 14px; line-height: 1.7; }
+.tpushsteps code { font-size: 13.5px; padding: 2px 6px; border-radius: 6px; background: var(--surface-2); user-select: all; }
+.tpush[data-state="new"] .tpushsteps, .tpush[data-state="nolink"] .tpushsteps, .tpush[data-state="nolink"] #tpushon { display: none; }
 .todonote { margin: 0 0 12px; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; color: var(--ink-2); background: var(--accent-soft); }
 .todonote.warn { background: var(--miss-soft); }
 .todonote a { font-weight: 700; }
@@ -1025,3 +1081,24 @@ button.tbody { cursor: pointer; }
 .taacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .taacts .btn { padding: 11px 16px; font-size: 14.5px; }
 .tamore { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+/* the lamp's panel: is this device connected, which version is it on, when did each
+   part last agree with the repo */
+.syncsheet {
+  position: fixed; z-index: 60; top: calc(58px + env(safe-area-inset-top)); right: 12px; width: min(22rem, calc(100vw - 24px));
+  padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 24px 50px -18px rgba(0, 0, 0, .5); font-size: 14px;
+}
+.syncsheet h4 { margin: 0 0 4px; font-size: 15px; }
+.syncsheet .ssnote { margin: 0 0 10px; color: var(--ink-2); line-height: 1.45; }
+.syncsheet dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
+.syncsheet dt { color: var(--muted); }
+.syncsheet dd { margin: 0; font-variant-numeric: tabular-nums; }
+.syncsheet dd.bad { color: var(--miss); font-weight: 700; }
+.syncsheet dd.ok { color: var(--done); font-weight: 700; }
+.syncsheet .ssacts { display: flex; flex-wrap: wrap; gap: 8px; }
+.syncsheet .ssacts .btn { padding: 9px 14px; font-size: 14px; }
+.syncsheet .ssname { display: flex; gap: 6px; margin: 0 0 10px; }
+.syncsheet .ssname input { flex: 1; min-width: 0; font: 500 14px var(--sans); padding: 7px 10px; border-radius: 10px; border: 1.5px solid var(--line-2); background: var(--bg); color: var(--ink); }
+footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
+.freshpill { pointer-events: auto; }

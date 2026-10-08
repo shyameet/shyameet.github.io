@@ -104,6 +104,9 @@
 
   /* what to call this device when another one shows the block */
   var DEV = (function () {
+    /* a name he gave this device (the lamp's panel), else one guessed from the browser --
+       two Windows PCs would otherwise both be "Windows PC" */
+    try { var named = localStorage.getItem('device_name'); if (named) return named; } catch (e) {}
     var ua = navigator.userAgent || '';
     var touch = navigator.maxTouchPoints > 1;
     var kind = /iPhone/.test(ua) ? 'iPhone'
