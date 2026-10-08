@@ -180,7 +180,7 @@ const BUILT = new Date().toISOString();
    HTML that uses them can change on every deploy. Keyed by content, so a changed
    file is a new URL and old CSS can never meet new markup. */
 const ASSET_V = crypto.createHash('sha1')
-  .update(['style.css', 'app.js', 'focus.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
+  .update(['style.css', 'app.js', 'focus.js', 'todo.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
   .digest('hex').slice(0, 8);
 
 /* ---------- tasks ----------
@@ -393,6 +393,7 @@ function ring(pct, size, stroke, cls = '') {
 const ICON = {
   today: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.3M12 19.1v2.3M2.6 12h2.3M19.1 12h2.3M5.4 5.4 7 7M17 17l1.6 1.6M5.4 18.6 7 17M17 7l1.6-1.6"/></svg>',
   habits: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3.6"/><circle cx="17" cy="7" r="3.6"/><circle cx="7" cy="17" r="3.6"/><path d="m14.2 17.1 2 2 3.8-4.3"/></svg>',
+  tasks: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.8 6.3 1.6 1.6 2.9-3.2"/><path d="M11.5 6.6h8.7"/><path d="m3.8 12.8 1.6 1.6 2.9-3.2"/><path d="M11.5 13.1h8.7"/><rect x="3.9" y="16.7" width="4.5" height="4.5" rx="1.3"/><path d="M11.5 19.4h8.7"/></svg>',
   focus: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.4" r="7.6"/><path d="M12 13.4V9.2M9.6 2.8h4.8M12 2.8v2.9M18.3 6.3l1.4-1.4"/></svg>',
   journal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.2 4.6c0-.9.7-1.6 1.6-1.6h12v15H6.8c-.9 0-1.6.7-1.6 1.6z"/><path d="M5.2 19.6c0 .9.7 1.4 1.6 1.4h12"/><path d="M9 7.6h6M9 10.6h4"/></svg>',
   write: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11.4" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0M12 17.6v3.6M9 21.2h6"/></svg>',
@@ -403,6 +404,7 @@ const ICON = {
 const NAV = [
   ['today', '/', 'Today'],
   ['habits', '/habits/', 'Habits'],
+  ['tasks', '/tasks/', 'Tasks'],
   ['focus', '/focus/', 'Focus'],
   ['journal', '/journal/', 'Journal'],
   ['write', '/admin/', 'Write'],
@@ -432,6 +434,10 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<meta name="theme-color" content="#11121b" media="(prefers-color-scheme: dark)">\n'
     + '<meta name="built" content="' + BUILT + '">\n'
     + '<meta name="site-today" content="' + TODAY + '">\n'
+    /* where the list of tasks lives (todo.js reads it on every page, to ring on any) */
+    + '<meta name="repo" content="' + esc(CFG.repo) + '">\n'
+    + '<meta name="branch" content="' + esc(CFG.branch) + '">\n'
+    + '<meta name="sync-branch" content="' + esc(CFG.syncBranch || 'sync') + '">\n'
     + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
@@ -462,6 +468,8 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<nav class="tabbar" aria-label="Main">' + links(true) + '</nav>\n'
     + '<div id="toast" class="toast" role="status" aria-live="polite"></div>\n'
     + '<script src="/app.js?v=' + ASSET_V + '" defer></script>\n'
+    /* the reminders ring on whatever page is open, so this is on every page */
+    + '<script src="/todo.js?v=' + ASSET_V + '" defer></script>\n'
     + scripts.map((s) => '<script src="' + s + '?v=' + ASSET_V + '" defer></script>\n').join('')
     + '</body>\n</html>\n';
 }
@@ -790,8 +798,10 @@ function focusTimeline(key) {
   const f = FOCUS.get(key);
   if (!f || !f.sec) return '';
   const blocks = f.sessions.map((s) => {
-    const p = clockParts(s.start);
-    const a = p.h * 60 + p.mi;
+    /* a block that began on an earlier day (left paused overnight) sits where it ended */
+    const p = keyOf(s.start) === key ? clockParts(s.start) : null;
+    const e = clockParts(s.end || s.start);
+    const a = p ? p.h * 60 + p.mi : Math.max(0, (e.h * 60 + e.mi) - Number(s.sec) / 60);
     const w = Math.max(Number(s.sec) / 60, 4);
     return '<i style="left:' + (a / 14.4).toFixed(2) + '%;width:' + (w / 14.4).toFixed(2) + '%" title="'
       + esc(hhmm(s.start) + ' · ' + fmtDur(s.sec)) + '"></i>';
@@ -848,6 +858,20 @@ const focusEmbed = () => '<script type="application/json" id="focusdata">' + inl
    the clock does -- right date, right deity, right day's habits -- instead of
    showing yesterday as "Today" until the next deploy lands. app.js does the
    switching (showPanel); with no JS the first panel simply shows. */
+/* The to-do list for a day, short: what is open, a tick for each, a box to add. Empty
+   here -- todo.js fills it from the list it keeps (the list is not in the build, so a
+   tick does not rebuild the site). */
+const todoCard = (k) => '<section class="card todocard" data-todo-card data-todo-day="' + k + '">\n'
+  + '  <div class="cardhead"><h3><a href="/tasks/">Tasks</a></h3><span class="count" data-todo-count></span></div>\n'
+  + '  <ul class="tlist" data-todo-list></ul>\n'
+  + '  <p class="muted small tempty" data-todo-empty></p>\n'
+  + '  <form class="todoquick" data-todo-form autocomplete="off">'
+  + '<input type="text" maxlength="200" placeholder="Add a task…" aria-label="Add a task" enterkeyhint="done">'
+  + '<button class="btn" type="submit">Add</button></form>\n'
+  /* filled in by todo.js, for a browser that is not connected (the link opens the editor's Setup tab) */
+  + '  <p class="muted small todolocal" data-todo-local hidden></p>\n'
+  + '</section>';
+
 function todayPanel(k) {
   const page = dayPageFor(k);
   const week = weekPageFor(k);
@@ -862,6 +886,7 @@ function todayPanel(k) {
     + '  ' + medal(k) + '\n'
     + '</section>\n'
     + weekStrip(k) + '\n'
+    + todoCard(k) + '\n'
     + (page
       ? taskCard(page, 'Today', { link: false, cls: 'today' })
       : '<section class="card"><p class="muted">No daily routine is set up yet. It lives in site.config.json.</p></section>')
@@ -896,6 +921,54 @@ write('habits/index.html', shell({
     + '<p class="legend"><i class="yes"></i> done <i class="no"></i> missed <i class="off"></i> not tracked</p></section>\n'
     + '<div class="rowhead"><h2>Every day</h2><span><a href="/s/weektasks/">Week lists</a> · <a href="/s/daytasks/">All days →</a></span></div>\n'
     + '<div class="stack">' + (bySection.daytasks || []).slice(0, 7).map((p) => taskCard(p, fullDate(p.iso))).join('\n') + '</div>',
+}));
+
+/* ---------- tasks ----------
+   The page is the shell; todo.js draws the lists into #tlists. The list itself is not
+   built in: it lives in the repo on the sync branch (see todo.js), so the page is the
+   same on every deploy and a tick never rebuilds the site. */
+write('tasks/index.html', shell({
+  title: 'Tasks', canonical: '/tasks/', nav: 'tasks', cls: 'taskspage',
+  desc: 'What has to be done, with a bell for what cannot slip.',
+  body: '<div class="pagehead">' + titled('Tasks', 'काम')
+    + '<p class="muted">Say it or type it. Give it a time and it rings until you tick it.</p></div>\n'
+    + '<div id="todoapp" class="todoapp" data-lang="' + esc(CFG.speechLang || 'en-IN') + '">\n'
+    + '<div class="todonote" id="tstatus" hidden></div>\n'
+    + '<section class="card todoadd">\n'
+    + '  <form id="tform" autocomplete="off">\n'
+    + '    <div class="todoin"><input id="ttext" type="text" maxlength="200" placeholder="Call the bank at 5 pm tomorrow…" aria-label="New task" enterkeyhint="done" autocapitalize="sentences">'
+    + '<button type="button" class="micbtn" id="tmic" aria-label="Say a task" aria-pressed="false" hidden>' + ICON.write + '</button></div>\n'
+    + '    <div class="tchips" id="twhen">\n'
+    + '      <button type="button" class="tchip" data-pick="today" data-on="true" aria-pressed="true">Today</button>\n'
+    + '      <button type="button" class="tchip" data-pick="tomorrow" data-on="false" aria-pressed="false">Tomorrow</button>\n'
+    + '      <label class="tchip" id="tpickday" data-on="false"><span id="tdaytext">Pick a day</span><input type="date" id="tdate" aria-label="Pick a day"></label>\n'
+    + '      <label class="tchip" id="tpicktime" data-on="false"><span id="ttimetext">Add a time</span><input type="time" id="ttime" aria-label="Time for the reminder"></label>\n'
+    + '      <button type="button" class="tclear" id="ttimeclear" aria-label="Remove the time" hidden>×</button>\n'
+    + '    </div>\n'
+    + '    <p class="tparsed" id="tparsed" hidden></p>\n'
+    + '    <div class="tsubmit"><span class="fnote" id="tnote"></span><button class="btn primary" type="submit">Add task</button></div>\n'
+    + '  </form>\n'
+    + '</section>\n'
+    + '<div id="tlists"><p class="muted small tempty">Loading your list…</p></div>\n'
+    + '<section class="card todoset">\n'
+    + '  <div class="cardhead"><h3>Reminders</h3></div>\n'
+    + '  <label class="switch"><input type="checkbox" id="tsound" checked><span>Ring a bell</span></label>\n'
+    + '  <div class="notifyrow"><span id="tnotifystate">Notifications</span><button type="button" class="btn" id="tnotify">Allow notifications</button>'
+    + '<button type="button" class="btn ghost" id="ttest">Test the alarm</button></div>\n'
+    + '  <div class="setrow"><label for="tnag">Nudge me again every</label><select id="tnag">'
+    + '<option value="0">Never</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">hour</option></select></div>\n'
+    + '  <div class="setrow"><label class="switch"><input type="checkbox" id="tcheckin"><span>Evening check-in at</span></label>'
+    + '<input type="time" id="tcheckinat" aria-label="Check-in time"></div>\n'
+    + '  <div class="setrow"><label class="switch"><input type="checkbox" id="tquiet"><span>Quiet hours</span></label>'
+    + '<span class="quietat"><input type="time" id="tquietfrom" aria-label="Quiet from"> to <input type="time" id="tquietto" aria-label="Quiet until"></span></div>\n'
+    + '  <p class="muted small">Reminders ring while this site is open — in a tab, or the Home Screen app. A web page cannot wake a closed phone, '
+    + 'so for something you must not miss, put it in the phone’s own Reminders as well. A time you set always rings; quiet hours only hold back '
+    + 'the repeat nudges and the check-in.</p>\n'
+    + '  <p class="muted small">Tasks are kept in the journal’s repo, which is public — leave anything private out of them.</p>\n'
+    + '  <p class="muted small" id="tsync"></p>\n'
+    + '</section>\n'
+    + '</div>\n'
+    + '<noscript><p class="muted">The task list needs JavaScript.</p></noscript>',
 }));
 
 /* ---------- focus ---------- */
@@ -1240,7 +1313,7 @@ write('admin/config.json', JSON.stringify({
   }).filter(Boolean),
 }));
 
-for (const f of ['style.css', 'app.js', 'focus.js', 'sw.js']) {
+for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'sw.js']) {
   fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
 }
 

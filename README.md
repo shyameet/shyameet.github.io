@@ -10,8 +10,9 @@ Live at **https://shyameet.github.io**
 
 | Page | What it is |
 |---|---|
-| **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
+| **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's tasks, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
+| **Tasks** (`/tasks/`) | What has to be done: say it or type it ("call the bank at 5 pm tomorrow"), tick it, push it later. A time gives it a bell, and it nudges until it is done. The same short list sits on Today |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
 | **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
 | **Shloka** (`/shloka/`) | Every verse in the collection, searchable, with a chip per scripture |
@@ -19,8 +20,8 @@ Live at **https://shyameet.github.io**
 | **Darshan** (`/darshan/`) | All seven deities, one per weekday |
 | **Write** (`/admin/`) | The phone editor |
 
-A phone gets a bottom tab bar (Today · Habits · Focus · Journal · Write); a desk gets the
-same links along the top.
+A phone gets a bottom tab bar (Today · Habits · Tasks · Focus · Journal · Write); a desk gets
+the same links along the top.
 
 ## The sections
 
@@ -116,6 +117,58 @@ flashing tab title. Space starts and pauses.
 `src/sw.js` is the smallest service worker that makes those notifications work (Android
 refuses the plain `Notification` constructor). It has no fetch handler and caches nothing.
 
+## Tasks
+
+Habits are the routine that repeats; **Tasks** are the things that have to happen once —
+`/tasks/`, and a short list under the week strip on Today. (`src/todo.js`.)
+
+- **Adding.** Type or dictate. *"call the bank at 5 pm tomorrow"* becomes the task *Call the
+  bank*, tomorrow, 17:00 — and what was understood is shown before it is added, so a wrong
+  guess is one tap to fix. It understands today / tomorrow / weekdays / `on the 15th` /
+  `15 october`, `at 5`, `5:30 pm`, `17:30`, `noon`, `in 20 minutes`, `2 hours from now`,
+  `tomorrow morning`, `tonight`. A bare "at 5" is the next 5 o'clock today, and on another
+  day a morning from 7 and an afternoon before. Anything it does not understand stays in
+  the words of the task. There is no repeat option — repeating things are Habits.
+- **Overdue** things sit on top in red, and wait there. *Move all to today* clears the
+  times that have gone. Tap a task's words to edit it, push it ten minutes, an hour or to
+  tomorrow, or delete it (with an undo). Done tasks stay a week under *Done this week*.
+- **Reminders** — a task with a time rings at that time: the temple bell, a banner with
+  *Done · 10 min · 1 hour · Tomorrow*, a notification with buttons, a vibration. If it is
+  still open it nudges again every 30 minutes (15 / 30 / 60 / never) for four hours. At
+  20:00 an *evening check-in* names whatever is still open and offers to move it to
+  tomorrow. Quiet hours (23:00–06:30) hold back the nudges and the check-in — a time you
+  set always rings, even at 05:30. Ringing is per device (`todo_prefs_v1`).
+- **What a reminder cannot do.** It rings while the site is open — a tab, or the Home
+  Screen app. A web page cannot wake a closed phone; only a server can, and this site has
+  none. So the page *catches up the moment it is opened* (a task that came due while it was
+  closed rings once, then nudges on its schedule — never more than once per nudge interval,
+  however many pages are opened), but for something that must not be missed, the phone's own
+  Reminders are the safety net. Closed-phone reminders would need a push service (ntfy.sh
+  is the one that fits) — not set up.
+- **Where the list is kept.** `todos.json` on the `sync` branch (the one the focus timer
+  uses), **not** in `content/` — so a tick does not rebuild the site and the list is not
+  part of any published page. It is still a file in a public repo, so a task is public:
+  nothing private belongs in one. Local storage holds it first (instant, offline), and
+  changes go up after about half a second.
+- **How devices agree.** Each task carries the time it was last changed and the later change
+  wins, task by task. A deleted task leaves a marker (a month) so the deletion reaches the
+  other devices instead of being undone by one that still had it; ticked tasks are dropped
+  after two months. A write that races another device (409/422) re-reads and merges again.
+  A page looks again every 9 seconds (30 on other pages) as a conditional read that costs
+  nothing when nothing changed. A browser that is not connected keeps its tasks on that
+  device — the page says so, the lamp is grey — and they join the shared list as soon as it
+  is connected.
+- **Ringing is decided by `plan()`** (pure, tested): the clock first (the site's time, not
+  the device's), then for each open task *due* (its time has come and this device has not
+  rung for it), *nag* (it has been ringing and a nudge interval has passed), and at the
+  check-in time *check-in*. `todo_fired_v1` remembers when this device last rang for what, so
+  opening another page does not ring again; the alarm on screen survives page changes
+  (`todo_ring_v1`) and shows in the other tabs without a second bell.
+
+`src/sw.js` carries the notification buttons for both the timer and the tasks: a button
+tapped with the site open acts on the open page; with the site closed it opens
+`/tasks/?do=done&id=…`, which does what the button said and tidies the address.
+
 ## The deities
 
 `deities` in `site.config.json` pairs each weekday with a deity and a mantra:
@@ -188,7 +241,7 @@ The site is static, so *reading* needs nothing and *saving* needs the journal to
 browser that should save — the laptop, the phone's browser, and on an iPhone the Home Screen
 app separately (it has its own storage) — is connected **once**, from Write → ⚙, and then:
 
-- ticks, the focus log and the running timer are read from and written to the repo, so every
+- ticks, the focus log, the running timer and the task list are read from and written to the repo, so every
   connected device shows the same thing: a page that stays open looks again every 20 seconds
   (habits) and every few seconds (the timer), and the moment it is woken or comes back online;
 - those looks ask GitHub "has it changed?" and are answered `304`, which does not count against
@@ -331,7 +384,8 @@ src/style.css           all the styling
 src/app.js              theme, freshness, day rollover, tappable tasks, search, the verse
                         library, the greeting and the festival countdown
 src/focus.js            the timer, and the live focus total (as lamps)
-src/sw.js               notifications for the timer
+src/todo.js             the task list, the spoken-phrase parser and the reminders
+src/sw.js               notifications for the timer and the tasks
 src/art/*.svg           the medallions (made by src/make_art.py)
 public/art/ornaments/   the toran, rangoli and lotus (made by src/make_ornaments.py)
 src/newday.mjs          makes today's and tomorrow's page (run by .github/workflows/newday.yml)

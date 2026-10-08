@@ -157,7 +157,7 @@ footer.site {
 /* a phone gets an app's bottom bar; a desk gets the links up top */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   height: calc(var(--tabbar) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
@@ -893,3 +893,135 @@ footer.site .lotus { display: block; margin: 0 auto 8px; width: 44px; height: au
   margin-left: 6px; padding: 2px 7px; border-radius: 99px; background: var(--accent);
   color: #fff; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
 }
+
+/* =========================================================================
+   Tasks: what has to be done, and a bell for what cannot slip.
+   Saffron is for what you act on, green only ever means done, red means late.
+   ========================================================================= */
+.tlist { list-style: none; margin: 0; padding: 0; }
+.trow { display: flex; align-items: flex-start; gap: 12px; padding: 11px 4px; border-radius: 12px; }
+.trow + .trow { border-top: 1px solid var(--line); }
+.tick {
+  flex: none; width: 28px; height: 28px; margin-top: 1px; padding: 0; border-radius: 50%;
+  border: 2px solid var(--line-2); background: transparent; display: grid; place-items: center; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.tick:hover { border-color: var(--done); }
+.tick[aria-checked="true"] { background: var(--done); border-color: var(--done); }
+.tick[aria-checked="true"]::after {
+  content: ""; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+.trow.late .tick { border-color: color-mix(in srgb, var(--miss) 70%, var(--line-2)); }
+.tbody {
+  flex: 1; min-width: 0; display: block; padding: 0; border: 0; background: none; text-align: left;
+  font: inherit; color: inherit;
+}
+button.tbody { cursor: pointer; }
+.ttitle { display: block; font-size: 16.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.tmeta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tmeta .tm { color: var(--accent); font-weight: 700; }
+.tmeta .tlate { color: var(--miss); font-weight: 700; }
+.trow.done .ttitle { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 55%, transparent); }
+.trow.ringing { background: var(--accent-soft); }
+.tmore { padding: 8px 4px 2px; font-size: 13.5px; font-weight: 700; }
+.tmore a { text-decoration: none; }
+.tempty { margin: 4px 0 2px; }
+.tday { margin: 14px 4px 2px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tday:first-of-type { margin-top: 4px; }
+.todolist.lates { border-color: color-mix(in srgb, var(--miss) 45%, var(--line)); }
+.todolist.lates .cardhead h3 { color: var(--miss); }
+.tbulk { margin-top: 8px; }
+.tdone > summary { list-style: none; cursor: pointer; margin: 0; }
+.tdone > summary::-webkit-details-marker { display: none; }
+.tdone[open] > summary { margin-bottom: 6px; }
+.count.met { color: var(--done); }
+
+/* the short list on Today */
+.todocard { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.todoquick { display: flex; gap: 8px; margin-top: 10px; }
+.todoquick input, .todoin input {
+  flex: 1; min-width: 0; font: 500 16px var(--sans); padding: 11px 14px; border-radius: 99px;
+  border: 1.5px solid var(--line-2); background: var(--bg); color: var(--ink);
+}
+.todoquick input:focus, .todoin input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.todoquick .btn { padding: 11px 18px; }
+.todolocal { margin: 10px 2px 0; }
+.todolocal a { font-weight: 700; }
+
+/* adding one */
+.todoadd { padding: 14px; }
+.todoin { display: flex; gap: 8px; align-items: center; }
+.todoin input { font-size: 17px; padding: 13px 16px; }
+.micbtn {
+  flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; padding: 0;
+  border: 1.5px solid var(--line-2); background: transparent; color: var(--muted); cursor: pointer;
+}
+.micbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.micbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; animation: listen 1.3s ease-in-out infinite; }
+@keyframes listen { 0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); } 50% { box-shadow: 0 0 0 9px var(--accent-soft); } }
+.tchips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.tchip {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  font: 700 14px/1 var(--sans); padding: 10px 14px; border-radius: 99px; cursor: pointer;
+  border: 1.5px solid var(--line-2); background: transparent; color: var(--ink-2);
+}
+.tchip[data-on="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tchip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+.tclear { border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 4px 8px; cursor: pointer; border-radius: 8px; }
+.tclear:hover { color: var(--miss); background: var(--miss-soft); }
+.tparsed { margin: 10px 2px 0; font-size: 13.5px; color: var(--ink-2); }
+.tparsed b { color: var(--accent); }
+.tsubmit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.tsubmit .fnote { margin: 0; flex: 1; min-width: 0; min-height: 0; }
+
+/* changing one */
+.trow.editing { display: block; padding: 8px 0 12px; }
+.tedit .tx {
+  width: 100%; font: 500 17px var(--sans); padding: 12px 14px; border-radius: 12px;
+  border: 1.5px solid var(--accent); background: var(--bg); color: var(--ink); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tedit .tx:focus { outline: none; }
+.tedit .tchips { margin-top: 10px; }
+.tactions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.tactions .btn { padding: 10px 14px; font-size: 14px; }
+
+/* the reminder settings */
+.todoset .switch { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 15px; cursor: pointer; }
+.todoset .switch input:checked { background: var(--accent); }
+.setrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 4px 0; font-size: 15px; }
+.setrow select, .setrow input[type="time"] {
+  font: 600 15px var(--sans); padding: 8px 10px; border-radius: 10px;
+  border: 1.5px solid var(--line-2); background: var(--bg); color: var(--ink);
+}
+.setrow input[type="time"] { width: 7.4rem; min-width: 0; }
+.quietat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.todonote { margin: 0 0 12px; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; color: var(--ink-2); background: var(--accent-soft); }
+.todonote.warn { background: var(--miss-soft); }
+.todonote a { font-weight: 700; }
+
+/* a reminder, on whatever page is open */
+.todoalarm {
+  position: fixed; z-index: 45; left: 12px; right: 12px; margin: 0 auto; max-width: 42rem;
+  bottom: calc(var(--tabbar) + 12px + env(safe-area-inset-bottom));
+  padding: 14px 16px; border-radius: 20px; background: var(--surface); border: 1.5px solid var(--accent);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, .55), 0 0 0 5px var(--accent-soft);
+  animation: alarmin .25s ease-out;
+}
+@keyframes alarmin { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 760px) { .todoalarm { bottom: 24px; } }
+.tahead { display: flex; align-items: flex-start; gap: 12px; }
+.tabell {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; transform-origin: 50% 10%; animation: wobble 1.2s ease-in-out 3;
+}
+.tabell svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes wobble { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); } 60% { transform: rotate(8deg); } 80% { transform: rotate(-5deg); } }
+.tatext { flex: 1; min-width: 0; }
+.tatitle { margin: 0; font-size: 17.5px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.tasub { margin: 2px 0 0; font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.taclose { flex: none; border: 0; background: none; color: var(--muted); font-size: 24px; line-height: 1; padding: 2px 8px; border-radius: 10px; cursor: pointer; }
+.taclose:hover { color: var(--ink); background: var(--surface-2); }
+.taacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.taacts .btn { padding: 11px 16px; font-size: 14.5px; }
+.tamore { margin: 10px 0 0; font-size: 13px; color: var(--muted); }

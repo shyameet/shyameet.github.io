@@ -141,6 +141,12 @@
         var fa = document.getElementById('focusapp');
         if (fa && fa.dataset.state && fa.dataset.state !== 'idle') return true;
       }
+      /* ...or out from under a reminder that is ringing, a task being typed or edited */
+      var ta = document.getElementById('todoalarm');
+      if (ta && !ta.hidden) return true;
+      var tt = document.getElementById('ttext');
+      if (tt && tt.value) return true;
+      if (document.querySelector('form.tedit')) return true;
     } catch (e) {}
     return false;
   }

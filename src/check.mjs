@@ -100,7 +100,9 @@ for (const file of fs.readdirSync(postsDir).filter((f) => f.endsWith('.md'))) {
   }
 }
 
-/* focus blocks: one file per day, ids unique, each block starting on its own day */
+/* focus blocks: one file per day, ids unique, each block touching its own day. A block
+   left paused overnight is filed under the day it was FINISHED (so it may have started
+   the day before); files from before that change filed it under the day it started. */
 const focusDir = path.join(ROOT, 'content', 'focus');
 if (fs.existsSync(focusDir)) {
   for (const f of fs.readdirSync(focusDir).filter((x) => x.endsWith('.json'))) {
@@ -111,7 +113,9 @@ if (fs.existsSync(focusDir)) {
     for (const s of d.sessions || []) {
       if (ids.has(s.id)) bad(where, 'block id ' + s.id + ' appears twice');
       ids.add(s.id);
-      if (!String(s.start || '').startsWith(f.slice(0, 10))) bad(where, 'block ' + s.id + ' starts on another day (' + s.start + ')');
+      if (![s.start, s.end].some((t) => String(t || '').startsWith(f.slice(0, 10)))) {
+        bad(where, 'block ' + s.id + ' neither starts nor ends on this day (' + s.start + ' → ' + s.end + ')');
+      }
     }
   }
 }
