@@ -400,6 +400,16 @@
     color: var(--ink); padding: 12px 14px; font-family: ui-monospace, Consolas, monospace; font-size: 16px;
   }
   #token:focus { outline: none; border-color: var(--accent); }
+  .pwbox {
+    flex: 1; min-width: 0; width: 100%; background: var(--paper); border: 1.5px solid var(--rule-2); border-radius: 12px;
+    color: var(--ink); padding: 12px 14px; font: 500 16px var(--sans);
+  }
+  .pwbox:focus { outline: none; border-color: var(--accent); }
+  #pwform .pwbox { display: block; margin: 0 0 10px; }
+  .pwstate { margin: 0 0 12px; font-size: 14.5px; font-weight: 700; color: var(--ink-2); }
+  .pwstate.on { color: var(--ok); }
+  /* with password sign-in on, the token card is the fallback: quieter */
+  #tokencard.secondary h3 { font-size: 17px; color: var(--muted); }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .diag {
     background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; margin: 8px 0 10px;
@@ -425,8 +435,8 @@
   </header>
 
   <div class="connbar" id="conn" hidden>
-    <span>Not connected yet. You can write, but publishing needs a token.</span>
-    <button type="button" id="connset">Set up</button>
+    <span>Not signed in on this browser. You can write, but publishing needs you to sign in.</span>
+    <button type="button" id="connset">Sign in</button>
   </div>
 
   <main id="main">
@@ -504,12 +514,28 @@
         </div>
       </div>
       <div id="setup-msg"></div>
-      <div class="card">
+      <!-- signing in with a password: any new browser, no token to paste -->
+      <div class="card" id="signin" hidden>
+        <h3>Sign in</h3>
+        <p class="note" id="signin-note" style="margin:0 0 4px">
+          Type your journal password. This browser can then publish, tick habits and save focus
+          blocks and tasks — the same as your other devices.
+        </p>
+        <form id="signinform" autocomplete="on">
+          <div class="tokenrow">
+            <input id="pw" class="pwbox" type="password" autocomplete="current-password" placeholder="Your journal password" aria-label="Journal password">
+            <button class="ghost" id="pwshow" type="button">Show</button>
+          </div>
+          <div class="row"><button class="primary" id="signinbtn" type="submit">Sign in</button></div>
+        </form>
+      </div>
+      <div class="card" id="tokencard">
         <h3 id="connh">Connect this browser</h3>
         <p class="note" style="margin:0 0 4px">
-          This editor talks straight to GitHub from your phone. The token is kept only in this
-          browser's local storage — never in the site's code, and never sent anywhere except
-          <code>api.github.com</code>.
+          This editor talks straight to GitHub. The token is kept in this browser's local storage
+          and never sent anywhere except <code>api.github.com</code>. If you set a sign-in password
+          (below, once connected), a copy locked with that password is kept on the site so that a
+          new device can sign in with the password alone.
         </p>
         <details id="howto" open>
           <summary>How to get a token (a minute)</summary>
@@ -528,6 +554,31 @@
           <button class="primary" id="connect" type="button">Connect</button>
           <button class="ghost danger" id="forget" type="button">Forget token</button>
         </div>
+      </div>
+      <!-- setting the password, on a browser that is connected -->
+      <div class="card" id="pwcard" hidden>
+        <h3>Sign in anywhere with a password</h3>
+        <p class="note" style="margin:0 0 8px">
+          Set a password once, here. Then on any new phone, laptop or browser: open
+          <b>Write</b>, type the password, and you are in — nothing to copy across.
+        </p>
+        <p class="pwstate" id="pwstate">Checking…</p>
+        <form id="pwform" autocomplete="off">
+          <input id="pw1" class="pwbox" type="password" autocomplete="new-password" placeholder="Password — 12 characters or more" aria-label="New password">
+          <input id="pw2" class="pwbox" type="password" autocomplete="new-password" placeholder="The same again" aria-label="Repeat the password">
+          <div class="row">
+            <button class="primary" id="pwsave" type="submit">Save password</button>
+            <button class="ghost danger" id="pwremove" type="button" hidden>Turn off password sign-in</button>
+          </div>
+        </form>
+        <p class="note small" style="margin-top:10px">
+          How it is kept: your token is locked with this password (AES-256, the key made from the
+          password with 600,000 rounds of PBKDF2) and the locked copy is published at
+          <code>/admin/vault.json</code>, so a device that is not connected yet can fetch it. Anyone
+          can download that locked copy, so the password is all that protects it — make it long:
+          three or four unrelated words work well. Change the password any time; if you make a new
+          token, save the password again so it locks the new one.
+        </p>
       </div>
       <div class="card" id="pair" hidden>
         <h3>Connect another device</h3>
@@ -751,13 +802,17 @@
     var on = connected === true;
     var has = !!getToken();
     $('bigdot').className = 'bigdot' + (on ? ' on' : (connected === false || !has ? ' off' : ''));
-    $('conntitle').textContent = on ? 'Connected' : (has && connected === null ? 'Checking…' : 'Not connected');
+    $('conntitle').textContent = on ? 'Signed in' : (has && connected === null ? 'Checking…' : 'Not signed in');
     $('connsub').textContent = on
-      ? 'This browser can publish to ' + CFG.repo + ', tick habits and save focus blocks.'
-      : 'Add a token below so this browser can publish, tick habits and save focus blocks.';
-    $('connh').textContent = on ? 'Replace or remove the token' : 'Connect this browser';
+      ? 'This browser can publish to ' + CFG.repo + ', tick habits and save focus blocks and tasks.'
+      : 'Sign in so this browser can publish, tick habits and save focus blocks and tasks.';
+    $('connh').textContent = on ? 'Replace or remove the token' : (vaultKnown === true ? 'Or connect with a token' : 'Connect with a token');
     $('connect').textContent = on ? 'Replace' : 'Connect';
     $('pair').hidden = !on;
+    $('signin').hidden = on || (has && connected === null);
+    $('pwcard').hidden = !on;
+    /* with password sign-in set up, the token is the fallback, folded away */
+    $('tokencard').classList.toggle('secondary', !on && vaultKnown === true);
     /* the notice bar: not on Setup itself, and not while a saved token is still being checked */
     $('conn').hidden = on || (has && connected === null) || tabNow === 'setup';
   }
@@ -1764,8 +1819,9 @@
   }
   var connectLink = function () { return location.origin + '/admin/#connect=' + getToken(); };
 
-  /* try a token: keep it if GitHub accepts it and it can write, drop it if not */
-  function tryToken(v, doneMsg) {
+  /* try a token: keep it if GitHub accepts it and it can write, drop it if not
+     (failMsg: what to say when it is refused, if not GitHub's own words) */
+  function tryToken(v, doneMsg, failMsg) {
     var before = getToken();
     setToken(v);
     connected = null;
@@ -1778,7 +1834,7 @@
     }).catch(function (e) {
       /* a token that does not work must not throw away one that did */
       setToken(before);
-      say($('setup-msg'), 'err', esc(e.message));
+      say($('setup-msg'), 'err', failMsg && e.status === 401 ? failMsg(e) : esc(e.message));
       if (before) checkConnection().catch(function () { setConnected(false); });
       else setConnected(false);
     });
@@ -1827,6 +1883,177 @@
   });
 
   $('connset').addEventListener('click', function () { showTab('setup'); });
+
+  /* ---------- signing in with a password ----------
+     The token never leaves GitHub's hands unprotected: on a connected browser he sets a
+     password, the token is locked with it (AES-GCM, key from PBKDF2-SHA256), and the
+     LOCKED copy is committed as public/admin/vault.json -- published with the site, so a
+     browser that has no token yet can fetch it. Typing the password there unlocks it.
+     Anyone can download the locked copy, so a long password is the whole protection;
+     600,000 rounds make each guess slow. Changing the token means saving the password
+     again (the vault holds the token it was made with). */
+  var VAULT_PATH = 'public/admin/vault.json';
+  var KDF_ITER = 600000;
+  var vaultKnown = null;                       // null = not looked yet; true / false
+  var vaultMade = '';
+  var bytesToB64 = function (buf) {
+    var b = new Uint8Array(buf), s = '';
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  };
+  var b64ToBytes = function (s) {
+    var bin = atob(String(s || ''));
+    var b = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+    return b;
+  };
+  function deriveKey(pw, salt, iter) {
+    return crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw).normalize('NFC')), 'PBKDF2', false, ['deriveKey'])
+      .then(function (base) {
+        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' },
+          base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      });
+  }
+  function lockToken(pw, token) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var made = new Date().toISOString();
+    return deriveKey(pw, salt, KDF_ITER).then(function (key) {
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(JSON.stringify({ t: token, made: made })));
+    }).then(function (ct) {
+      return { v: 1, kdf: 'PBKDF2-SHA256', iter: KDF_ITER, salt: bytesToB64(salt), iv: bytesToB64(iv), ct: bytesToB64(ct), made: made };
+    });
+  }
+  /* a wrong password fails the AES-GCM check: no partial or garbled token ever comes out */
+  function unlockToken(pw, vault) {
+    return deriveKey(pw, b64ToBytes(vault.salt), +vault.iter || KDF_ITER).then(function (key) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(vault.iv) }, key, b64ToBytes(vault.ct));
+    }).then(function (pt) { return JSON.parse(new TextDecoder().decode(pt)).t; });
+  }
+  /* the locked copy, from the site (fast) and from the repo itself (there before the
+     deploy that publishes it has finished): newest first */
+  function fetchVaults() {
+    var get = function (url) {
+      return fetch(url, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    };
+    var raw = CFG.repo ? 'https://raw.githubusercontent.com/' + CFG.repo + '/' + (CFG.branch || 'main') + '/' + VAULT_PATH + '?t=' + Date.now() : '';
+    return Promise.all([get('/admin/vault.json?t=' + Date.now()), raw ? get(raw) : null]).then(function (vs) {
+      var ok = vs.filter(function (v) { return v && v.v === 1 && v.salt && v.iv && v.ct; });
+      ok.sort(function (a, b) { return String(b.made || '').localeCompare(String(a.made || '')); });
+      /* the same vault twice is one */
+      return ok.filter(function (v, i) { return i === 0 || v.ct !== ok[i - 1].ct; });
+    });
+  }
+  function lookForVault() {
+    return fetchVaults().then(function (vs) {
+      vaultKnown = vs.length > 0;
+      vaultMade = vs.length ? vs[0].made || '' : '';
+      renderVault();
+      return vs;
+    });
+  }
+  function madeText(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.getDate() + ' ' + MON3[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  function renderVault() {
+    var st = $('pwstate');
+    st.className = 'pwstate' + (vaultKnown ? ' on' : '');
+    st.textContent = vaultKnown === null ? 'Checking…'
+      : vaultKnown ? 'Password sign-in is ON' + (vaultMade ? ' (set ' + madeText(vaultMade) + ')' : '') + '. Saving a new password replaces it.'
+        : 'Password sign-in is not set up yet.';
+    $('pwsave').textContent = vaultKnown ? 'Change password' : 'Save password';
+    $('pwremove').hidden = !vaultKnown;
+    $('signin-note').innerHTML = vaultKnown === false
+      ? 'Password sign-in is not set up yet. On a device that is already signed in, open <b>Write → ⚙</b> and set a password there — then come back here and type it. (Or connect this browser with a token below.)'
+      : 'Type your journal password. This browser can then publish, tick habits and save focus blocks and tasks — the same as your other devices.';
+    renderConn();
+  }
+
+  var SIGNED_IN = function (r) {
+    return 'Signed in to ' + esc(r.full_name) + '. This browser now shares your writing, ticks, focus blocks and tasks with your other devices. <a href="/">Back to Today →</a>';
+  };
+  $('signinform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = $('pw').value;
+    if (!pw) { say($('setup-msg'), 'err', 'Type your password.'); $('pw').focus(); return; }
+    $('signinbtn').disabled = true;
+    say($('setup-msg'), 'ok', 'Unlocking…');
+    fetchVaults().then(function (vs) {
+      vaultKnown = vs.length > 0;
+      if (!vs.length) {
+        renderVault();
+        throw new Error('Password sign-in is not set up yet. On a device that is already signed in, open Write → ⚙ and set a password.');
+      }
+      /* try the newest copy first; an older one may still be on the site for a minute */
+      var attempt = function (i) {
+        if (i >= vs.length) return Promise.reject(new Error('That password does not match. Check it and try again.'));
+        return unlockToken(pw, vs[i]).catch(function () { return attempt(i + 1); });
+      };
+      return attempt(0);
+    }).then(function (tok) {
+      $('pw').value = '';
+      return tryToken(tok, SIGNED_IN, function () {
+        return 'The password is right, but GitHub no longer accepts the token it unlocks (tokens expire). On a signed-in device: make a new token, connect it, and save the password again.';
+      });
+    }).catch(function (err) {
+      say($('setup-msg'), 'err', esc(err.message));
+    }).then(function () { $('signinbtn').disabled = false; });
+  });
+  $('pwshow').addEventListener('click', function () {
+    var show = $('pw').type === 'password';
+    $('pw').type = show ? 'text' : 'password';
+    $('pwshow').textContent = show ? 'Hide' : 'Show';
+  });
+
+  /* the vault file in the repo: its sha, so it can be replaced or removed */
+  function vaultSha() {
+    return gh('GET', '/repos/' + CFG.repo + '/contents/' + VAULT_PATH + '?ref=' + encodeURIComponent(CFG.branch || 'main'))
+      .then(function (f) { return f && f.sha; }, function (err) { if (err.status === 404) return null; throw err; });
+  }
+  $('pwform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var a = $('pw1').value, b = $('pw2').value;
+    if (a.length < 12) { say($('setup-msg'), 'err', 'Make the password at least 12 characters — three or four unrelated words are easy to remember and hard to guess.'); $('pw1').focus(); return; }
+    if (a !== b) { say($('setup-msg'), 'err', 'The two passwords are not the same.'); $('pw2').focus(); return; }
+    var tok = getToken();
+    if (!tok) { say($('setup-msg'), 'err', 'Connect this browser first.'); return; }
+    $('pwsave').disabled = true;
+    say($('setup-msg'), 'ok', 'Locking the token with your password…');
+    Promise.all([lockToken(a, tok), vaultSha()]).then(function (res) {
+      var vault = res[0], sha = res[1];
+      var body = {
+        message: 'admin: ' + (sha ? 'new sign-in password' : 'password sign-in turned on'),
+        content: b64encode(JSON.stringify(vault, null, 1) + NL),
+        branch: CFG.branch || 'main'
+      };
+      if (sha) body.sha = sha;
+      return gh('PUT', '/repos/' + CFG.repo + '/contents/' + VAULT_PATH, body).then(function () { return vault; });
+    }).then(function (vault) {
+      $('pw1').value = '';
+      $('pw2').value = '';
+      vaultKnown = true;
+      vaultMade = vault.made;
+      renderVault();
+      say($('setup-msg'), 'ok', 'Password saved. On any other device or browser, open <b>' + esc(location.host) + '/admin</b> and sign in with it (it can take a minute or two to reach the site).');
+    }).catch(function (err) {
+      say($('setup-msg'), 'err', esc(err.message));
+    }).then(function () { $('pwsave').disabled = false; });
+  });
+  $('pwremove').addEventListener('click', function () {
+    if (!confirm('Turn off password sign-in? Devices already signed in stay signed in; new ones will need a token or a connect link.')) return;
+    vaultSha().then(function (sha) {
+      if (!sha) return null;
+      return gh('DELETE', '/repos/' + CFG.repo + '/contents/' + VAULT_PATH, {
+        message: 'admin: password sign-in turned off', sha: sha, branch: CFG.branch || 'main'
+      });
+    }).then(function () {
+      vaultKnown = false;
+      vaultMade = '';
+      renderVault();
+      say($('setup-msg'), 'ok', 'Password sign-in is off. The locked copy has been removed from the site.');
+    }, function (err) { say($('setup-msg'), 'err', esc(err.message)); });
+  });
 
   /* ---------- tabs ---------- */
   function showTab(which) {
@@ -1919,10 +2146,10 @@
         tryToken(link[1], function (r) {
           return 'Connected to ' + esc(r.full_name) + '. This browser now shares your ticks, focus blocks and timer with your other devices. <a href="/">Back to Today →</a>';
         });
-      } else if (location.hash === '#setup') {
+      } else if (location.hash === '#setup' || location.hash === '#signin') {
         showTab('setup');
         if (getToken()) {
-          checkConnection(function () { return 'This browser is already connected. <a href="/">Back to Today →</a>'; })
+          checkConnection(function () { return 'This browser is already signed in. <a href="/">Back to Today →</a>'; })
             .catch(function () { setConnected(false); });
         } else { setConnected(false); }
       } else if (getToken()) {
@@ -1932,6 +2159,13 @@
         setConnected(false);
         showTab('setup');
       }
+      /* is password sign-in set up? (decides what a new browser is offered first) */
+      lookForVault().then(function () {
+        if (!getToken() && vaultKnown) {
+          $('howto').open = false;
+          try { $('pw').focus(); } catch (e) {}
+        }
+      });
     });
 })();
 </script>

@@ -1309,7 +1309,7 @@
       var loc = card.querySelector('[data-todo-local]');
       if (loc) {
         loc.hidden = syncState !== 'local';
-        if (!loc.firstChild) loc.innerHTML = 'Not connected — these stay on this device. <a href="/admin/#setup">Connect it once</a>.';
+        if (!loc.firstChild) loc.innerHTML = 'Not signed in — these stay on this device. <a href="/admin/#signin">Sign in</a>.';
       }
     });
   }
@@ -1318,9 +1318,9 @@
     var el = $('tstatus');
     if (!el) return;
     var text = {
-      local: 'This browser isn’t connected, so these tasks stay on this device only. <a href="/admin/#setup">Connect it once</a> and your list follows you to every device.',
+      local: 'This browser isn’t signed in, so these tasks stay on this device only. <a href="/admin/#signin">Sign in</a> with your journal password and your list follows you to every device.',
       offline: 'Can’t reach GitHub right now. Your changes are safe on this device and go up as soon as there is a connection.',
-      badtoken: 'GitHub rejected this browser’s token — <a href="/admin/#setup">reconnect it</a>. Your changes are safe on this device.'
+      badtoken: 'GitHub rejected this browser’s token — <a href="/admin/#signin">sign in again</a>. Your changes are safe on this device.'
     }[syncState] || '';
     el.hidden = !text;
     el.className = 'todonote' + (syncState === 'local' ? ' info' : ' warn');
@@ -1368,7 +1368,7 @@
     $('tpushtopic').textContent = store.push ? store.push.topic : '';
     $('tpushandroid').href = store.push ? 'ntfy://ntfy.sh/' + store.push.topic : '#';
     $('tpushandroid').hidden = !/Android/.test(navigator.userAgent);
-    $('tpushstate').textContent = !canSync() ? 'Connect this browser first — phone alerts are set from a connected browser.'
+    $('tpushstate').textContent = !canSync() ? 'Sign in on this browser first — phone alerts are set from a signed-in browser.'
       : on ? (pushState === 'failed' ? 'On, but ntfy.sh could not be reached just now — it will try again.' : 'On. Tasks with a time also ring on your phone, closed or not, and the evening check-in comes there too.')
         : 'Off. Reminders ring only while the site is open.';
     $('tpushon').textContent = on ? 'Turn phone alerts off' : (store.push && store.push.topic ? 'Turn phone alerts on' : 'Set up phone alerts');

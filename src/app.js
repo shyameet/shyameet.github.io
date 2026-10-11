@@ -84,10 +84,10 @@
   try { HAS_TOKEN = !!localStorage.getItem('gh_token'); } catch (e) {}
   var subs = {};
   var SYNC_NOTE = {
-    off: ['This browser isn’t connected, so it shows the site as last published and can’t save. Tap to connect it once.', '/admin/#setup'],
+    off: ['This browser isn’t signed in, so it shows the site as last published and can’t save. Tap to sign in.', '/admin/#signin'],
     ok: ['Connected — your ticks, focus blocks and timer are shared with your other devices.', ''],
     warn: ['Can’t reach GitHub right now. What you do here goes up when the connection is back.', ''],
-    bad: ['GitHub rejected this browser’s token. Tap to reconnect it.', '/admin/#setup']
+    bad: ['GitHub rejected this browser’s token. Tap to sign in again.', '/admin/#signin']
   };
   function syncLevel() {
     if (!HAS_TOKEN) return 'off';
@@ -138,7 +138,7 @@
     var lv = syncLevel();
     var head = { off: 'This browser is not connected', ok: 'Connected — in step', warn: 'Connected, but GitHub can’t be reached', bad: 'GitHub refused this browser’s token' }[lv];
     var note = {
-      off: 'It shows the site as last published and cannot save: ticks, focus and tasks done here stay on this device. Connect it once and it shares everything.',
+      off: 'It shows the site as last published and cannot save: ticks, focus and tasks done here stay on this device. Sign in with your journal password and it shares everything.',
       ok: 'Ticks, focus and tasks here are shared with your other connected devices.',
       warn: 'What you do here is kept on this device and goes up when the connection is back.',
       bad: 'Reconnect it to keep saving. Nothing done here is lost meanwhile.'
@@ -160,7 +160,7 @@
       + '<div class="ssname"><input id="ssname" maxlength="24" placeholder="Name this device (e.g. Desk PC)" value="' + escHtml(name) + '">'
       + '<button type="button" class="btn small" data-ss="name">Save</button></div>'
       + '<div class="ssacts"><button type="button" class="btn primary" data-ss="refresh">Refresh now</button>'
-      + (lv === 'off' || lv === 'bad' ? '<a class="btn" href="/admin/#setup">Connect this browser</a>' : '') + '</div>';
+      + (lv === 'off' || lv === 'bad' ? '<a class="btn" href="/admin/#signin">Sign in</a>' : '') + '</div>';
   }
   function refreshAll() {
     if (window.__ticksSync) window.__ticksSync(true);
@@ -388,7 +388,7 @@
         el.addEventListener('click', function (e) {
           e.preventDefault();
           if (tooEarly(el)) { toast('That day has not started yet'); return; }
-          toast('This browser isn’t connected — tap to connect it once', 'err', 5000, '/admin/#setup');
+          toast('This browser isn’t signed in — tap to sign in', 'err', 5000, '/admin/#signin');
         });
       });
       window.__ticksSync = function () {};

@@ -378,6 +378,27 @@ habits or save focus blocks.
 Scoped that way, a leaked token can edit this journal and nothing else. Revoke at
 <https://github.com/settings/tokens> and paste a new one — takes a minute.
 
+### Signing in anywhere with a password
+
+Pasting a token on every new device is the step that never happened, so devices stayed
+unconnected and kept their work to themselves. Instead: on a browser that is connected,
+**Write → ⚙ → Sign in anywhere with a password** (12+ characters). The token is locked
+with it — AES-256-GCM, the key from PBKDF2-SHA256 with 600,000 rounds and a random salt —
+and the locked copy is committed as `public/admin/vault.json`, so it is published at
+`/admin/vault.json`. On any new browser, the Write page opens on **Sign in**: the password
+unlocks the token (a wrong one fails the AES-GCM check; nothing half-decrypted comes out)
+and the browser is connected like the others. Until the deploy has published a new vault,
+the page also reads it straight from the repo (raw.githubusercontent.com), newest first.
+
+- The locked copy is public, so **the password is the whole protection**: long, not reused
+  (three or four unrelated words). Each guess costs 600,000 rounds, which is about 0.1 s
+  on a laptop and makes guessing a long password impractical, not impossible.
+- Change it any time (the vault is replaced); *Turn off* deletes the vault. Devices already
+  signed in stay signed in — revoke the token at GitHub to cut them off.
+- The vault holds the token it was made with: after making a new token, save the password
+  again. A password that unlocks an expired token says so.
+- The connect link (*Copy connect link*) still works as before.
+
 ## Local development
 
 ```

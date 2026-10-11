@@ -1001,11 +1001,11 @@
     var last = lastSyncAt ? '<small>Last synced ' + hm(lastSyncAt) + '.</small>' : '';
     var text = {
       local: 'This browser isn’t connected, so the timer and your blocks stay on this device only. '
-        + '<a href="/admin/#setup">Connect it once</a> and they follow you to every device.',
+        + '<a href="/admin/#signin">Sign in</a> (your journal password) and they follow you to every device.',
       ok: unsynced ? 'Saving…' : 'In sync — the timer and your blocks follow you to your other devices. ' + last,
       syncing: 'Saving…',
       offline: 'Can’t reach GitHub right now. Blocks are safe on this device and go up as soon as there is signal.',
-      badtoken: 'GitHub rejected the token — <a href="/admin/#setup">reconnect</a>. Blocks are safe on this device.'
+      badtoken: 'GitHub rejected the token — <a href="/admin/#signin">sign in again</a>. Blocks are safe on this device.'
     }[syncState] || '';
     el.innerHTML = text;
   }
