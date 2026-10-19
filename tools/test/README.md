@@ -13,6 +13,14 @@ node tools/test/test_todo.mjs
 which version of a task belongs on the phone, and what should ring when. It loads the real
 file in a VM through the `window.__todoTest` hook. Run it after any change to `todo.js`.
 
+```
+node tools/test/test_speak.mjs
+```
+
+92 checks on `src/speak.js`: the filler count (and the phrases it must not flag), words a
+minute, restarts, topic words, the tips, how two devices' takes merge, streaks, and the choice
+of a random topic. Same method as above (`window.__speakTest`).
+
 ## Several devices in one browser
 
 1. `node tools/test/fake_gh.mjs` — a fake GitHub on :4400 (contents API with real 409/422/304
@@ -34,5 +42,17 @@ Traps met in the Claude browser pane: it blocks `127.0.0.2`; it reports every ta
 into native date/time inputs (set `.value` and dispatch `input`/`change`); screenshots time
 out while the window is hidden. A race needs the other device's write to land BETWEEN the
 page's read and its write — the page waits ~600 ms before saving.
+
+The Speak page also needs a fake microphone and a second, private repo, both built in:
+`fake_gh.mjs` serves `shyameet/speech-log` too (it starts EMPTY and makes `main` on the first
+write; `GET /__speech` shows it; `POST /__noaccess?on=1` makes it answer 404 as GitHub does for
+a private repo the token cannot see; `POST /__race?n=2` makes the next two writes lose a race
+with "another device"). `mk_dev.py` copies take `say=some+words` (the words come out one by
+one, then the "browser" ends the listen, as Chrome does), `sayms=40` (ms per word),
+`norec=1` (a browser that cannot listen) and `micerr=not-allowed` (a blocked microphone):
+`python tools/test/mk_dev.py speak/index.html _t_speak.html`, then open
+`/_t_speak.html?fresh=1&say=...`. In the page, `localStorage.speak_pref_v1 =
+'{"think":3,"target":4,"mode":"topic"}'` gives a 3 s think and a 4 s talk instead of waiting a
+minute.
 
 Never point these at the real repo. `fake_gh.mjs` accepts any token.

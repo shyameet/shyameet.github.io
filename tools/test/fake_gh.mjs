@@ -26,10 +26,16 @@ import { fileURLToPath } from 'node:url';
 
 const SITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = 'shyameet/shyameet.github.io';
+/* a second, PRIVATE repository for the Speak page's takes: it starts empty, like a new repo,
+   and its main branch is made by the first write */
+const SPEECH_REPO = 'shyameet/speech-log';
 const PORT = 4400;
 
 const sha1 = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
 let branches;
+let speechBranches = {};
+let raceN = 0;          // the next n writes to the speech log lose a race with "another device"
+let noAccess = false;   // the token cannot see the private repo (GitHub answers 404 for those)
 let log;
 let failN = 0;
 let offline = false;
@@ -48,6 +54,9 @@ function seed() {
     }
   }
   branches = { main: files };
+  speechBranches = {};
+  noAccess = false;
+  raceN = 0;
   log = [];
   counter = 0;
   failN = 0; offline = false; delayMs = 0;
@@ -89,6 +98,16 @@ http.createServer(async (req, res) => {
     }
     return send(res, 200, out);
   }
+  if (p === '/__speech') {
+    const out = {};
+    for (const [b, files] of Object.entries(speechBranches)) {
+      out[b] = {};
+      for (const [k, v] of files) out[b][k] = v.buf.toString('utf8');
+    }
+    return send(res, 200, out);
+  }
+  if (p === '/__race') { raceN = +url.searchParams.get('n') || 0; return send(res, 200, { raceN }); }
+  if (p === '/__noaccess') { noAccess = url.searchParams.get('on') === '1'; return send(res, 200, { noAccess }); }
   if (p === '/__log') return send(res, 200, log);
   if (p === '/__reset') { seed(); return send(res, 200, { ok: true }); }
   if (p === '/__fail') { failN = +url.searchParams.get('n') || 0; return send(res, 200, { failN }); }
@@ -133,13 +152,17 @@ http.createServer(async (req, res) => {
   if (offline) { entry.s = 503; return send(res, 503, { message: 'offline' }); }
   if (!req.headers.authorization) { entry.s = 401; return send(res, 401, { message: 'Requires authentication' }); }
 
-  const base = '/repos/' + REPO;
-  if (p === base) { entry.s = 200; return send(res, 200, { full_name: REPO, permissions: { push: true } }); }
+  /* which repository: the journal (seeded) or the private speech log (starts empty) */
+  const isSpeech = p === '/repos/' + SPEECH_REPO || p.startsWith('/repos/' + SPEECH_REPO + '/');
+  if (isSpeech && noAccess) { entry.s = 404; return send(res, 404, { message: 'Not Found' }); }
+  const base = '/repos/' + (isSpeech ? SPEECH_REPO : REPO);
+  const store = isSpeech ? speechBranches : branches;
+  if (p === base) { entry.s = 200; return send(res, 200, { full_name: isSpeech ? SPEECH_REPO : REPO, permissions: { push: true } }); }
 
   /* git refs */
   let m = p.match(new RegExp('^' + base + '/git/ref/heads/(.+)$'));
   if (m && req.method === 'GET') {
-    const b = branches[m[1]];
+    const b = store[m[1]];
     if (!b) { entry.s = 404; return send(res, 404, { message: 'Not Found' }); }
     entry.s = 200;
     return send(res, 200, { ref: 'refs/heads/' + m[1], object: { sha: sha1(m[1] + counter) } });
@@ -147,8 +170,8 @@ http.createServer(async (req, res) => {
   if (p === base + '/git/refs' && req.method === 'POST') {
     const body = await readBody(req);
     const name = String(body.ref || '').replace('refs/heads/', '');
-    if (!name || branches[name]) { entry.s = 422; return send(res, 422, { message: 'Reference already exists' }); }
-    branches[name] = new Map([...branches.main].map(([k, v]) => [k, { ...v }]));
+    if (!name || store[name]) { entry.s = 422; return send(res, 422, { message: 'Reference already exists' }); }
+    store[name] = new Map([...(store.main || new Map())].map(([k, v]) => [k, { ...v }]));
     entry.s = 201;
     return send(res, 201, { ref: 'refs/heads/' + name });
   }
@@ -159,7 +182,7 @@ http.createServer(async (req, res) => {
     const file = m[1];
     const branch = url.searchParams.get('ref') || 'main';
     if (req.method === 'GET') {
-      const files = branches[branch];
+      const files = store[branch];
       if (!files) { entry.s = 404; return send(res, 404, { message: 'No commit found for the ref ' + branch }); }
       const f = files.get(file);
       if (!f) {
@@ -178,8 +201,20 @@ http.createServer(async (req, res) => {
       const body = await readBody(req);
       if (failN > 0) { failN--; entry.s = 500; return send(res, 500, { message: 'Server on fire' }); }
       const branch2 = body.branch || 'main';
-      const files = branches[branch2];
+      if (isSpeech && branch2 === 'main' && !store.main) store.main = new Map();   // the first write makes main
+      const files = store[branch2];
       if (!files) { entry.s = 404; return send(res, 404, { message: 'Branch ' + branch2 + ' not found' }); }
+      /* a race: another device writes this file first (n times), so this write is stale */
+      if (isSpeech && raceN > 0 && /^takes\//.test(file)) {
+        raceN--;
+        const was = files.get(file);
+        let doc = { v: 1, takes: [] };
+        try { if (was) doc = JSON.parse(was.buf.toString('utf8')); } catch { /* start fresh */ }
+        const day = file.slice(6, 16);
+        doc.takes.push({ id: 'other' + (++counter), at: Date.now(), mod: Date.now(), day, mode: 'free', topic: '', text: 'said on the other device', sec: 30 });
+        const nb = Buffer.from(JSON.stringify(doc, null, 1) + '\n');
+        files.set(file, { buf: nb, sha: sha1(nb + 'race' + counter) });
+      }
       const cur = files.get(file);
       if (cur && !body.sha) { entry.s = 422; return send(res, 422, { message: 'Invalid request. "sha" wasn\'t supplied.' }); }
       if (cur && body.sha !== cur.sha) { entry.s = 409; return send(res, 409, { message: file + ' does not match ' + body.sha }); }
@@ -193,7 +228,7 @@ http.createServer(async (req, res) => {
     }
     if (req.method === 'DELETE') {
       const body = await readBody(req);
-      const files = branches[body.branch || 'main'];
+      const files = store[body.branch || 'main'];
       const cur = files && files.get(file);
       if (!cur) { entry.s = 404; return send(res, 404, { message: 'Not Found' }); }
       if (body.sha !== cur.sha) { entry.s = 409; return send(res, 409, { message: file + ' does not match ' + body.sha }); }

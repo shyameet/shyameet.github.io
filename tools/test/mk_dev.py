@@ -58,6 +58,37 @@ STUB = r"""<script>
 
   if (q.get('ua') === 'iphone') Object.defineProperty(navigator, 'userAgent', { get: function () { return 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'; } });
 
+  /* a fake microphone for the Speak page:
+       say=some+words   the words come out one by one (interim results), then the "browser"
+                        ends the listen after a quiet moment, as Chrome does; a restarted
+                        listen hears nothing more
+       sayms=120        milliseconds between words
+       norec=1          this browser cannot listen at all
+       micerr=not-allowed   the microphone is blocked */
+  if (q.get('norec')) { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; }
+  else if (q.get('say') || q.get('micerr')) {
+    var said = false;
+    function FakeRec() { this.continuous = false; this.interimResults = false; this.lang = ''; }
+    FakeRec.prototype.start = function () {
+      var self = this, words = (!said && q.get('say') ? q.get('say') : '').split(/\s+/).filter(Boolean), i = 0, gap = +q.get('sayms') || 120;
+      window.__recStarts = (window.__recStarts || 0) + 1;
+      if (q.get('micerr')) { setTimeout(function () { self.onerror && self.onerror({ error: q.get('micerr') }); self.onend && self.onend(); }, 50); return; }
+      setTimeout(function () { self.onstart && self.onstart(); }, 10);
+      this._t = setInterval(function () {
+        if (i < words.length) {
+          i++;
+          var text = words.slice(0, i).join(' ');
+          self.onresult && self.onresult({ resultIndex: 0, results: [[{ transcript: text }]] });
+        } else {
+          clearInterval(self._t); said = true;
+          setTimeout(function () { self.onend && self.onend(); }, 300);
+        }
+      }, gap);
+    };
+    FakeRec.prototype.stop = function () { clearInterval(this._t); var s = this; setTimeout(function () { s.onend && s.onend(); }, 10); };
+    window.SpeechRecognition = FakeRec; window.webkitSpeechRecognition = FakeRec;
+  }
+
   window.__calls = [];
   var real = window.fetch;
   window.fetch = function (url, opts) {

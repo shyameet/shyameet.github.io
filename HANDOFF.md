@@ -21,7 +21,29 @@ Written when the work moved from the laptop to the desktop. Read this, then `REA
   and a new browser opens Write on *Sign in*. The password was set on 11 Oct; since then the
   devices save normally (by 19 Oct: 51 focus blocks, tasks, a journal entry).
 
+- **19 Oct — Speak** (`/speak/`, `src/speak.js`, a card on Today). Random topic or free talk, a
+  thinking timer, a speaking timer, dictation, and a read-out (pace, fillers, restarts, first
+  word, topic words, tips). Takes are saved as TEXT to a **private** repo, `shyameet/speech-log`
+  (`takes/YYYY-MM-DD.json`), through the owner's own token; a take waits in the browser's queue
+  until it can be sent. See README → *Speak*. Tested against the fake GitHub (race, no access,
+  offline, delete, typed fallback, blocked mic, phone width) and 92 unit checks; **not yet run
+  against the real private repo or a real microphone**, because the repo has to be made by the
+  owner (see below).
+
 ## Still open
+
+- **Speak needs the owner's two steps:** create the **private** repo `shyameet/speech-log` on
+  GitHub (tick *Add a README*), then add it to the journal's fine-grained token (Repository
+  access, Contents: Read and write). Until then the page says "cannot see the private repo" and
+  takes wait on the device. Then one real take from the phone confirms it end to end.
+- **Speak phase 2 (not built):** record audio and transcribe with Whisper on a private machine,
+  to catch the "um"/"uh" that browser dictation drops and to measure pauses. Audio must never go
+  in a public repo; delete it after transcribing unless the owner wants it kept.
+- **Speak phase 3 (not built):** a nightly job that reads the day's takes and writes
+  `coaching/YYYY-MM-DD.md` in the private repo (the page already shows the newest), naming the
+  top habits and one drill for tomorrow; plus an evening nudge if nothing was spoken.
+- **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task
+  for him (instead of choosing a section) is not built; Free talk only stores the text.
 
 - **Phone alerts** are built but not known to be set up: install ntfy, subscribe to the topic
   shown under Tasks → *Reminders & phone alerts*, press *Send a test*. No session has ever sent

@@ -18,6 +18,7 @@ import { marked } from 'marked';
 import { dayFile, weekFile, daySeedText, weekSeedText } from './lib/seed.mjs';
 import { loadShlokas, shlokaFor } from './lib/shlokas.mjs';
 import { loadFestivals, upcoming } from './lib/festivals.mjs';
+import { TOPICS } from './lib/topics.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -180,7 +181,7 @@ const BUILT = new Date().toISOString();
    HTML that uses them can change on every deploy. Keyed by content, so a changed
    file is a new URL and old CSS can never meet new markup. */
 const ASSET_V = crypto.createHash('sha1')
-  .update(['style.css', 'app.js', 'focus.js', 'todo.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
+  .update(['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
   .digest('hex').slice(0, 8);
 
 /* ---------- tasks ----------
@@ -438,6 +439,8 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<meta name="repo" content="' + esc(CFG.repo) + '">\n'
     + '<meta name="branch" content="' + esc(CFG.branch) + '">\n'
     + '<meta name="sync-branch" content="' + esc(CFG.syncBranch || 'sync') + '">\n'
+    /* the PRIVATE repo the Speak page saves takes to (speak.js) */
+    + '<meta name="speech-repo" content="' + esc(CFG.speechRepo || '') + '">\n'
     + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
@@ -462,7 +465,7 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '  <img class="lotus" src="/art/ornaments/lotus.svg" alt="" width="48" height="29">\n'
     + '  <p class="shanti" lang="sa">॥ ॐ शान्तिः शान्तिः शान्तिः ॥</p>\n'
     + '  <p class="motto">' + esc(CFG.tagline) + '</p>\n'
-    + '  <p class="flinks"><a href="/shloka/">Shloka</a><a href="/utsav/">Utsav</a><a href="/darshan/">Darshan</a>'
+    + '  <p class="flinks"><a href="/speak/">Speak</a><a href="/shloka/">Shloka</a><a href="/utsav/">Utsav</a><a href="/darshan/">Darshan</a>'
     + '<a href="/archive/">Archive · ' + journal.length + '</a><a href="/search/">Search</a><a href="/feed.xml">RSS</a></p>\n'
     + '  <p class="builtat" id="builtat"></p>\n'
     + '</footer>\n'
@@ -873,6 +876,14 @@ const todoCard = (k) => '<section class="card todocard" data-todo-card data-todo
   + '  <p class="muted small todolocal" data-todo-local hidden></p>\n'
   + '</section>';
 
+/* One button to start talking. speak.js fills in the streak (from this browser's own
+   copy of the private log), so nothing about it is in the published page. */
+const speakCard = () => '<section class="card speakcard" data-speak-card>\n'
+  + '  <div class="cardhead"><h3><a href="/speak/">Speak</a></h3><span class="count" data-speak-streak></span></div>\n'
+  + '  <p class="muted small">A random topic, one minute, and a plain read-out of how it went. Kept private.</p>\n'
+  + '  <a class="btn primary big" href="/speak/" data-speak-go>Speak a minute</a>\n'
+  + '</section>';
+
 function todayPanel(k) {
   const page = dayPageFor(k);
   const week = weekPageFor(k);
@@ -887,6 +898,7 @@ function todayPanel(k) {
     + '  ' + medal(k) + '\n'
     + '</section>\n'
     + weekStrip(k) + '\n'
+    + speakCard() + '\n'
     + todoCard(k) + '\n'
     + (page
       ? taskCard(page, 'Today', { link: false, cls: 'today' })
@@ -907,9 +919,29 @@ function todayPanel(k) {
   write('index.html', shell({
     canonical: '/', nav: 'today', cls: 'home',
     desc: d ? CFG.tagline + ' ' + d.roman + '.' : CFG.tagline,
-    body, scripts: ['/focus.js'],
+    body, scripts: ['/focus.js', '/speak.js'],
   }));
 }
+
+/* ---------- speak ----------
+   Practise talking. The page is a shell; speak.js draws the practice into #sstage and
+   keeps takes in the private repo named by speechRepo in site.config.json. Nothing
+   spoken is in the build. The topics are, and they are public on purpose: they are only
+   prompts. */
+write('speak/index.html', shell({
+  title: 'Speak', canonical: '/speak/', nav: 'speak', cls: 'speakpage',
+  desc: 'Practise talking: a random topic, one minute, a plain read-out.',
+  body: '<div class="pagehead">' + titled('Speak', 'बोलो')
+    + '<p class="muted">Think a little, talk for a minute, see how it went. Every take is kept privately.</p></div>\n'
+    + '<div id="speakapp" class="speakapp" data-lang="' + esc(CFG.speechLang || 'en-IN') + '">\n'
+    + '<div class="todonote" id="sstatus" hidden></div>\n'
+    + '<section class="card sstagecard" id="sstage"><noscript><p class="muted">This page needs JavaScript.</p></noscript></section>\n'
+    + '<section class="card scoach" id="scoach" hidden></section>\n'
+    + '<section class="card shist" id="shist"></section>\n'
+    + '<script type="application/json" id="stopics">' + JSON.stringify(TOPICS).replace(/</g, '\\u003c') + '</script>\n'
+    + '</div>',
+  scripts: ['/speak.js'],
+}));
 
 /* ---------- habits ---------- */
 write('habits/index.html', shell({
@@ -1359,7 +1391,7 @@ write('admin/config.json', JSON.stringify({
   }).filter(Boolean),
 }));
 
-for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'sw.js']) {
+for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'sw.js']) {
   fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
 }
 

@@ -13,6 +13,7 @@ Live at **https://shyameet.github.io**
 | **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's tasks, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
 | **Tasks** (`/tasks/`) | What has to be done, as Today · Upcoming · Done: say it or type it ("call the bank at 5 pm tomorrow", "gym every weekday at 7"), tick it, open it to change it. A time gives it a bell that nudges until it is done — and, with phone alerts on, a notification on the phone even with the site closed. The same short list sits on Today |
+| **Speak** (`/speak/`) | Practise talking: a random topic (or free talk), a thinking timer, a speaking timer, the words as dictated, and a plain read-out (pace, filler words, restarts, how long before the first word, which topic words were used). Every take is kept **privately**, as text, in a separate private repo. A card on Today starts it and shows the streak |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
 | **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
 | **Shloka** (`/shloka/`) | Every verse in the collection, searchable, with a chip per scripture |
@@ -398,6 +399,48 @@ the page also reads it straight from the repo (raw.githubusercontent.com), newes
 - The vault holds the token it was made with: after making a new token, save the password
   again. A password that unlocks an expired token says so.
 - The connect link (*Copy connect link*) still works as before.
+
+## Speak
+
+Practice for talking without filler: pick **Random topic** (about 100 prompts in
+`src/lib/topics.mjs`, six kinds: explain, persuade, story, describe, think, pitch) or **Free
+talk**. A topic gets a thinking timer (none, 30 s or 1 min), then the speaking timer starts
+by itself with a short tone and the microphone listens. When it ends the page shows:
+words and **words a minute**, **fillers a minute** (and which), **restarts** (a phrase said
+twice), **first word after** (how long before speaking), which **topic words** were used and
+which were not, words said often, and at most two plain tips. The transcript is editable
+before saving and the numbers update as it is fixed.
+
+**Where it is kept.** Not in this repo, which is public. Takes go to a **private repo**
+named by `speechRepo` in `site.config.json` (`shyameet/speech-log`), one file per day,
+`takes/YYYY-MM-DD.json` (`{v:1, takes:[{id, at, mod, day, mode, topic, cat, target, think,
+sec, delay, text, st}]}`), written with the same token the Write page uses. **That token must be
+allowed to see the private repo** (GitHub → Settings → Developer settings → Fine-grained
+tokens → the journal token → Repository access → add `speech-log`, Contents: Read and write);
+until it is, the page says so and the takes wait. Only text is kept, never audio; a take is
+about 1 KB, so a year of daily practice is a few MB.
+
+**Never lost.** *Save* puts the take in this browser's queue (`speak_q_v1`) first, then sends
+it. A take that cannot be sent (offline, no access yet, a busy API) stays queued and is
+retried every minute, when the network returns, and on the next visit. Two devices writing the
+same day merge by take id (the later change wins, a deletion stays deleted), with the same
+409/422 retry as the rest of the site. Deleting the last take of a day removes its file, so
+the streak stays true. *Download everything* exports every take as one JSON file.
+
+**What the numbers are, honestly.** Browser dictation drops "um" and "uh" before the page
+sees them and gives no pauses, so the filler count covers what dictation keeps ("like", "you
+know", "I mean", "so", "basically"…) and is an estimate, with rules against the obvious false
+alarms ("what kind of", "do you know", "I like tea", "looks like rain"). The page says this
+under the numbers. Catching real "um"s and pauses needs the audio transcribed with timestamps
+(Whisper) on a private machine; that is a planned second phase and is **not built**.
+
+**Coaching.** If the private repo has `coaching/YYYY-MM-DD.md`, the newest is shown on the
+page as plain text under *Coaching*. Nothing writes these yet; a nightly job that reads the
+day's takes and writes them is the planned third phase.
+
+The code is `src/speak.js` (the pure analysis is tested in `tools/test/test_speak.mjs`, 92
+checks). The page itself is a shell built by `src/build.mjs`; the topics are embedded in it
+and are public on purpose, they are only prompts.
 
 ## Local development
 
