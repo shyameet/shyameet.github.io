@@ -53,7 +53,9 @@ that long after opening) and `devices=2` (two microphones to pick from):
 fixed sentence, a 1.7 s pause after the third word, so the highlighting can be checked). In the
 page, `localStorage.speak_pref_v1 = '{"think":3,"target":6,"mode":"topic"}'` gives a 3 s think and
 a 6 s talk instead of waiting a minute. The helper's own tests need no model:
-`python tools/speakd/test_speakd.py` (22 tests: the origin and host guards, saving, transcribing,
-restarts, a broken day file, deleting, concurrent takes).
+`python tools/speakd/test_speakd.py` (32 tests: the origin and host guards, saving, transcribing,
+restarts, a broken day file, deleting, concurrent takes, serving the site's pages and the kept copy).
+To open a test copy through the helper (same origin, as in daily use), start it with
+`--upstream http://localhost:4321` and visit `http://localhost:4777/_t_speak.html?mic=tone`.
 
 Never point these at the real repo or at the real data folder. `fake_gh.mjs` accepts any token.

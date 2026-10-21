@@ -425,6 +425,13 @@ the takes back. **Nothing leaves the PC**: no GitHub, no token, no server. Only 
 pages (and the local test server) are allowed to talk to it, only over loopback, and a request from
 any other website or Host is refused.
 
+**Open it at `http://localhost:4777/speak/`** (bookmark that). The helper also serves the site's own
+pages, fetched from the site and kept for when there is no internet, so the page and the helper are
+one origin and nothing about a web page reaching a local program can get in the way. The same page
+at `https://shyameet.github.io/speak/` also tries to reach the helper, but Chrome may block a public
+https page from talking to a program on your PC (the 21 Oct test in the Claude browser pane was
+blocked), so when it cannot, it shows a link to the localhost address instead.
+
 The data folder (default `C:\Users\shyam\SpeechJournal`, or `$SPEAK_DATA`):
 
 | Path | What |
@@ -459,7 +466,7 @@ not supported yet (the helper lives on the PC). The helper must be running; the 
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 22 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 32 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Local development

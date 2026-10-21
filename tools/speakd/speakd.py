@@ -8,7 +8,10 @@ take here, to http://127.0.0.1:4777. This helper
     C:\\Users\\shyam\\SpeechJournal, or $SPEAK_DATA),
   * turns the audio into words with Whisper (faster-whisper, on the CPU), with a time for
     every word, so "um", "uh" and pauses are kept rather than cleaned away,
-  * serves the takes back to the page, and the coaching notes written for them.
+  * serves the takes back to the page, and the coaching notes written for them,
+  * and serves the site's own pages (a copy fetched from the site, cached for when there is no
+    internet), so the Speak page can be opened at http://localhost:4777/speak/ -- the same address
+    as the helper, which no browser rule about web pages reaching local programs can get in the way of.
 
 Layout of the data folder:
   audio/YYYY-MM-DD/<take id>_<part>.webm   the recording (a take can have more than one part)
@@ -24,7 +27,9 @@ local test server) may talk to it, and only on the loopback address.
 --fake replaces Whisper with a stand-in that returns scripted words (for the tests).
 """
 import argparse
+import hashlib
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -35,9 +40,12 @@ import traceback
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.error import URLError
+from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import Request, urlopen
 
-VERSION = 1
+VERSION = 2
+UPSTREAM = 'https://shyameet.github.io'
 ALLOWED_ORIGINS = {
     'https://shyameet.github.io',
     'http://localhost:4321', 'http://127.0.0.1:4321',   # the local test server
@@ -60,7 +68,7 @@ class Store:
     def __init__(self, root):
         self.root = Path(root)
         self.lock = threading.RLock()
-        for d in ('audio', 'takes', 'coaching'):
+        for d in ('audio', 'takes', 'coaching', 'site_cache'):
             (self.root / d).mkdir(parents=True, exist_ok=True)
         self.index = {}   # take id -> day
         for f in sorted((self.root / 'takes').glob('*.json')):
@@ -280,7 +288,7 @@ class Worker(threading.Thread):
 
 # ---------------------------------------------------------------- http
 
-def make_handler(store, worker, engine, log, site_dir=None):
+def make_handler(store, worker, engine, log, upstream=UPSTREAM):
     class H(BaseHTTPRequestHandler):
         server_version = 'speakd/%d' % VERSION
         protocol_version = 'HTTP/1.1'
@@ -376,7 +384,49 @@ def make_handler(store, worker, engine, log, site_dir=None):
             if p == '/coaching':
                 c = store.coaching()
                 return self._send(200, c or {'name': '', 'text': '', 'all': []})
-            self._send(404, {'error': 'not found'})
+            self._site(u)
+
+        def _site(self, u):
+            """The site's own pages and files, fetched from the site (and kept, for when there is no
+            internet). Only GET, only from the one host, never a path that climbs out."""
+            path = u.path
+            if path == '/':
+                self.send_response(302)
+                self.send_header('Location', '/speak/')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            if '..' in path or chr(92) in path or not path.startswith('/') or len(path) > 300:
+                return self._send(404, {'error': 'not found'})
+            url = upstream.rstrip('/') + quote(path, safe='/%:@') + ('?' + u.query if u.query else '')
+            key = hashlib.sha1(url.encode('utf-8')).hexdigest()
+            cache = store.root / 'site_cache' / key
+            ctype = None
+            body = None
+            try:
+                req = Request(url, headers={'User-Agent': 'speakd/%d' % VERSION})
+                with urlopen(req, timeout=8) as r:
+                    body = r.read(20 * 1024 * 1024)
+                    ctype = r.headers.get('Content-Type')
+                    status = r.status
+                if status == 200:
+                    cache.write_bytes(body)
+                    cache.with_suffix('.type').write_text(ctype or '', encoding='utf-8')
+                else:
+                    body = None
+            except Exception as e:
+                if getattr(e, 'code', None) == 404:
+                    return self._send(404, {'error': 'not found'})
+                body = None   # no internet, or the site is down: fall back to the copy
+            if body is None:
+                if not cache.exists():
+                    return self._send(502, {'error': 'the site could not be reached and nothing is kept for this page yet'})
+                body = cache.read_bytes()
+                tf = cache.with_suffix('.type')
+                ctype = tf.read_text(encoding='utf-8') if tf.exists() else None
+            if not ctype:
+                ctype = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+            return self._send(200, body, ctype)
 
         def do_POST(self):
             if not self._allowed():
@@ -455,6 +505,7 @@ def main(argv=None):
     ap.add_argument('--data', default=os.environ.get('SPEAK_DATA', r'C:\Users\shyam\SpeechJournal'))
     ap.add_argument('--model', default=os.environ.get('SPEAK_MODEL'))
     ap.add_argument('--fake', action='store_true', help='use a stand-in for Whisper (tests)')
+    ap.add_argument('--upstream', default=os.environ.get('SPEAK_UPSTREAM', UPSTREAM), help="where the site's pages come from")
     a = ap.parse_args(argv)
 
     store = Store(a.data)
@@ -471,7 +522,7 @@ def main(argv=None):
     for t in store.takes():
         if t.get('status') in ('queued', 'transcribing'):
             worker.add(t['id'])
-    srv = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(store, worker, engine, log))
+    srv = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(store, worker, engine, log, a.upstream))
     log('speakd %d listening on 127.0.0.1:%d, data %s, whisper %s' % (VERSION, a.port, store.root, 'FAKE' if a.fake else engine.model_dir))
     if sys.stdout:   # pythonw (no console) has none
         print('speakd listening on http://127.0.0.1:%d  (data: %s)' % (a.port, store.root), flush=True)

@@ -8,6 +8,7 @@ take saving, transcription finishing, the take coming back with words and times,
 editing, retrying, requeueing after a restart, a broken file being moved aside.
 """
 import http.client
+import http.server
 import json
 import os
 import shutil
@@ -25,7 +26,7 @@ ORIGIN = 'https://shyameet.github.io'
 
 
 class Rig:
-    def __init__(self, data):
+    def __init__(self, data, upstream='http://127.0.0.1:1'):
         self.store = speakd.Store(data)
         self.engine = speakd.FakeWhisper()
         self.worker = speakd.Worker(self.store, self.engine, lambda m: None)
@@ -33,7 +34,7 @@ class Rig:
         for t in self.store.takes():
             if t.get('status') in ('queued', 'transcribing'):
                 self.worker.add(t['id'])
-        self.srv = speakd.ThreadingHTTPServer(('127.0.0.1', 0), speakd.make_handler(self.store, self.worker, self.engine, lambda m: None))
+        self.srv = speakd.ThreadingHTTPServer(('127.0.0.1', 0), speakd.make_handler(self.store, self.worker, self.engine, lambda m: None, upstream))
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
 
@@ -72,13 +73,49 @@ class Rig:
         raise AssertionError('take %s did not finish' % tid)
 
 
+class Upstream:
+    """A stand-in for the site: serves /speak/ and /speak.js, 404 for the rest."""
+    FILES = {'/speak/': (b'<!doctype html><title>Speak</title>', 'text/html; charset=utf-8'),
+             '/speak.js': (b'/* the page */', 'application/javascript')}
+
+    def __init__(self):
+        files = self.FILES
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                f = files.get(self.path.split('?')[0])
+                if not f:
+                    self.send_response(404)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header('Content-Type', f[1])
+                self.send_header('Content-Length', str(len(f[0])))
+                self.end_headers()
+                self.wfile.write(f[0])
+
+        self.srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+        self.url = 'http://127.0.0.1:%d' % self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def stop(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
 class T(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix='speakd-test-')
-        self.rig = Rig(self.dir)
+        self.up = Upstream()
+        self.rig = Rig(self.dir, self.up.url)
 
     def tearDown(self):
         self.rig.stop()
+        self.up.stop()
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def send_take(self, tid='take0001', day='2026-10-21', parts=1, **extra):
@@ -231,14 +268,14 @@ class T(unittest.TestCase):
         st = speakd.Store(self.dir)
         st.save_audio('2026-10-21', 'resume0001', 0, b'WEBM')
         st.put({'id': 'resume0001', 'day': '2026-10-21', 'at': 1, 'mod': 1, 'parts': 1, 'text': '', 'status': 'transcribing', 'fake': 'x y z'})
-        self.rig = Rig(self.dir)
+        self.rig = Rig(self.dir, self.up.url)
         self.assertEqual(self.rig.wait_done('resume0001')['status'], 'done')
 
     def test_broken_day_file_is_moved_aside_not_overwritten(self):
         self.rig.stop()
         (Path(self.dir) / 'takes').mkdir(exist_ok=True)
         (Path(self.dir) / 'takes' / '2026-10-21.json').write_text('{ this is not json', encoding='utf-8')
-        self.rig = Rig(self.dir)
+        self.rig = Rig(self.dir, self.up.url)
         self.assertEqual(self.rig.req('GET', '/takes')[1]['takes'], [])
         self.send_take(fake='a b c')
         self.rig.wait_done('take0001')
@@ -261,6 +298,67 @@ class T(unittest.TestCase):
         for i in range(8):
             self.assertEqual(self.rig.wait_done('conc%04d' % i)['status'], 'done')
         self.assertEqual(len(self.rig.req('GET', '/takes')[1]['takes']), 8)
+
+
+class TSite(unittest.TestCase):
+    """The helper also serves the site's pages, so the Speak page can open at the helper's own address."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix='speakd-site-')
+        self.up = Upstream()
+        self.rig = Rig(self.dir, self.up.url)
+
+    def tearDown(self):
+        self.rig.stop()
+        self.up.stop()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_root_goes_to_speak(self):
+        s, _, h = self.rig.req('GET', '/', origin=None)
+        self.assertEqual(s, 302)
+        self.assertEqual(h['location'], '/speak/')
+
+    def test_page_comes_from_the_site(self):
+        s, body, h = self.rig.req('GET', '/speak/', origin=None)
+        self.assertEqual(s, 200)
+        self.assertIn(b'<title>Speak</title>', body)
+        self.assertTrue(h['content-type'].startswith('text/html'))
+        s, body, h = self.rig.req('GET', '/speak.js?v=abc123', origin=None)
+        self.assertEqual(s, 200)
+        self.assertEqual(h['content-type'], 'application/javascript')
+
+    def test_kept_copy_is_served_when_the_site_is_unreachable(self):
+        self.assertEqual(self.rig.req('GET', '/speak/', origin=None)[0], 200)
+        self.up.stop()
+        s, body, _ = self.rig.req('GET', '/speak/', origin=None)
+        self.assertEqual(s, 200)
+        self.assertIn(b'<title>Speak</title>', body)
+
+    def test_nothing_kept_and_no_site_is_a_502(self):
+        self.up.stop()
+        self.assertEqual(self.rig.req('GET', '/speak.js', origin=None)[0], 502)
+
+    def test_site_404_is_404(self):
+        self.assertEqual(self.rig.req('GET', '/nope/', origin=None)[0], 404)
+
+    def test_paths_that_climb_are_refused(self):
+        self.assertEqual(self.rig.req('GET', '/a/../b', origin=None)[0], 404)
+
+    def test_api_is_not_shadowed_by_the_site(self):
+        s, b, _ = self.rig.req('GET', '/health', origin=None)
+        self.assertTrue(b['ok'])
+
+    def test_site_is_get_only(self):
+        self.assertEqual(self.rig.req('POST', '/speak/', {'x': 1})[0], 404)
+
+    def test_same_origin_page_may_use_the_api(self):
+        for o in ('http://localhost:4777', 'http://127.0.0.1:4777'):
+            s, _, h = self.rig.req('GET', '/health', origin=o)
+            self.assertEqual(s, 200)
+            self.assertEqual(h['access-control-allow-origin'], o)
+
+    def test_foreign_host_cannot_read_the_site_either(self):
+        self.assertEqual(self.rig.req('GET', '/speak/', host='attacker.example:4777', origin=None)[0], 403)
 
 
 if __name__ == '__main__':

@@ -30,7 +30,9 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   `C:\Users\shyam\SpeechJournal`; no GitHub, no token. The page shows facts (pace, fillers, pauses,
   first word, the transcript with fillers and pauses marked); the ADVICE is Claude's, written to
   `coaching/YYYY-MM-DD.md` after reading the output of `tools/speakd/review_pack.py`.
-  README → *Speak* has the whole design.
+  Open it at `http://localhost:4777/speak/` (the helper serves the page too, so no browser rule
+  about a public page reaching a local program can block it; the https page may be blocked, and then
+  links there). README → *Speak* has the whole design.
 - **21 Oct — sign-in keeper** (top of `src/app.js`, and the Write page): asks the browser to keep
   the site's storage, mirrors the sign-in into IndexedDB and puts it back once per tab if
   localStorage lost it; signing out on purpose clears both. Why: "not connected" kept coming back

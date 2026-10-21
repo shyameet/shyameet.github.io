@@ -272,7 +272,11 @@
   var homeCard = document.querySelector('[data-speak-card]');
   if (!app && !homeCard) return;
 
-  var HELPER = 'http://127.0.0.1:4777';
+  /* Served by the helper itself (http://localhost:4777/speak/), the page and the helper are one
+     origin: nothing to allow, nothing to block. From the site's own address the helper is
+     reached across origins, which Chrome may block or ask about. */
+  var ON_HELPER = location.port === '4777' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var HELPER = ON_HELPER ? location.origin : 'http://127.0.0.1:4777';
   var LS_SEEN = 'speak_seen_v1';     // topics shown lately
   var LS_PREF = 'speak_pref_v1';     // { target, think, mode, device }
   var LS_DAYS = 'speak_days_v2';     // days with a take, for the streak when the helper is off
@@ -825,9 +829,12 @@
     if (!box) return;
     var msg = '';
     if (H.asked && !H.up) {
-      msg = 'The Speak helper is not running on this PC' + (PEND.length ? ' (' + PEND.length + ' recording' + (PEND.length > 1 ? 's' : '') + ' waiting in this browser, safe)' : '')
-        + '. Start it with <b>Start Speak helper</b> in <code>C:\\Users\\shyam\\SpeechJournal</code>. '
-        + 'If Chrome asks to let this site reach devices on your network, choose <b>Allow</b>. Recording works either way.';
+      var waiting = PEND.length ? ' (' + PEND.length + ' recording' + (PEND.length > 1 ? 's' : '') + ' waiting in this browser, safe)' : '';
+      msg = ON_HELPER
+        ? 'The helper is not answering' + waiting + '. Start it with <b>Start Speak helper</b> in <code>C:\\Users\\shyam\\SpeechJournal</code>.'
+        : 'This page cannot reach the Speak helper' + waiting + '. Open <a href="http://localhost:4777/speak/"><b>Speak on this PC</b></a> '
+          + '(works even if Chrome blocks this page from reaching your PC), and record there. '
+          + 'If that page does not open, start the helper with <b>Start Speak helper</b> in <code>C:\\Users\\shyam\\SpeechJournal</code>.';
     } else if (H.up && H.info && H.info.whisper === 'missing') {
       msg = 'The helper is running but the Whisper model is missing, so recordings cannot be written out yet.';
     }
