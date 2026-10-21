@@ -58,35 +58,36 @@ STUB = r"""<script>
 
   if (q.get('ua') === 'iphone') Object.defineProperty(navigator, 'userAgent', { get: function () { return 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'; } });
 
-  /* a fake microphone for the Speak page:
-       say=some+words   the words come out one by one (interim results), then the "browser"
-                        ends the listen after a quiet moment, as Chrome does; a restarted
-                        listen hears nothing more
-       sayms=120        milliseconds between words
-       norec=1          this browser cannot listen at all
-       micerr=not-allowed   the microphone is blocked */
-  if (q.get('norec')) { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; }
-  else if (q.get('say') || q.get('micerr')) {
-    var said = false;
-    function FakeRec() { this.continuous = false; this.interimResults = false; this.lang = ''; }
-    FakeRec.prototype.start = function () {
-      var self = this, words = (!said && q.get('say') ? q.get('say') : '').split(/\s+/).filter(Boolean), i = 0, gap = +q.get('sayms') || 120;
-      window.__recStarts = (window.__recStarts || 0) + 1;
-      if (q.get('micerr')) { setTimeout(function () { self.onerror && self.onerror({ error: q.get('micerr') }); self.onend && self.onend(); }, 50); return; }
-      setTimeout(function () { self.onstart && self.onstart(); }, 10);
-      this._t = setInterval(function () {
-        if (i < words.length) {
-          i++;
-          var text = words.slice(0, i).join(' ');
-          self.onresult && self.onresult({ resultIndex: 0, results: [[{ transcript: text }]] });
-        } else {
-          clearInterval(self._t); said = true;
-          setTimeout(function () { self.onend && self.onend(); }, 300);
-        }
-      }, gap);
+  /* a fake microphone for the Speak page (a tone from WebAudio, a real MediaStream):
+       mic=tone       a tone, so the level bar moves and the recording has sound
+       mic=silent     a microphone that hears nothing
+       mic=deny       the browser refuses (NotAllowedError)
+       mic=none       there is no microphone (NotFoundError)
+       mic=busy       another app has it (NotReadableError)
+       lostms=3000    the microphone is unplugged this long after it was opened
+       devices=2      two microphones to choose from */
+  if (q.get('mic') && navigator.mediaDevices) {
+    var micMode = q.get('mic');
+    window.__gum = 0;
+    navigator.mediaDevices.getUserMedia = function (c) {
+      window.__gum++;
+      window.__lastConstraints = c;
+      if (micMode === 'deny') return Promise.reject(new DOMException('denied', 'NotAllowedError'));
+      if (micMode === 'none') return Promise.reject(new DOMException('none', 'NotFoundError'));
+      if (micMode === 'busy') return Promise.reject(new DOMException('busy', 'NotReadableError'));
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var dst = ctx.createMediaStreamDestination();
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      g.gain.value = micMode === 'silent' ? 0 : 0.3;
+      o.frequency.value = 220; o.connect(g); g.connect(dst); o.start();
+      var tr = dst.stream.getAudioTracks()[0];
+      if (+q.get('lostms')) setTimeout(function () { try { tr.stop(); } catch (e) {} if (tr.onended) tr.onended(); }, +q.get('lostms'));
+      window.__fakeTrack = tr;
+      return Promise.resolve(dst.stream);
     };
-    FakeRec.prototype.stop = function () { clearInterval(this._t); var s = this; setTimeout(function () { s.onend && s.onend(); }, 10); };
-    window.SpeechRecognition = FakeRec; window.webkitSpeechRecognition = FakeRec;
+    if (+q.get('devices') > 1) navigator.mediaDevices.enumerateDevices = function () {
+      return Promise.resolve([{ kind: 'audioinput', deviceId: 'mic-a', label: 'Fake mic A' }, { kind: 'audioinput', deviceId: 'mic-b', label: 'Fake mic B' }]);
+    };
   }
 
   window.__calls = [];

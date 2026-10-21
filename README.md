@@ -13,7 +13,7 @@ Live at **https://shyameet.github.io**
 | **Today** (`/`) | A toran over the page, a greeting by the hour in Devanagari with the day's jaikara, the date, the day's deity and mantra, the week as rings, today's tasks, today's habits (tappable), the shloka of the day, the next two festivals, yesterday's folded underneath, focus so far as a row of lamps, this week's list, the last three days of writing |
 | **Habits** (`/habits/`) | The week as a grid — tap any circle to tick a day, past ones too — plus four weeks per habit and focus hours per day |
 | **Tasks** (`/tasks/`) | What has to be done, as Today · Upcoming · Done: say it or type it ("call the bank at 5 pm tomorrow", "gym every weekday at 7"), tick it, open it to change it. A time gives it a bell that nudges until it is done — and, with phone alerts on, a notification on the phone even with the site closed. The same short list sits on Today |
-| **Speak** (`/speak/`) | Practise talking: a random topic (or free talk), a thinking timer, a speaking timer, the words as dictated, and a plain read-out (pace, filler words, restarts, how long before the first word, which topic words were used). Every take is kept **privately**, as text, in a separate private repo. A card on Today starts it and shows the streak |
+| **Speak** (`/speak/`) | Practise talking: a random topic (or free talk), a thinking timer, then it records you. Whisper on the PC writes out the words with the timing of every word; the page shows pace, fillers, pauses and the transcript with both marked, and Claude's written advice. Audio and words never leave the PC. A card on Today starts it and shows the streak |
 | **Focus** (`/focus/`) | A block timer with an alarm, and the day's focused time |
 | **Journal** (`/journal/`) | A diary: one quiet row per entry, grouped under the day it is about, sections as a row of chips |
 | **Shloka** (`/shloka/`) | Every verse in the collection, searchable, with a chip per scripture |
@@ -402,45 +402,65 @@ the page also reads it straight from the repo (raw.githubusercontent.com), newes
 
 ## Speak
 
-Practice for talking without filler: pick **Random topic** (about 100 prompts in
-`src/lib/topics.mjs`, six kinds: explain, persuade, story, describe, think, pitch) or **Free
-talk**. A topic gets a thinking timer (none, 30 s or 1 min), then the speaking timer starts
-by itself with a short tone and the microphone listens. When it ends the page shows:
-words and **words a minute**, **fillers a minute** (and which), **restarts** (a phrase said
-twice), **first word after** (how long before speaking), which **topic words** were used and
-which were not, words said often, and at most two plain tips. The transcript is editable
-before saving and the numbers update as it is fixed.
+Practice for talking without filler. Pick **Random topic** (about 100 prompts in
+`src/lib/topics.mjs`: explain, persuade, story, describe, think, pitch) or **Free talk**. A topic
+gets a thinking time (none, 30 s or 1 min); recording then starts by itself with a short tone and
+stops when the time is up. The page records **audio** (MediaRecorder), not live dictation, and
+shows a **level bar** so you can see the microphone is alive.
 
-**Where it is kept.** Not in this repo, which is public. Takes go to a **private repo**
-named by `speechRepo` in `site.config.json` (`shyameet/speech-log`), one file per day,
-`takes/YYYY-MM-DD.json` (`{v:1, takes:[{id, at, mod, day, mode, topic, cat, target, think,
-sec, delay, text, st}]}`), written with the same token the Write page uses. **That token must be
-allowed to see the private repo** (GitHub → Settings → Developer settings → Fine-grained
-tokens → the journal token → Repository access → add `speech-log`, Contents: Read and write);
-until it is, the page says so and the takes wait. Only text is kept, never audio; a take is
-about 1 KB, so a year of daily practice is a few MB.
+**Why audio, and why a helper on the PC.** Browser dictation stops by itself, drops "um" and "uh",
+and gives no pauses. (The 21 Oct report "the mic stops after 30 seconds" was the first version
+starting dictation from the timer, with no tap, after the 30 s thinking time. Chrome does not
+reliably allow that, and the page said "Listening" regardless.) Now the tap that starts the take
+opens the microphone, so nothing later needs another tap; the page warns if the bar stays flat for
+6 s, if the microphone is muted, busy, blocked or unplugged (a *Reconnect* button records a new
+part and the take joins them), and it lets you pick another microphone mid-take.
 
-**Never lost.** *Save* puts the take in this browser's queue (`speak_q_v1`) first, then sends
-it. A take that cannot be sent (offline, no access yet, a busy API) stays queued and is
-retried every minute, when the network returns, and on the next visit. Two devices writing the
-same day merge by take id (the later change wins, a deletion stays deleted), with the same
-409/422 retry as the rest of the site. Deleting the last take of a day removes its file, so
-the streak stays true. *Download everything* exports every take as one JSON file.
+The audio goes to **speakd**, a small helper that runs on the PC (`tools/speakd/speakd.py`,
+127.0.0.1:4777, started at login by a Startup entry; `Start/Stop Speak helper.cmd` in
+`C:\Users\shyam\SpeechJournal`). It saves the recording, turns it into words with
+**Whisper medium** (faster-whisper, on the CPU, English with Hindi mixed in: the prompt makes it
+write Hindi in Roman letters and keep "um", "uh", "like"), with a time for every word, and serves
+the takes back. **Nothing leaves the PC**: no GitHub, no token, no server. Only the site's own
+pages (and the local test server) are allowed to talk to it, only over loopback, and a request from
+any other website or Host is refused.
 
-**What the numbers are, honestly.** Browser dictation drops "um" and "uh" before the page
-sees them and gives no pauses, so the filler count covers what dictation keeps ("like", "you
-know", "I mean", "so", "basically"…) and is an estimate, with rules against the obvious false
-alarms ("what kind of", "do you know", "I like tea", "looks like rain"). The page says this
-under the numbers. Catching real "um"s and pauses needs the audio transcribed with timestamps
-(Whisper) on a private machine; that is a planned second phase and is **not built**.
+The data folder (default `C:\Users\shyam\SpeechJournal`, or `$SPEAK_DATA`):
 
-**Coaching.** If the private repo has `coaching/YYYY-MM-DD.md`, the newest is shown on the
-page as plain text under *Coaching*. Nothing writes these yet; a nightly job that reads the
-day's takes and writes them is the planned third phase.
+| Path | What |
+|---|---|
+| `audio/YYYY-MM-DD/<id>_<part>.webm` | the recordings |
+| `takes/YYYY-MM-DD.json` | `{v:1, takes:[{id, day, at, mode, topic, cat, target, think, sec, parts, text, words:[{w,s,e}], status, error}]}` |
+| `coaching/YYYY-MM-DD.md` | the advice for that day (see *My review*) |
+| `speakd.log`, `models/`, `venv/` | log, the Whisper model, the Python environment |
 
-The code is `src/speak.js` (the pure analysis is tested in `tools/test/test_speak.mjs`, 92
-checks). The page itself is a shell built by `src/build.mjs`; the topics are embedded in it
-and are public on purpose, they are only prompts.
+**Never lost.** The recording goes into the browser's own storage (IndexedDB) first, then to the
+helper. If the helper is not running it waits there, the page says so, and it is sent and written
+out by itself when the helper starts. A take that Whisper cannot read is marked `error` with a
+*Try again* button; a day file that cannot be read is moved aside (`*.broken-*.json`), never
+overwritten; takes still in line when the helper stops are picked up again at start.
+
+**What the page shows about a take** is facts, not advice: words, words a minute, filler words a
+minute (and which), pauses of 0.7 s or more (count, longest), when the first word came, and the
+transcript with the **fillers highlighted** and each **pause marked** in line. The audio can be
+replayed from the history. The filler rules avoid the obvious false alarms ("what kind of",
+"do you know", "I like tea", "looks like rain") and count Hindi *matlab* too.
+
+**My review (Claude, not a formula).** The advice is written by a reader. `python
+tools/speakd/review_pack.py [--days 7] [--day YYYY-MM-DD]` lays out the takes (transcript with
+`[1.7s]` pauses marked inline, pace, first word, um/uh count) and the last two notes. A review
+reads that and writes `coaching/YYYY-MM-DD.md` (plain text with `##` headings, `-` bullets and
+`**bold**`); the page shows the newest under *Coaching*. A nightly scheduled review and asking in
+chat ("review my speech") both do exactly this.
+
+**Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
+miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Phones are
+not supported yet (the helper lives on the PC). The helper must be running; the page says when it
+is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
+
+Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
+`tools/speakd/` (helper, tested in `test_speakd.py`, 22 tests). The topics are embedded in the
+page and are public on purpose, they are only prompts.
 
 ## Local development
 

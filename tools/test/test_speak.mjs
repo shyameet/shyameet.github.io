@@ -1,6 +1,6 @@
 /* Unit tests for the pure parts of src/speak.js: what the words of a talk show (pace,
-   fillers, restarts, topic words, the tips), how two devices' takes merge, streaks, and
-   the choice of a topic.
+   fillers, restarts, pauses between timed words, topic words), the transcript segments,
+   the coaching note's markup, streaks, and the choice of a topic.
 
      node tools/test/test_speak.mjs
 
@@ -45,7 +45,7 @@ function eq(name, got, want) {
 const ok = (name, cond) => eq(name, !!cond, true);
 
 const A = boot();
-ok('hook gave the functions', A && A.analyze && A.mergeTakes && A.streakOf);
+ok('hook gave the functions', A && A.analyze && A.analyzeWords && A.pausesOf && A.streakOf);
 
 /* ---- tokenize ---- */
 eq('tokenize lowercases and strips punctuation', A.tokenize("Hello, World! It's 5."), ['hello', 'world', "it's", '5']);
@@ -117,33 +117,6 @@ ok('sample: never touched profit', ss.missed.indexOf('profit') >= 0);
 ok('sample: gives is not said often (stop word)', !ss.repeated.some((r) => r[0] === 'gives'));
 ok('sample: money is said often', ss.repeated.some((r) => r[0] === 'money'));
 
-/* ---- tips ---- */
-/* n different made-up words, so the text has no repeats of its own */
-const W = (n) => Array.from({ length: n }, (_, i) => 'w' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26) % 26) + 'x').join(' ') + ' ';
-ok('short take gets the short tip', /short/.test(A.tips(A.analyze('hello there', { sec: 60 }), 'free')[0]));
-ok('long wait tip', A.tips(A.analyze(W(100), { sec: 60, delay: 9 }), 'free').some((t) => /9 seconds/.test(t)));
-ok('filler tip names the filler', A.tips(A.analyze('um '.repeat(10) + W(90), { sec: 60 }), 'free').some((t) => /"um"/.test(t)));
-ok('restart tip', A.tips(A.analyze('go go to to be be ' + W(90), { sec: 60 }), 'free').some((t) => /over 3 times/.test(t)));
-ok('fast tip', A.tips(A.analyze(W(200), { sec: 60 }), 'free').some((t) => /fast/.test(t)));
-ok('slow tip', A.tips(A.analyze(W(60), { sec: 60 }), 'free').some((t) => /Slow/.test(t)));
-ok('clean take tip', /clean take/i.test(A.tips(A.analyze(W(130), { sec: 60, delay: 1 }), 'free')[0]));
-ok('at most two tips', A.tips(A.analyze('um '.repeat(10) + 'go go to to be be ' + W(190), { sec: 60, delay: 9 }), 'free').length <= 2);
-ok('off-topic tip', A.tips(A.analyze(W(130), { sec: 60, delay: 1, topic: 'Explain volcano magma crater lava' }), 'topic').some((t) => /never touched/.test(t)));
-
-/* ---- takes: clean + merge ---- */
-const T = (id, mod, extra = {}) => ({ id, at: 1000 + mod, mod, day: '2026-10-19', mode: 'topic', topic: 'x', sec: 60, text: 'hello world', ...extra });
-eq('clean drops junk', A.cleanTake({ nope: 1 }), null);
-eq('clean keeps tombstone small', A.cleanTake({ id: 'a', del: 1, mod: 5, at: 4, day: '2026-10-19', text: 'secret' }), { id: 'a', mod: 5, at: 4, day: '2026-10-19', del: 1 });
-ok('clean computes stats when missing', A.cleanTake(T('a', 1)).st.words === 2);
-eq('merge: later change wins', A.mergeTakes([T('a', 1, { text: 'one' })], [T('a', 2, { text: 'two' })]).map((t) => t.text), ['two']);
-eq('merge: stale device does not win', A.mergeTakes([T('a', 5, { text: 'new' })], [T('a', 2, { text: 'old' })]).map((t) => t.text), ['new']);
-eq('merge: union by id, ordered by time', A.mergeTakes([T('b', 9)], [T('a', 1)]).map((t) => t.id), ['a', 'b']);
-eq('merge: a deletion stays deleted against an older copy', A.mergeTakes([{ id: 'a', del: 1, mod: 9, at: 1, day: '2026-10-19' }], [T('a', 3)]).map((t) => !!t.del), [true]);
-eq('merge: an edit made after a deletion wins', A.mergeTakes([{ id: 'a', del: 1, mod: 3, at: 1, day: '2026-10-19' }], [T('a', 9)]).map((t) => !!t.del), [false]);
-eq('merge: same mod, deletion wins', A.mergeTakes([T('a', 4)], [{ id: 'a', del: 1, mod: 4, at: 1, day: '2026-10-19' }]).map((t) => !!t.del), [true]);
-eq('merge twice is stable', A.mergeTakes(A.mergeTakes([T('a', 1)], [T('b', 2)]), [T('a', 1)]).map((t) => t.id), ['a', 'b']);
-ok('file text is JSON', JSON.parse(A.fileText([A.cleanTake(T('a', 1))])).takes.length === 1);
-
 /* ---- streaks ---- */
 eq('streak: three days incl. today', A.streakOf(['2026-10-17', '2026-10-18', '2026-10-19'], '2026-10-19'), { days: 3, today: true });
 eq('streak: today not yet spoken keeps yesterday', A.streakOf(['2026-10-17', '2026-10-18'], '2026-10-19'), { days: 2, today: false });
@@ -181,8 +154,59 @@ ok('pick: with everything seen still returns one', !!A.pickTopic(TOPICS, TOPICS.
 }
 
 /* ---- average ---- */
-eq('average', A.average([{ st: { wpm: 100 } }, { st: { wpm: 150 } }, { st: {} }], 'wpm'), 125);
-eq('average of nothing', A.average([], 'wpm'), null);
+eq('average', A.average([{ v: 100 }, { v: 150 }, {}], (t) => t.v), 125);
+eq('average of nothing', A.average([], (t) => t.v), null);
+
+
+/* ---- timed words: pauses, first word, flags line up with the words ---- */
+const TW = (spec) => {
+  /* spec: [[word, startSec, endSec], ...] */
+  return spec.map(([w, s, e]) => ({ w, s, e }));
+};
+const timed = TW([['Um,', 1.5, 1.9], ['so', 2.0, 2.2], ['I', 2.3, 2.4], ['think', 2.5, 2.9], ['money', 4.6, 5.0], ['is', 5.1, 5.2], ['like', 5.3, 5.5], ['you', 5.6, 5.7], ['know', 5.8, 6.0], ['useful', 6.1, 6.6]]);
+const pa = A.pausesOf(timed);
+eq('pauses: one gap of 1.7 s', [pa.count, pa.longest, pa.long], [1, 1.7, 1]);
+eq('pauses: where it is', pa.gaps, [{ i: 4, len: 1.7 }]);
+eq('pauses: first word', pa.first, 1.5);
+eq('pauses: none in steady speech', A.pausesOf(TW([['a', 0, 0.3], ['b', 0.4, 0.7], ['c', 0.8, 1.1]])).count, 0);
+eq('pauses: a gap of exactly 0.7 counts', A.pausesOf(TW([['a', 0, 0.3], ['b', 1.0, 1.3]])).count, 1);
+eq('pauses: a gap of 0.6 does not', A.pausesOf(TW([['a', 0, 0.3], ['b', 0.9, 1.2]])).count, 0);
+eq('pauses: total', A.pausesOf(TW([['a', 0, 0.3], ['b', 1.3, 1.6], ['c', 3.6, 3.9]])).total, 3);
+eq('pauses: empty', A.pausesOf([]), { count: 0, long: 0, total: 0, longest: 0, first: null, gaps: [] });
+eq('pauses: a custom minimum', A.pausesOf(TW([['a', 0, 0.3], ['b', 0.9, 1.2]]), 0.5).count, 1);
+
+const aw = A.analyzeWords(timed, { sec: 30 });
+eq('words: um is flagged at position 0', aw.flags.indexOf(0) >= 0, true);
+eq('words: "so" after um is flagged', aw.flags.indexOf(1) >= 0, true);
+eq('words: "like you know" flags like, you, know', [6, 7, 8].every((i) => aw.flags.indexOf(i) >= 0), true);
+eq('words: ordinary words are not flagged', [2, 3, 4, 5, 9].some((i) => aw.flags.indexOf(i) >= 0), false);
+eq('words: filler tally', aw.fillers, { um: 1, so: 1, like: 1, 'you know': 1 });
+eq('words: punctuation on a word does not hide it', A.analyzeWords(TW([['Uh,', 0, 0.2]]), {}).fillerTotal, 1);
+eq('words: a word that is two tokens is one position', A.analyzeWords(TW([['non-profit', 0, 0.5], ['um', 0.6, 0.8]]), {}).flags, [1]);
+eq('words: an empty word does not break positions', A.analyzeWords(TW([['...', 0, 0.1], ['um', 0.2, 0.3]]), {}).flags, [1]);
+eq('words: matlab (a Hindi filler) is counted', A.analyzeWords(TW([['matlab', 0, 0.4]]), {}).fillerTotal, 1);
+
+const facts = A.factsOf({ words: timed, sec: 30, mode: 'topic', topic: 'Explain money to a child.' });
+eq('facts: first word and pauses ride along', [facts.pauses.first, facts.pauses.count, facts.delay], [1.5, 1, 1.5]);
+eq('facts: wpm from the seconds spoken', facts.wpm, 20);
+ok('facts: topic words used', facts.touched.indexOf('money') >= 0 && facts.missed.indexOf('child') >= 0);
+eq('facts: free talk has no topic words', A.factsOf({ words: timed, sec: 30, mode: 'free', topic: 'x' }).missed, []);
+eq('facts: none without words', A.factsOf({ words: [], sec: 30 }), null);
+eq('facts: none for a take still being written out', A.factsOf({ sec: 30, status: 'queued' }), null);
+
+const seg = A.segmentsOf(timed, facts);
+eq('segments: one per word', seg.length, 10);
+eq('segments: the pause sits before "money"', [seg[3].gap, seg[4].gap], [0, 1.7]);
+eq('segments: fillers marked', seg.filter((s) => s.filler).map((s) => s.w), ['Um,', 'so', 'like', 'you', 'know']);
+eq('segments: no words', A.segmentsOf([], null), []);
+
+/* ---- the coaching note ---- */
+eq('note: heading, paragraph, bullets', A.noteHtml('## Today\nYou did well.\n- one\n- two\n\nBye'), '<h4>Today</h4><p>You did well.</p><ul><li>one</li><li>two</li></ul><p>Bye</p>');
+eq('note: bold', A.noteHtml('a **big** word'), '<p>a <b>big</b> word</p>');
+eq('note: html is escaped', A.noteHtml('<script>alert(1)</script>'), '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
+eq('note: hindi survives', A.noteHtml('- \u092e\u0948\u0902'), '<ul><li>\u092e\u0948\u0902</li></ul>');
+eq('note: empty', A.noteHtml(''), '');
+eq('note: windows line endings', A.noteHtml('a\r\n- b\r\n'), '<p>a</p><ul><li>b</li></ul>');
 
 console.log(passes + ' checks passed' + (fails ? ', ' + fails + ' FAILED' : ''));
 process.exit(fails ? 1 : 0);

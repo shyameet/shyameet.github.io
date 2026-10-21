@@ -17,9 +17,9 @@ file in a VM through the `window.__todoTest` hook. Run it after any change to `t
 node tools/test/test_speak.mjs
 ```
 
-92 checks on `src/speak.js`: the filler count (and the phrases it must not flag), words a
-minute, restarts, topic words, the tips, how two devices' takes merge, streaks, and the choice
-of a random topic. Same method as above (`window.__speakTest`).
+106 checks on `src/speak.js`: the filler count (and the phrases it must not flag), words a
+minute, restarts, topic words, the pauses between timed words, the marked transcript, the
+coaching note's markup, streaks, and the choice of a random topic. Same method as above (`window.__speakTest`).
 
 ## Several devices in one browser
 
@@ -43,16 +43,17 @@ into native date/time inputs (set `.value` and dispatch `input`/`change`); scree
 out while the window is hidden. A race needs the other device's write to land BETWEEN the
 page's read and its write — the page waits ~600 ms before saving.
 
-The Speak page also needs a fake microphone and a second, private repo, both built in:
-`fake_gh.mjs` serves `shyameet/speech-log` too (it starts EMPTY and makes `main` on the first
-write; `GET /__speech` shows it; `POST /__noaccess?on=1` makes it answer 404 as GitHub does for
-a private repo the token cannot see; `POST /__race?n=2` makes the next two writes lose a race
-with "another device"). `mk_dev.py` copies take `say=some+words` (the words come out one by
-one, then the "browser" ends the listen, as Chrome does), `sayms=40` (ms per word),
-`norec=1` (a browser that cannot listen) and `micerr=not-allowed` (a blocked microphone):
+The Speak page needs a fake microphone and the helper. `mk_dev.py` copies take
+`mic=tone` (a WebAudio tone as a real MediaStream, so the level bar moves and MediaRecorder
+records something), `mic=silent`, `mic=deny`, `mic=none`, `mic=busy`, `lostms=3000` (unplugged
+that long after opening) and `devices=2` (two microphones to pick from):
 `python tools/test/mk_dev.py speak/index.html _t_speak.html`, then open
-`/_t_speak.html?fresh=1&say=...`. In the page, `localStorage.speak_pref_v1 =
-'{"think":3,"target":4,"mode":"topic"}'` gives a 3 s think and a 4 s talk instead of waiting a
-minute.
+`/_t_speak.html?mic=tone`. Run the helper against a scratch folder with the stand-in for Whisper:
+`python tools/speakd/speakd.py --fake --data <scratch dir>` (the stand-in answers every take with a
+fixed sentence, a 1.7 s pause after the third word, so the highlighting can be checked). In the
+page, `localStorage.speak_pref_v1 = '{"think":3,"target":6,"mode":"topic"}'` gives a 3 s think and
+a 6 s talk instead of waiting a minute. The helper's own tests need no model:
+`python tools/speakd/test_speakd.py` (22 tests: the origin and host guards, saving, transcribing,
+restarts, a broken day file, deleting, concurrent takes).
 
-Never point these at the real repo. `fake_gh.mjs` accepts any token.
+Never point these at the real repo or at the real data folder. `fake_gh.mjs` accepts any token.

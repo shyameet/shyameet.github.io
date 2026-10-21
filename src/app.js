@@ -10,6 +10,54 @@
                               and shows the one that matches the device's date;
      3. make the day's file -- if the nightly job has not, the browser holding the
                               token creates it. */
+/* Sign-in keeper. Asks the browser to keep this site's storage (so it is not cleared when the
+   disk runs short), keeps a second copy of the sign-in in IndexedDB, and puts it back if the
+   first copy has gone missing. Signing out on purpose forgets both (the editor calls
+   window.keeperSync() after it changes the token). It adds nothing the token did not
+   already have: both copies are this site's own storage on this browser. */
+(function () {
+  var K = 'gh_token';
+  var db = function () {
+    return new Promise(function (res) {
+      try {
+        var r = indexedDB.open('keeper', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = r.onblocked = function () { res(null); };
+      } catch (e) { res(null); }
+    });
+  };
+  var op = function (mode, fn) {
+    return db().then(function (d) {
+      if (!d) return null;
+      return new Promise(function (res) {
+        try {
+          var tx = d.transaction('kv', mode);
+          var rq = fn(tx.objectStore('kv'));
+          tx.oncomplete = function () { res(rq && rq.result !== undefined ? rq.result : true); d.close(); };
+          tx.onerror = tx.onabort = function () { res(null); d.close(); };
+        } catch (e) { res(null); }
+      });
+    });
+  };
+  var mine = function () { try { return localStorage.getItem(K) || ''; } catch (e) { return ''; } };
+  window.keeperSync = function () {
+    var v = mine();
+    return op('readwrite', function (s) { return v ? s.put(v, K) : s.delete(K); });
+  };
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  if (mine()) { window.keeperSync(); return; }
+  op('readonly', function (s) { return s.get(K); }).then(function (v) {
+    if (!v || typeof v !== 'string') return;
+    try {
+      if (sessionStorage.getItem('keeper_once')) return;   // once per tab, never a loop
+      sessionStorage.setItem('keeper_once', '1');
+      localStorage.setItem(K, v);
+      location.reload();
+    } catch (e) {}
+  });
+})();
+
 (function () {
   'use strict';
 

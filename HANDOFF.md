@@ -1,7 +1,7 @@
-# Handoff — where the journal site stands (19 Oct 2026)
+# Handoff — where the journal site stands (21 Oct 2026)
 
-Written when the work moved from the laptop to the desktop. Read this, then `README.md`
-(how every part works), then `tools/test/README.md` (how to check a change).
+Written when the work moved from the laptop to the desktop (19 Oct), updated 21 Oct. Read this, then
+`README.md` (how every part works), then `tools/test/README.md` (how to check a change).
 
 ## What is live
 
@@ -20,31 +20,33 @@ Written when the work moved from the laptop to the desktop. Read this, then `REA
   kept locked with it in `public/admin/vault.json` (AES-256-GCM, PBKDF2-SHA256 600,000 rounds),
   and a new browser opens Write on *Sign in*. The password was set on 11 Oct; since then the
   devices save normally (by 19 Oct: 51 focus blocks, tasks, a journal entry).
-
-- **19 Oct — Speak** (`/speak/`, `src/speak.js`, a card on Today). Random topic or free talk, a
-  thinking timer, a speaking timer, dictation, and a read-out (pace, fillers, restarts, first
-  word, topic words, tips). Takes are saved as TEXT to a **private** repo, `shyameet/speech-log`
-  (`takes/YYYY-MM-DD.json`), through the owner's own token; a take waits in the browser's queue
-  until it can be sent. See README → *Speak*. Tested against the fake GitHub (race, no access,
-  offline, delete, typed fallback, blocked mic, phone width) and 92 unit checks; **not yet run
-  against the real private repo or a real microphone**, because the repo has to be made by the
-  owner (see below).
+- **21 Oct — Speak v2** (`/speak/`, `src/speak.js`, the helper in `tools/speakd/`, a card on Today).
+  v1 (19 Oct) used live dictation and a private GitHub repo; the owner reported that the microphone
+  stopped after the 30 s thinking time and that fixed rules were not real analysis. v2 records
+  AUDIO (the tap opens the microphone; a level bar proves it is alive; warnings for a flat bar,
+  muted / busy / blocked / unplugged, a Reconnect button, a microphone picker), hands each take to
+  **speakd** on the PC (127.0.0.1:4777, started at login), which writes it out with Whisper medium
+  (English + Hindi mixed, fillers kept, a time per word). Audio, words and notes stay in
+  `C:\Users\shyam\SpeechJournal`; no GitHub, no token. The page shows facts (pace, fillers, pauses,
+  first word, the transcript with fillers and pauses marked); the ADVICE is Claude's, written to
+  `coaching/YYYY-MM-DD.md` after reading the output of `tools/speakd/review_pack.py`.
+  README → *Speak* has the whole design.
+- **21 Oct — sign-in keeper** (top of `src/app.js`, and the Write page): asks the browser to keep
+  the site's storage, mirrors the sign-in into IndexedDB and puts it back once per tab if
+  localStorage lost it; signing out on purpose clears both. Why: "not connected" kept coming back
+  on his Windows Chrome. The real cause is not proven; if it persists, check Chrome → Settings →
+  Privacy → *Clear cookies and site data when you close all windows* (add shyameet.github.io to
+  the allowed list).
 
 ## Still open
 
-- **Speak needs the owner's two steps:** create the **private** repo `shyameet/speech-log` on
-  GitHub (tick *Add a README*), then add it to the journal's fine-grained token (Repository
-  access, Contents: Read and write). Until then the page says "cannot see the private repo" and
-  takes wait on the device. Then one real take from the phone confirms it end to end.
-- **Speak phase 2 (not built):** record audio and transcribe with Whisper on a private machine,
-  to catch the "um"/"uh" that browser dictation drops and to measure pauses. Audio must never go
-  in a public repo; delete it after transcribing unless the owner wants it kept.
-- **Speak phase 3 (not built):** a nightly job that reads the day's takes and writes
-  `coaching/YYYY-MM-DD.md` in the private repo (the page already shows the newest), naming the
-  top habits and one drill for tomorrow; plus an evening nudge if nothing was spoken.
-- **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task
-  for him (instead of choosing a section) is not built; Free talk only stores the text.
-
+- **Speak: a real talk on the real microphone** is the first thing to check. The pipeline was
+  tested with a fake microphone and a spoken test clip; Hinglish accuracy is untested.
+- **Speak on the phone** is not supported (the helper lives on the PC). Options if wanted: send the
+  audio to the helper over Tailscale or a tunnel, or record on the phone and sync it through Drive.
+- **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task for
+  him (instead of choosing a section) is not built; Free talk stores a talk like any other.
+- **Nightly review:** a scheduled task on this PC (see the memory file `personal-journal-site.md`).
 - **Phone alerts** are built but not known to be set up: install ntfy, subscribe to the topic
   shown under Tasks → *Reminders & phone alerts*, press *Send a test*. No session has ever sent
   anything to the real ntfy.sh — the owner's test is the first real one.
@@ -63,7 +65,7 @@ Written when the work moved from the laptop to the desktop. Read this, then `REA
 - Posts stay as spoken, never tidied. Scripture is never typed from memory. No personal
   name on the site. Only public-domain or openly licensed images.
 - Never ask for, paste or reuse a GitHub token; never put a broad token in the vault; this
-  site's files never go into any other repo.
+  site's files never go into any other repo. Speech audio and transcripts never go in any repo.
 
 ## Traps already met
 
@@ -79,3 +81,6 @@ Written when the work moved from the laptop to the desktop. Read this, then `REA
   merging them by content made a cleared record reappear and cancels repeat forever.
 - GitHub Pages lets browsers keep HTML for 10 minutes; pages reload themselves when
   `/build.json` is newer (or show the staying button while in use).
+- A microphone started by a timer with no tap is not reliable in Chrome: open it in the tap.
+- Dictation (SpeechRecognition) is no longer used anywhere: it drops "um" and "uh" and gives no
+  pauses; do not bring it back as the source of the words.

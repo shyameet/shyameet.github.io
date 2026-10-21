@@ -1141,3 +1141,18 @@ footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
 .scoachtext { font-family: var(--serif); font-size: 16.5px; line-height: 1.55; color: var(--ink); }
 .speakcard .btn { margin-top: 6px; }
 .speakcard .count { font-size: 13px; }
+
+/* Speak v2: the level bar, the marked transcript, recordings */
+.slevel { height: 10px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 4px auto 10px; max-width: 360px; }
+.slevel i { display: block; height: 100%; width: 0; background: var(--done); border-radius: 99px; transition: width .08s linear; }
+.sdev { max-width: 100%; margin: 8px auto 0; font: inherit; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); }
+.wf { background: var(--accent-soft); color: var(--accent); border-radius: 5px; padding: 0 3px; font-weight: 600; }
+.wp { display: inline-block; font: 600 11px var(--sans); color: var(--muted); background: var(--surface-2); border-radius: 99px; padding: 1px 7px; vertical-align: middle; }
+.wp.long { color: var(--miss); background: var(--miss-soft); }
+.saudio { margin: 6px 0; display: grid; gap: 4px; }
+.saudio audio { width: 100%; height: 34px; }
+.stake.wait { display: block; color: var(--muted); font-size: 13px; }
+.scoachtext h4 { margin: 12px 0 4px; font-family: var(--sans); font-size: 14px; letter-spacing: .02em; }
+.scoachtext p { margin: 6px 0; }
+.scoachtext ul { margin: 6px 0; padding-left: 20px; }
+.scoachtext li { margin: 4px 0; }
