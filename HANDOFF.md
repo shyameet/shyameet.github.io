@@ -84,5 +84,10 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
 - GitHub Pages lets browsers keep HTML for 10 minutes; pages reload themselves when
   `/build.json` is newer (or show the staying button while in use).
 - A microphone started by a timer with no tap is not reliable in Chrome: open it in the tap.
+- Whisper invents text over silence or noise (the hint repeated, or "Thanks for watching!"): keep VAD
+  on and `keep_segment`; re-check with a tone through `try_whisper.py` after any change to the settings.
+- faster-whisper 1.2.1 needs `av==16.0.1` (av 19 breaks decoding); see `tools/speakd/requirements.txt`.
+- "I saved a take but it is not in the folder": read `C:\Users\shyam\SpeechJournal\speakd.log` (every
+  write and every failed request is logged) and the saved screen (it now says why a send failed).
 - Dictation (SpeechRecognition) is no longer used anywhere: it drops "um" and "uh" and gives no
   pauses; do not bring it back as the source of the words.

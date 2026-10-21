@@ -55,11 +55,42 @@ MAX_AUDIO = 200 * 1024 * 1024
 DAY_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 ID_RE = re.compile(r'^[A-Za-z0-9_-]{4,40}$')
 
-# a prompt that makes Whisper write the way the owner speaks: English with Hindi mixed in,
-# Hindi in Roman letters, and the filler words left in rather than tidied away
+# A hint that makes Whisper write the way the owner speaks: English with Hindi mixed in, Hindi
+# in Roman letters, and the filler words kept rather than tidied away. A hint has a cost, found by
+# testing on 21 Oct: on a stretch with no speech Whisper repeats it ("Umm, so, uh, basically..."),
+# and with no hint at all it writes "Thanks for watching!". So only stretches where a voice was
+# detected (VAD) are ever given to Whisper, and anything that still looks like an echo is dropped.
 PROMPT = ("Umm, so, uh, basically I was like, you know, thinking about it. "
           "Haan, main yeh bol raha hoon, matlab, kuch toh karna padega, na? "
           "Okay, so, uh, let me explain.")
+# a soft "um" is voice too: a lower threshold than the default 0.5; a silence of 1.5 s splits the
+# stretches (times stay those of the whole recording)
+VAD = dict(threshold=0.35, min_silence_duration_ms=1500, speech_pad_ms=400)
+NO_SPEECH_HARD = 0.85    # a stretch Whisper itself is this sure has no speech is dropped
+NO_SPEECH_SOFT = 0.30    # with this much doubt, text that is only the hint repeated is dropped
+KNOWN_NOISE_TEXT = ('thanks for watching', 'thank you for watching', 'thank you very much', 'subscribe')
+
+
+def _norm(text):
+    return re.sub(r'[^a-z0-9 ]+', ' ', str(text).lower().replace("'", '')).split()
+
+
+def keep_segment(seg, prompt=PROMPT):
+    """False for a stretch that is not the owner speaking: Whisper's own no-speech call, the hint
+    repeated back, or the stock phrases it makes up over noise."""
+    nsp = getattr(seg, 'no_speech_prob', 0.0) or 0.0
+    words = _norm(seg.text)
+    if not words:
+        return False
+    if nsp >= NO_SPEECH_HARD:
+        return False
+    flat = ' ' + ' '.join(words) + ' '
+    if nsp >= NO_SPEECH_SOFT:
+        if any(k in flat for k in KNOWN_NOISE_TEXT):
+            return False
+        if flat.strip() in ' ' + ' '.join(_norm(prompt)) + ' ':
+            return False
+    return True
 
 
 class Store:
@@ -210,10 +241,12 @@ class Whisper:
         for p in paths:
             segs, info = self.model.transcribe(
                 str(p), language='en', task='transcribe', beam_size=5, temperature=0.0,
-                word_timestamps=True, vad_filter=False, condition_on_previous_text=False,
-                initial_prompt=PROMPT)
+                word_timestamps=True, vad_filter=True, vad_parameters=VAD,
+                condition_on_previous_text=False, initial_prompt=PROMPT)
             lang = info.language
             for seg in segs:
+                if not keep_segment(seg):
+                    continue
                 texts.append(seg.text.strip())
                 for w in (seg.words or []):
                     words.append({'w': w.word.strip(), 's': round(offset + w.start, 2), 'e': round(offset + w.end, 2)})
@@ -328,6 +361,10 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM):
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(body)
+            # the log keeps every write, and every request that failed, so a take that "did not arrive" can be traced
+            path = self.path.split('?')[0]
+            if self.command in ('POST', 'DELETE') or (status >= 400 and path not in ('/favicon.ico',)):
+                log('%s %s -> %d (origin %s, %d bytes)' % (self.command, path, status, self.headers.get('Origin') or '-', len(body)))
 
         def _allowed(self):
             """Data is only for the site's pages. A request with no Origin (a plain GET typed in

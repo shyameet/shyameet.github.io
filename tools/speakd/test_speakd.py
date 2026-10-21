@@ -416,5 +416,95 @@ class TReview(unittest.TestCase):
 
 
 
+class TWhisperGuard(unittest.TestCase):
+    """What the real Whisper is allowed to hand back: nothing made up over silence or noise."""
+
+    def seg(self, text, nsp=0.0, words=None):
+        from types import SimpleNamespace as NS
+        return NS(text=text, no_speech_prob=nsp, words=words or [], start=0.0)
+
+    def test_the_hint_repeated_over_non_speech_is_dropped(self):
+        echo = 'Okay, so, uh, let me explain.'
+        self.assertFalse(speakd.keep_segment(self.seg(echo, 0.65)))
+        self.assertFalse(speakd.keep_segment(self.seg('Umm, so, uh, basically I was like, you know, thinking about it.', 0.5)))
+
+    def test_the_same_words_said_for_real_are_kept(self):
+        self.assertTrue(speakd.keep_segment(self.seg('Okay, so, uh, let me explain.', 0.0)))
+        self.assertTrue(speakd.keep_segment(self.seg('Okay, so, uh, let me explain.', 0.1)))
+
+    def test_stock_phrases_over_noise_are_dropped(self):
+        self.assertFalse(speakd.keep_segment(self.seg('Thanks for watching!', 0.5)))
+        self.assertFalse(speakd.keep_segment(self.seg('Thank you very much.', 0.9)))
+        self.assertTrue(speakd.keep_segment(self.seg('Thank you very much.', 0.0)))   # said by a person
+
+    def test_whisper_own_call_of_no_speech_wins(self):
+        self.assertFalse(speakd.keep_segment(self.seg('I went to the market and bought rice', 0.9)))
+        self.assertTrue(speakd.keep_segment(self.seg('I went to the market and bought rice', 0.1)))
+
+    def test_empty_text_is_dropped(self):
+        self.assertFalse(speakd.keep_segment(self.seg('  ', 0.0)))
+        self.assertFalse(speakd.keep_segment(self.seg('...', 0.0)))
+
+    def test_transcribe_asks_for_voice_detection_and_joins_parts(self):
+        from types import SimpleNamespace as NS
+        calls = []
+
+        class Model:
+            def transcribe(self, path, **kw):
+                calls.append(kw)
+                n = len(calls)
+                w = NS(word='hello', start=1.0, end=1.4)
+                segs = [NS(text=' hello', no_speech_prob=0.0, words=[w], start=1.0),
+                        NS(text=' Thanks for watching!', no_speech_prob=0.9, words=[NS(word='Thanks', start=5.0, end=5.5)], start=5.0)]
+                return iter(segs), NS(language='en', duration=10.0)
+
+        w = speakd.Whisper(self.id())
+        w.model = Model()
+        res = w.transcribe(['a.webm', 'b.webm'])
+        self.assertEqual([x['w'] for x in res['words']], ['hello', 'hello'])
+        self.assertEqual([x['s'] for x in res['words']], [1.0, 11.0])   # the second part is shifted by the first
+        self.assertEqual(res['text'], 'hello hello')
+        for kw in calls:
+            self.assertTrue(kw['vad_filter'])
+            self.assertEqual(kw['vad_parameters']['threshold'], 0.35)
+            self.assertEqual(kw['language'], 'en')
+            self.assertTrue(kw['word_timestamps'])
+            self.assertFalse(kw['condition_on_previous_text'])
+            self.assertEqual(kw['initial_prompt'], speakd.PROMPT)
+
+
+class TLog(unittest.TestCase):
+    """The log keeps every write and every failure, so a take that did not arrive can be traced."""
+
+    def test_writes_and_failures_are_logged(self):
+        d = tempfile.mkdtemp(prefix='speakd-log-')
+        lines = []
+        try:
+            store = speakd.Store(d)
+            worker = speakd.Worker(store, speakd.FakeWhisper(), lambda m: None)
+            worker.start()
+            srv = speakd.ThreadingHTTPServer(('127.0.0.1', 0), speakd.make_handler(store, worker, speakd.FakeWhisper(), lines.append, 'http://127.0.0.1:1'))
+            port = srv.server_address[1]
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+            def req(method, path, body=None, origin=ORIGIN):
+                c = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+                h = {'Origin': origin}
+                c.request(method, path, body=body, headers=h)
+                r = c.getresponse(); r.read(); c.close(); return r.status
+            req('GET', '/health')
+            req('POST', '/audio?id=logtest1&day=2026-10-21&n=0', b'WEBM')
+            req('GET', '/takes', origin='https://evil.example')
+            srv.shutdown(); srv.server_close()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        joined = ' | '.join(lines)
+        self.assertIn('POST /audio -> 200', joined)
+        self.assertIn('GET /takes -> 403', joined)
+        self.assertIn('https://evil.example', joined)
+        self.assertNotIn('/health', joined)
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

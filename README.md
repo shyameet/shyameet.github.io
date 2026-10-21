@@ -468,13 +468,22 @@ resumes). `tools/speakd/try_whisper.py <audio>` checks it by hand. Tested on a s
 speech written out in about 15 s on the i7-9700 (model load 5 s), with "Umm", "like", "You know" and
 "Basically" kept and every word timed.
 
+**Whisper makes things up over silence, so it is never given silence.** Found on 21 Oct by sending
+it a plain tone: with the hint text that keeps "um"/"uh" it repeated the hint ("Umm, so, uh,
+basically..."), and with no hint it wrote "Thanks for watching!". That would put invented fillers in
+a transcript. So only stretches where a voice is detected (VAD, threshold 0.35, soft enough for a
+quiet "um") go to Whisper, and `keep_segment` drops what still looks like an echo of the hint or a
+stock phrase. Checked: silence, noise, a tone and a Chrome recording of a tone all give nothing;
+speech with a quiet voice and room hiss is written out in full with its fillers. Do not remove the
+VAD or change the hint without re-running that check (`tools/speakd/try_whisper.py` on a tone).
+
 **Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
 miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Phones are
 not supported yet (the helper lives on the PC). The helper must be running; the page says when it
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 37 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 44 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Local development

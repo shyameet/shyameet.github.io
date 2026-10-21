@@ -382,9 +382,10 @@
       PEND = PEND.filter(function (p) { return p.id !== rec.id; });
       MEMPEND = MEMPEND.filter(function (p) { return p.id !== rec.id; });
       return idbDel(rec.id);
-    }).then(function () { delete sending[rec.id]; }, function (e) {
+    }).then(function () { delete sending[rec.id]; rec.lastError = ''; }, function (e) {
       delete sending[rec.id];
-      if (e && e.status === 400) { /* the helper refused it: keep it, say so */ rec.refused = e.message; }
+      /* kept, retried, and said on the page, so "it said Saved" is never the whole story */
+      rec.lastError = (e && e.message) || String(e);
     });
   }
   function sendAllPending() {
@@ -740,6 +741,7 @@
   }
   function stateLine(t, rec) {
     if (rec && !t) {
+      if (rec.lastError) return 'Your recording is safe in this browser, but sending it failed (' + rec.lastError + '). Trying again.';
       return H.up ? 'Sending your recording to the helper…'
         : 'Your recording is safe in this browser. The helper is not running, so it will be written out as soon as it is.';
     }
