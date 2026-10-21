@@ -460,6 +460,14 @@ reads that and writes `coaching/YYYY-MM-DD.md` (plain text with `##` headings, `
 `**bold**`); the page shows the newest under *Coaching*. A nightly scheduled review and asking in
 chat ("review my speech") both do exactly this.
 
+**Set-up (done 21 Oct on SUMEET-PC):** make a venv at `C:\Users\shyam\SpeechJournal\venv`, then
+`pip install -r tools/speakd/requirements.txt` (the `av==16.0.1` pin matters: faster-whisper 1.2.1
+fails with av 19), and put the model `Systran/faster-whisper-medium` in `SpeechJournal\models\medium`
+(`huggingface_hub.snapshot_download`; if it stalls, set `HF_HUB_DISABLE_XET=1` and run it again, it
+resumes). `tools/speakd/try_whisper.py <audio>` checks it by hand. Tested on a spoken clip: 15 s of
+speech written out in about 15 s on the i7-9700 (model load 5 s), with "Umm", "like", "You know" and
+"Basically" kept and every word timed.
+
 **Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
 miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Phones are
 not supported yet (the helper lives on the PC). The helper must be running; the page says when it
