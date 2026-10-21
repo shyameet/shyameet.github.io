@@ -361,5 +361,60 @@ class TSite(unittest.TestCase):
         self.assertEqual(self.rig.req('GET', '/speak/', host='attacker.example:4777', origin=None)[0], 403)
 
 
+class TReview(unittest.TestCase):
+    """review_pack lays the takes out for a reader: pauses marked in line, no scoring."""
+
+    def setUp(self):
+        import review_pack
+        self.rp = review_pack
+        self.dir = tempfile.mkdtemp(prefix='speakd-review-')
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def words(self, spec):
+        return [{'w': w, 's': s, 'e': e} for w, s, e in spec]
+
+    def test_pauses_are_marked_inline(self):
+        text, gaps = self.rp.marked(self.words([('so', 1.0, 1.3), ('the', 1.4, 1.6), ('thing', 3.3, 3.7)]))
+        self.assertEqual(text, 'so the [1.7s] thing')
+        self.assertEqual(gaps, [1.7])
+
+    def test_short_gaps_are_not_marked(self):
+        text, gaps = self.rp.marked(self.words([('a', 0, 0.3), ('b', 0.8, 1.1)]))
+        self.assertEqual(text, 'a b')
+        self.assertEqual(gaps, [])
+
+    def test_one_take_has_facts_and_transcript_but_no_verdict(self):
+        t = {'at': 1792568643840, 'mode': 'topic', 'topic': 'Explain money.', 'status': 'done', 'sec': 30,
+             'words': self.words([('Um,', 1.0, 1.3), ('money', 3.0, 3.4), ('is', 3.5, 3.6), ('a', 3.7, 3.8), ('tool', 3.9, 4.2)])}
+        out = self.rp.one(t)
+        self.assertIn('Explain money.', out)
+        self.assertIn('5 words', out)
+        self.assertIn('10 words/min', out)
+        self.assertIn('first word at 1.0 s', out)
+        self.assertIn('1 um/uh/er', out)
+        self.assertIn('1 pauses', out)
+        self.assertIn('Um, [1.7s] money is a tool', out)
+        for bad in ('score', 'good job', 'great', 'poor'):
+            self.assertNotIn(bad, out.lower())
+
+    def test_take_not_ready_says_so(self):
+        out = self.rp.one({'at': 1792568643840, 'mode': 'free', 'status': 'error', 'error': 'no audio arrived', 'words': []})
+        self.assertIn('free talk', out)
+        self.assertIn('error', out)
+        self.assertIn('no audio arrived', out)
+
+    def test_load_reads_days_and_skips_broken_files(self):
+        (Path(self.dir) / 'takes').mkdir()
+        (Path(self.dir) / 'takes' / '2026-10-20.json').write_text(json.dumps({'v': 1, 'takes': [{'id': 'a', 'at': 2, 'day': '2026-10-20'}]}), encoding='utf-8')
+        (Path(self.dir) / 'takes' / '2026-10-21.json').write_text('{ broken', encoding='utf-8')
+        (Path(self.dir) / 'takes' / '2026-10-22.json').write_text(json.dumps({'v': 1, 'takes': [{'id': 'b', 'at': 3, 'day': '2026-10-22'}]}), encoding='utf-8')
+        self.assertEqual([t['id'] for t in self.rp.load(self.dir)], ['a', 'b'])
+        self.assertEqual([t['id'] for t in self.rp.load(self.dir, since='2026-10-22')], ['b'])
+        self.assertEqual([t['id'] for t in self.rp.load(self.dir, day='2026-10-20')], ['a'])
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

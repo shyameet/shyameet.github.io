@@ -466,7 +466,7 @@ not supported yet (the helper lives on the PC). The helper must be running; the 
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 32 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 37 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Local development
