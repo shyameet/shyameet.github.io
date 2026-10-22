@@ -48,7 +48,13 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   audio to the helper over Tailscale or a tunnel, or record on the phone and sync it through Drive.
 - **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task for
   him (instead of choosing a section) is not built; Free talk stores a talk like any other.
-- **Nightly review:** a scheduled task on this PC (see the memory file `personal-journal-site.md`).
+- **Scheduled tasks on this PC** (they run while the Claude app is open): `speech-nightly-review`
+  (~22:08, follows `tools/speakd/REVIEW.md`) and `speech-evening-nudge` (~20:44, one push notification
+  if no take exists today). The first real review was written by hand on 22 Oct
+  (`SpeechJournal\coaching\2026-10-22.md`): his habit is starting half his sentences with "So"/"And"
+  (7 of 14), he gives reasons before the answer, and he said no "um" that Whisper caught.
+- **Helps him improve (22 Oct):** a shape per topic kind while thinking and talking, *Same topic again*,
+  the "So / And starters" chip, and a "How to get better, fast" card on the page.
 - **Phone alerts** are built but not known to be set up: install ntfy, subscribe to the topic
   shown under Tasks → *Reminders & phone alerts*, press *Send a test*. No session has ever sent
   anything to the real ntfy.sh — the owner's test is the first real one.
