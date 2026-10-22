@@ -1156,3 +1156,13 @@ footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
 .scoachtext p { margin: 6px 0; }
 .scoachtext ul { margin: 6px 0; padding-left: 20px; }
 .scoachtext li { margin: 4px 0; }
+
+/* Speak v3: the shape of a talk, the starters chip, the tips */
+.sshape { list-style: none; counter-reset: sh; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 0 auto 14px; padding: 0; max-width: 34em; }
+.sshape li { counter-increment: sh; font-size: 13px; color: var(--ink-2); background: var(--surface-2); border-radius: 99px; padding: 4px 11px; }
+.sshape li::before { content: counter(sh) ". "; color: var(--accent); font-weight: 700; }
+.schip.warn b { color: var(--miss); }
+.stips ol { margin: 8px 0 2px; padding-left: 20px; line-height: 1.5; color: var(--ink-2); }
+.stips li { margin: 6px 0; }
+.stips summary { cursor: pointer; list-style: none; }
+.stips summary::-webkit-details-marker { display: none; }

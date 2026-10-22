@@ -16,7 +16,8 @@ the facts (pace, fillers, pauses, the marked transcript); the review is the part
    It prints each take with its transcript, silences marked inline like `[1.7s]`, and the last two
    notes already written.
 2. Read today's takes the way a listener would. If there are no takes today, write nothing and stop
-   (never an empty or invented note).
+   (never an empty or invented note). If a note for today already exists, read it: rewrite it only when
+   there are takes newer than the note (add them in and keep its numbers right), otherwise leave it alone.
 3. Read the last two notes. Do not repeat advice that was followed; if a drill was not followed or
    the same habit is still there, say so kindly and make the next step smaller, not longer.
 4. Write `C:\Users\shyam\SpeechJournal\coaching\YYYY-MM-DD.md` (UTF-8; today's date). Never edit or
@@ -61,6 +62,14 @@ One or two sentences: what the talk was like, honestly.
 ## Since last time
 - one line: better, same, or worse, and by how much in plain words
 ```
+
+## Counting
+
+Count, never estimate. "Starts a sentence with So / And" is counted per sentence: Whisper puts the full
+stops in, so a sentence starts at the first word and after any word ending . ? or !. The Speak page shows
+the same count for each take (the "So / And starters" chip); say "7 of 14 sentences", not "a lot". Check
+any number you quote against the transcript before writing it (the first note once said "about 25
+sentences" when there were 14).
 
 ## Rules
 

@@ -187,12 +187,29 @@
     };
   }
 
+  /* How sentences begin. Whisper puts the full stops in, so a sentence starts at the first word
+     and after any word ending . ? or !. A sentence begun with "So" or "And" is a thought joined
+     on to the last one instead of finished: the commonest habit found in the first real takes. */
+  function openersOf(words) {
+    var ws = words || [];
+    var sentences = 0, so = 0, and = 0;
+    for (var i = 0; i < ws.length; i++) {
+      if (i && !/[.?!][”"')\]]*$/.test(ws[i - 1].w)) continue;
+      sentences++;
+      var t = tokenize(ws[i].w)[0];
+      if (t === 'so') so++;
+      else if (t === 'and') and++;
+    }
+    return { sentences: sentences, count: so + and, so: so, and: and };
+  }
+
   /* all the facts about a finished take, or null while it has no timed words */
   function factsOf(t) {
     if (!t || !t.words || !t.words.length) return null;
     var pa = pausesOf(t.words);
     var st = analyzeWords(t.words, { sec: t.sec, delay: pa.first, topic: t.mode === 'free' ? '' : t.topic });
     st.pauses = pa;
+    st.openers = openersOf(t.words);
     return st;
   }
 
@@ -260,7 +277,7 @@
   /* a hook for the tests, nothing else */
   if (typeof window.__speakTest === 'function') {
     window.__speakTest({
-      tokenize: tokenize, analyze: analyze, analyzeWords: analyzeWords, pausesOf: pausesOf, factsOf: factsOf,
+      tokenize: tokenize, analyze: analyze, analyzeWords: analyzeWords, pausesOf: pausesOf, factsOf: factsOf, openersOf: openersOf,
       segmentsOf: segmentsOf, streakOf: streakOf, pickTopic: pickTopic, dayKey: dayKey, addDays: addDays,
       average: average, noteHtml: noteHtml
     });
@@ -513,6 +530,22 @@
   pref.think = pref.think == null ? 30 : +pref.think;
   pref.mode = pref.mode === 'free' ? 'free' : 'topic';
 
+  /* A shape for each kind of topic, shown while thinking and talking. Thinking is the skill being
+     practised: a talk with a shape needs fewer "so"s and "um"s because the next step is known. */
+  var SHAPES = {
+    explain: ['Say what it is, in one sentence', 'Compare it to something they know', 'Say why it matters'],
+    persuade: ['Your claim, first', 'Because… (one reason)', 'For example… (one real case)', 'So… (the claim again)'],
+    story: ['Where and when', 'What went wrong, or surprised you', 'What happened next', 'What it taught you'],
+    describe: ['Start wide: where are we?', 'One sight, one sound, one smell', 'End on how it feels'],
+    think: ['Your answer, in one sentence', 'Reason one', 'Reason two', 'One thing against it, and your reply'],
+    pitch: ['Who it is for', 'What it does', 'Why they should care', 'What you want them to do'],
+    free: ['One idea per sentence', 'Finish the sentence, stay silent a second, then the next']
+  };
+  function shapeHtml(cat) {
+    var steps = SHAPES[cat] || SHAPES.free;
+    return '<ol class="sshape" aria-label="A shape for this talk">' + steps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>';
+  }
+
   var stage = $('sstage');
   var S = { phase: 'idle', free: false, topic: null, think0: 0, talk0: 0, sec: 0, parts: [], takeId: '', day: '', timer: 0, lost: false, err: '' };
 
@@ -543,6 +576,7 @@
       if (pref.mode === 'topic') {
         h += '<p class="stopiccat">' + esc(S.topic ? S.topic[0] : '') + '</p>'
           + '<p class="stopic" id="stopic">' + esc(S.topic ? S.topic[1] : '') + '</p>'
+          + shapeHtml(S.topic ? S.topic[0] : 'free')
           + '<div class="srow"><button type="button" class="btn ghost small" data-a="shuffle">Another topic</button>'
           + '<label class="slen">Talk for <select id="slen">' + [1, 2, 3].map(function (m) {
             return '<option value="' + m * 60 + '"' + (pref.target === m * 60 ? ' selected' : '') + '>' + m + ' min</option>';
@@ -552,21 +586,21 @@
           }).join('') + '</select></label></div>'
           + '<button type="button" class="btn primary big sgo" data-a="begin">' + (pref.think ? 'Start thinking' : 'Start talking') + '</button>';
       } else {
-        h += '<p class="stopic">Say anything: an idea, a worry, the day, a plan. No timer. Press stop when you are done.</p>'
+        h += '<p class="stopic">Say anything: an idea, a worry, the day, a plan. No timer. Press stop when you are done.</p>' + shapeHtml('free')
           + '<button type="button" class="btn primary big sgo" data-a="free">Start talking</button>';
       }
       h += '<p class="muted small' + (S.err ? ' bad' : '') + '" id="smic">' + esc(S.err) + '</p>'
         + '<select id="sdev" class="sdev" aria-label="Microphone" hidden></select>';
     } else if (S.phase === 'think') {
       h += '<p class="stopiccat">Think. Decide your first sentence only.</p>'
-        + '<p class="stopic">' + esc(S.topic[1]) + '</p>'
+        + '<p class="stopic">' + esc(S.topic[1]) + '</p>' + shapeHtml(S.topic[0])
         + '<p class="sclock" id="sclock">' + fmt(pref.think) + '</p>' + meter()
         + '<p class="muted small" id="smic">The microphone is on. Recording starts by itself when the time is up.</p>'
         + '<div class="srow"><button type="button" class="btn primary big sgo" data-a="talk">I am ready</button>'
         + '<button type="button" class="btn ghost small" data-a="reconnect" id="sreconnect" hidden>Reconnect the microphone</button></div>'
         + '<select id="sdev" class="sdev" aria-label="Microphone" hidden></select>';
     } else if (S.phase === 'talk') {
-      h += (S.free ? '' : '<p class="stopic small">' + esc(S.topic[1]) + '</p>')
+      h += (S.free ? '' : '<p class="stopic small">' + esc(S.topic[1]) + '</p>' + shapeHtml(S.topic[0]))
         + '<p class="sclock live" id="sclock">' + (S.free ? '0:00' : fmt(pref.target)) + '</p>' + meter()
         + '<p class="muted small" id="smic">Recording… speak, the bar should move.</p>'
         + '<div class="srow"><button type="button" class="btn primary big sgo" data-a="stop">' + (S.free ? 'Stop' : 'Done early') + '</button>'
@@ -576,6 +610,7 @@
       h += '<p class="stopiccat">' + (S.free ? 'Free talk' : esc(S.topic ? S.topic[1] : '')) + '</p>'
         + '<div id="sresult"></div>'
         + '<div class="srow"><button type="button" class="btn primary big" data-a="again">Another take</button>'
+        + (S.free ? '' : '<button type="button" class="btn" data-a="repeat">Same topic again</button>')
         + '<a class="btn ghost" href="/">Back to Today</a></div>';
     }
     stage.innerHTML = h;
@@ -723,6 +758,7 @@
       + chip('fillers a minute', st.fillerPerMin == null ? '–' : st.fillerPerMin, st.fillerTotal ? fillerList(st) : 'none caught')
       + chip('pauses over 0.7 s', pa.count, pa.count ? 'longest ' + pa.longest + ' s' : '')
       + chip('first word after', pa.first == null ? '–' : pa.first + ' s', '')
+      + (st.openers ? chip('"So" / "And" starters', st.openers.count, 'of ' + st.openers.sentences + (st.openers.sentences === 1 ? ' sentence' : ' sentences'), st.openers.count > st.openers.sentences * 0.25 ? 'warn' : '') : '')
       + '</div>'
       + (st.restarts ? '<p class="small muted">' + st.restarts + ' restart' + (st.restarts > 1 ? 's' : '') + ' (a phrase said twice).</p>' : '');
   }
@@ -913,6 +949,7 @@
     else if (a === 'stop') finishTalk();
     else if (a === 'reconnect') reconnect();
     else if (a === 'again') { S.phase = 'idle'; S.topic = null; S.err = ''; draw(); }
+    else if (a === 'repeat') { S.phase = 'idle'; S.err = ''; pref.mode = 'topic'; draw(); }
   });
   app.addEventListener('change', function (e) {
     if (e.target.id === 'slen') { pref.target = +e.target.value || 60; save(LS_PREF, pref); }

@@ -938,6 +938,14 @@ write('speak/index.html', shell({
     + '<section class="card sstagecard" id="sstage"><noscript><p class="muted">This page needs JavaScript.</p></noscript></section>\n'
     + '<section class="card scoach" id="scoach" hidden></section>\n'
     + '<section class="card shist" id="shist"></section>\n'
+    + '<details class="card stips"><summary class="cardhead"><h3>How to get better, fast</h3></summary>'
+    + '<ol><li><b>One minute a day beats one hour a week.</b> Same time each day. A short take still counts.</li>'
+    + '<li><b>Answer first.</b> Your first sentence is the answer. The reasons come after it.</li>'
+    + '<li><b>Silence beats a filler.</b> Finish the sentence, stop for one second, then start the next with the real word, not "so" or "and".</li>'
+    + '<li><b>One idea per sentence.</b> Short sentences are easier to say and easier to follow.</li>'
+    + '<li><b>Use the thinking time for two things:</b> your answer in one sentence, and one reason.</li>'
+    + '<li><b>Say the same topic twice.</b> Read the words you said, fix one thing, and go again with <i>Same topic again</i>.</li>'
+    + '<li><b>Read your transcript out loud once.</b> You will hear your habit.</li></ol></details>\n'
     + '<script type="application/json" id="stopics">' + JSON.stringify(TOPICS).replace(/</g, '\\u003c') + '</script>\n'
     + '</div>',
   scripts: ['/speak.js'],

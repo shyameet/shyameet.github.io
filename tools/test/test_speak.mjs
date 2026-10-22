@@ -208,5 +208,17 @@ eq('note: hindi survives', A.noteHtml('- \u092e\u0948\u0902'), '<ul><li>\u092e\u
 eq('note: empty', A.noteHtml(''), '');
 eq('note: windows line endings', A.noteHtml('a\r\n- b\r\n'), '<p>a</p><ul><li>b</li></ul>');
 
+
+/* ---- how sentences begin ---- */
+const W2 = (s) => s.split(' ').map((w, i) => ({ w, s: i, e: i + 0.5 }));
+eq('openers: counts so/and at sentence starts', A.openersOf(W2('It was fine. So we went. And then we ate. Good food.')), { sentences: 4, count: 2, so: 1, and: 1 });
+eq('openers: the first word counts', A.openersOf(W2('So I think so.')), { sentences: 1, count: 1, so: 1, and: 0 });
+eq('openers: a so after a comma is not a starter', A.openersOf(W2('It was late, so we left, and it rained.')), { sentences: 1, count: 0, so: 0, and: 0 });
+eq('openers: question and exclamation end a sentence', A.openersOf(W2('Why? So what! And now.')), { sentences: 3, count: 2, so: 1, and: 1 });
+eq('openers: a closing quote after the full stop still ends it', A.openersOf(W2('He said "go." So we went.')), { sentences: 2, count: 1, so: 1, and: 0 });
+eq('openers: capitals and commas do not matter', A.openersOf(W2('Fine. SO, we went. And, then.')), { sentences: 3, count: 2, so: 1, and: 1 });
+eq('openers: none', A.openersOf([]), { sentences: 0, count: 0, so: 0, and: 0 });
+eq('openers: riding along in the facts', A.factsOf({ words: W2('Fine. So we went. And ate.'), sec: 10, mode: 'free' }).openers.count, 2);
+
 console.log(passes + ' checks passed' + (fails ? ', ' + fails + ' FAILED' : ''));
 process.exit(fails ? 1 : 0);
