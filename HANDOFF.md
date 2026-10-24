@@ -33,6 +33,12 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   Open it at `http://localhost:4777/speak/` (the helper serves the page too, so no browser rule
   about a public page reaching a local program can block it; the https page may be blocked, and then
   links there). README → *Speak* has the whole design.
+- **24 Oct — installing as an app** (README → *Installing as an app*). He could not install the site
+  on his tablet (model and browser not yet known). A real headless Chrome reported NO installability
+  errors on the live site before or after the change, so it is specific to his tablet/browser.
+  Added `/install/` (steps for Android Chrome, Samsung Internet, iPad Safari, desktop, plus an
+  Install button where the browser allows), a footer link, Apple meta tags, manifest id/scope/maskable
+  icons, a service-worker fetch handler. Ask him which tablet and browser if it still fails.
 - **21 Oct — sign-in keeper** (top of `src/app.js`, and the Write page): asks the browser to keep
   the site's storage, mirrors the sign-in into IndexedDB and puts it back once per tab if
   localStorage lost it; signing out on purpose clears both. Why: "not connected" kept coming back
