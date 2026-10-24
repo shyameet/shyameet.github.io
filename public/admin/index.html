@@ -1129,13 +1129,25 @@
     r.continuous = true;
     r.interimResults = true;
     r.lang = CFG.speechLang || 'en-IN';
+    /* Which results of THIS session have already been written. Android Chrome resends the whole list of results
+       with every event and leaves resultIndex at 0, so trusting resultIndex types every word again each time
+       ("hello" became a hundred hellos, 24 Oct). Counting what was written, per session, is right on every
+       browser; a fresh recogniser starts from zero. */
+    var done = 0, lastText = '', lastAt = 0;
 
     r.onresult = function (e) {
       var interim = '';
-      for (var i = e.resultIndex; i < e.results.length; i++) {
+      for (var i = done; i < e.results.length; i++) {
         var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) { diag.results++; insertSpoken(t.trim()); }
-        else interim += t;
+        if (e.results[i].isFinal) {
+          done = i + 1;
+          var said = t.trim();
+          /* the same finished phrase twice within a moment is the engine repeating itself, not the speaker */
+          if (said && said === lastText && Date.now() - lastAt < 2000) continue;
+          lastText = said; lastAt = Date.now();
+          diag.results++;
+          insertSpoken(said);
+        } else interim += t;
       }
       if (interim) caption(interim, 'live');
       else if (wantOn) caption('Listening. It keeps going through pauses.', 'live');

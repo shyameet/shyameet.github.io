@@ -90,6 +90,30 @@ STUB = r"""<script>
     };
   }
 
+  /* a fake dictation engine, for the Write page's Talk button:
+       sr=desktop   each result event carries only the NEW result (resultIndex says which)
+       sr=android   what Android Chrome does: every event resends the WHOLE list of results, resultIndex stays 0
+     it "hears" three phrases 200 ms apart ("hello", "how are you", "fine thanks"), then the browser ends the listen */
+  if (q.get('sr') === 'desktop' || q.get('sr') === 'android') {
+    var droid = q.get('sr') === 'android';
+    var FakeSR = function () { this.continuous = false; this.interimResults = false; this.lang = ''; };
+    FakeSR.prototype.start = function () {
+      var self = this, phrases = ['hello', 'how are you', 'fine thanks'], list = [], i = 0;
+      window.__srStarts = (window.__srStarts || 0) + 1;
+      setTimeout(function () { self.onstart && self.onstart(); }, 10);
+      this._t = setInterval(function () {
+        if (i < phrases.length) {
+          var r = [{ transcript: ' ' + phrases[i] }]; r.isFinal = true; list.push(r);
+          self.onresult && self.onresult({ resultIndex: droid ? 0 : i, results: list.slice() });
+          i++;
+        } else { clearInterval(self._t); setTimeout(function () { self.onend && self.onend(); }, 150); }
+      }, 200);
+    };
+    FakeSR.prototype.stop = function () { clearInterval(this._t); var s = this; setTimeout(function () { s.onend && s.onend(); }, 10); };
+    FakeSR.prototype.abort = FakeSR.prototype.stop;
+    window.SpeechRecognition = FakeSR; window.webkitSpeechRecognition = FakeSR;
+  }
+
   window.__calls = [];
   var real = window.fetch;
   window.fetch = function (url, opts) {

@@ -111,6 +111,11 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   merging them by content made a cleared record reappear and cancels repeat forever.
 - GitHub Pages lets browsers keep HTML for 10 minutes; pages reload themselves when
   `/build.json` is newer (or show the staying button while in use).
+- Dictation on the Write page typed every word again and again on his Android tablet ("hello" became a
+  hundred hellos): Android Chrome resends the WHOLE list of results with each event and leaves
+  `resultIndex` at 0. The page now counts the results it has already written, per session, and ignores
+  `resultIndex`. Reproduce with `mk_dev.py admin/index.html ...` and `?sr=android` (a fake dictation
+  engine that behaves like that); `?sr=desktop` is the well-behaved kind.
 - A microphone started by a timer with no tap is not reliable in Chrome: open it in the tap.
 - Whisper invents text over silence or noise (the hint repeated, or "Thanks for watching!"): keep VAD
   on and `keep_segment`; re-check with a tone through `try_whisper.py` after any change to the settings.

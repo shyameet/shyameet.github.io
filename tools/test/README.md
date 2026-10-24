@@ -60,4 +60,9 @@ restarts, a broken day file, deleting, concurrent takes, serving the site's page
 To open a test copy through the helper (same origin, as in daily use), start it with
 `--upstream http://localhost:4321` and visit `http://localhost:4777/_t_speak.html?mic=tone`.
 
+The Write page's Talk button (browser dictation) can be tried with `mk_dev.py admin/index.html
+admin/_t_admin.html` and `?sr=android` (a fake dictation engine that resends the whole list of results with
+`resultIndex` stuck at 0, as Android Chrome does) or `?sr=desktop`; after "Talk" then "Stop" the box
+`#body` must hold each phrase once.
+
 Never point these at the real repo or at the real data folder. `fake_gh.mjs` accepts any token.
