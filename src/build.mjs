@@ -430,6 +430,9 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<link rel="alternate" type="application/rss+xml" title="' + esc(SITE_NAME) + '" href="/feed.xml">\n'
     + '<link rel="icon" href="/icon.svg" type="image/svg+xml">\n'
     + '<link rel="apple-touch-icon" href="/icon-180.png">\n'
+    + '<meta name="mobile-web-app-capable" content="yes">\n'
+    + '<meta name="apple-mobile-web-app-capable" content="yes">\n'
+    + '<meta name="apple-mobile-web-app-title" content="Journal">\n'
     + '<link rel="manifest" href="/manifest.webmanifest">\n'
     + '<meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">\n'
     + '<meta name="theme-color" content="#11121b" media="(prefers-color-scheme: dark)">\n'
@@ -465,7 +468,7 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '  <img class="lotus" src="/art/ornaments/lotus.svg" alt="" width="48" height="29">\n'
     + '  <p class="shanti" lang="sa">॥ ॐ शान्तिः शान्तिः शान्तिः ॥</p>\n'
     + '  <p class="motto">' + esc(CFG.tagline) + '</p>\n'
-    + '  <p class="flinks"><a href="/speak/">Speak</a><a href="/shloka/">Shloka</a><a href="/utsav/">Utsav</a><a href="/darshan/">Darshan</a>'
+    + '  <p class="flinks"><a href="/speak/">Speak</a><a href="/shloka/">Shloka</a><a href="/utsav/">Utsav</a><a href="/darshan/">Darshan</a><a href="/install/" id="footinstall">Install app</a>'
     + '<a href="/archive/">Archive · ' + journal.length + '</a><a href="/search/">Search</a><a href="/feed.xml">RSS</a></p>\n'
     + '  <p class="builtat" id="builtat"></p>\n'
     + '</footer>\n'
@@ -949,6 +952,45 @@ write('speak/index.html', shell({
     + '<script type="application/json" id="stopics">' + JSON.stringify(TOPICS).replace(/</g, '\\u003c') + '</script>\n'
     + '</div>',
   scripts: ['/speak.js'],
+}));
+
+/* ---------- install ----------
+   Plain steps for putting the site on a tablet or phone's home screen, and a button for the
+   browsers that can install it with one tap (Chrome, Edge, Samsung Internet). app.js keeps the
+   browser's "beforeinstallprompt" and enables the button; it also opens the steps for the
+   device in use. Safari has no such button, so for an iPad the steps are the whole answer. */
+const instSteps = (os, title, steps, note) => '<details class="card inst" data-os="' + os + '"><summary class="cardhead"><h3>' + title + '</h3></summary>'
+  + '<ol>' + steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>'
+  + (note ? '<p class="muted small">' + note + '</p>' : '') + '</details>\n';
+write('install/index.html', shell({
+  title: 'Install', canonical: '/install/', nav: '', cls: 'installpage',
+  desc: 'Put the journal on your home screen as an app.',
+  body: '<div class="pagehead">' + titled('Install', 'ऐप')
+    + '<p class="muted">Put the journal on a tablet or phone like an app: its own icon, no address bar.</p></div>\n'
+    + '<section class="card" id="inst-now">\n'
+    + '  <p id="inst-state" class="muted">Checking this browser…</p>\n'
+    + '  <button type="button" class="btn primary big" id="installbtn" hidden>Install the app</button>\n'
+    + '</section>\n'
+    + instSteps('android', 'Android tablet or phone, in Chrome', [
+      'Open <b>shyameet.github.io</b> in <b>Chrome</b>.',
+      'Tap the <b>⋮</b> menu at the top right.',
+      'Tap <b>Install app</b> (or <b>Add to Home screen</b>), then <b>Install</b>.',
+      'Open it from the new icon on your home screen.'],
+      'No “Install app” in the menu? Use the site for a minute, close the menu and open it again. Chrome only offers it after it has had a look at the site. Make sure this is the normal Chrome tab, not a private (incognito) one.')
+    + instSteps('samsung', 'Samsung tablet, in Samsung Internet', [
+      'Open <b>shyameet.github.io</b> in <b>Samsung Internet</b>.',
+      'Tap the <b>☰</b> menu, then <b>Add page to</b>, then <b>Home screen</b>. (If you see an install icon in the address bar, tap that instead.)',
+      'Tap <b>Add</b>.'])
+    + instSteps('ios', 'iPad or iPhone, in Safari', [
+      'Open <b>shyameet.github.io</b> in <b>Safari</b> (it will not work from Chrome on an iPad).',
+      'Tap the <b>Share</b> button, the square with an arrow pointing up.',
+      'Scroll down and tap <b>Add to Home Screen</b>.',
+      'Tap <b>Add</b>. Open it from the new icon.'],
+      'Turn on “Open as Web App” if Safari shows it.')
+    + instSteps('desktop', 'Windows or Mac, in Chrome or Edge', [
+      'Open <b>shyameet.github.io</b>.',
+      'Click the small install icon at the right end of the address bar, or open the ⋮ menu and choose <b>Install Journal</b>.'])
+    + '<p class="muted small">Still stuck? Tell me which tablet and which browser it is.</p>',
 }));
 
 /* ---------- habits ---------- */

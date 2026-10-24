@@ -29,6 +29,22 @@ def render(size):
     return im.resize((size, size), Image.LANCZOS)
 
 
+def render_maskable(size):
+    """A maskable icon: the saffron fills the whole square (the phone cuts its own shape out of it)
+    and the Om stays inside the central 80% circle that every shape keeps."""
+    big = size * 4
+    im = Image.new("RGB", (big, big), SAFFRON)
+    d = ImageDraw.Draw(im)
+    font = ImageFont.truetype(FONT, int(big * 0.46))
+    l, t, r, b = d.textbbox((0, 0), OM, font=font)
+    d.text(((big - (r - l)) / 2 - l, (big - (b - t)) / 2 - t - big * 0.008), OM, font=font, fill=IVORY)
+    return im.resize((size, size), Image.LANCZOS)
+
+
+for n in (192, 512):
+    render_maskable(n).save(OUT / f"icon-maskable-{n}.png")
+    print("wrote", OUT / f"icon-maskable-{n}.png")
+
 for n in (180, 192, 512):
     img = render(n)
     if n == 180:                        # iOS draws its own corners; give it a full square

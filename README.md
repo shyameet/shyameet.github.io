@@ -486,6 +486,20 @@ Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_spea
 `tools/speakd/` (helper, tested in `test_speakd.py`, 44 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
+## Installing as an app
+
+The site is an installable web app: `public/manifest.webmanifest` (id, scope, standalone, icons with
+`any` and `maskable` purposes, shortcuts), a service worker (`src/sw.js`, no cache; it has a fetch
+handler that sends page loads straight to the network, because some browsers only offer to install a
+site that has one), Apple meta tags for the iPad, and an **Install** page (`/install/`, linked from the
+footer) with plain steps for Android Chrome, Samsung Internet, iPad Safari and desktop, plus an
+*Install the app* button on browsers that can do it with one tap (`app.js` keeps the browser's
+`beforeinstallprompt` for that page only). A real headless Chrome reports no installability errors for
+the live site (checked 24 Oct, DevTools `Page.getInstallabilityErrors`), so "no Install option" on a
+particular tablet is about that browser: iPad needs Safari and *Add to Home Screen*; Android needs
+Chrome in a normal (not private) tab, and the offer can take a minute to appear. `node
+tools/test/test_sw.mjs` checks the service worker without a browser.
+
 ## Local development
 
 ```

@@ -984,3 +984,48 @@
   var fromUrl = new URLSearchParams(location.search).get('q');
   if (fromUrl) { q.value = fromUrl; run(); }
 })();
+
+/* Installing the site as an app. Browsers that can do it with one tap (Chrome, Edge, Samsung
+   Internet) announce it with "beforeinstallprompt"; the Install page keeps that offer for its
+   button (taking it there, and only there, switches off the browser's own small banner, so on other
+   pages the browser is left to offer it as it likes). Safari has no such button: for an iPad the
+   Install page opens the steps. Pages opened from the home screen hide the footer link. */
+(function () {
+  var deferred = null;
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  var ua = navigator.userAgent || '';
+  var os = /SamsungBrowser/i.test(ua) ? 'samsung'
+    : /Android/i.test(ua) ? 'android'
+    : (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'ios'
+    : 'desktop';
+  var btn = document.getElementById('installbtn');
+  var foot = document.getElementById('footinstall');
+  if (foot && standalone) foot.hidden = true;
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    if (btn) e.preventDefault();      // only the Install page holds on to the offer
+    deferred = e;
+    paint();
+  });
+  window.addEventListener('appinstalled', function () { deferred = null; paint(true); });
+
+  function paint(justInstalled) {
+    var st = document.getElementById('inst-state');
+    if (!st) return;
+    if (btn) btn.hidden = !deferred;
+    st.textContent = justInstalled ? 'Installed. Open it from your home screen.'
+      : standalone ? 'You are already using the app.'
+      : deferred ? 'This browser can install it with one tap.'
+      : os === 'ios' ? 'On an iPad or iPhone it is a few taps in Safari. The steps are below.'
+      : 'Follow the steps below for your device. If your browser can install it with one tap, a button appears here.';
+  }
+  if (btn) {
+    btn.addEventListener('click', function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.then(function () { deferred = null; paint(); }, function () {});
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('details.inst'), function (d) { d.open = d.getAttribute('data-os') === os; });
+    paint();
+  }
+})();

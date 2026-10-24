@@ -1166,3 +1166,10 @@ footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
 .stips li { margin: 6px 0; }
 .stips summary { cursor: pointer; list-style: none; }
 .stips summary::-webkit-details-marker { display: none; }
+
+/* Install page */
+.installpage .inst ol { margin: 8px 0 4px; padding-left: 22px; line-height: 1.6; color: var(--ink-2); }
+.installpage .inst li { margin: 6px 0; }
+.installpage .inst summary { cursor: pointer; list-style: none; }
+.installpage .inst summary::-webkit-details-marker { display: none; }
+.installpage #inst-now { text-align: center; }
