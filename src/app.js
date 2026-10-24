@@ -1029,3 +1029,21 @@
     paint();
   }
 })();
+
+/* A device that is not signed in cannot share the timer, the tasks or the ticks with the others, and
+   from the outside it looks like the site is broken (24 Oct: every timer write in the repo came from the
+   PC, none from the tablet, because the tablet was never signed in). The small lamp in the header says it;
+   this says it where it will be seen. Not shown on the Write page, or on the Speak helper's own address
+   (a different origin that is never signed in, and does not need to be). */
+(function () {
+  var has = false;
+  try { has = !!localStorage.getItem('gh_token'); } catch (e) {}
+  if (has || /^\/admin\//.test(location.pathname) || location.port === '4777') return;
+  var main = document.querySelector('main.wrap');
+  if (!main) return;
+  var bar = document.createElement('a');
+  bar.className = 'signbanner';
+  bar.href = '/admin/#signin';
+  bar.innerHTML = '<b>This device is not signed in.</b> The timer, tasks and ticks do not sync with your other devices. <u>Sign in</u>';
+  main.insertBefore(bar, main.firstChild);
+})();

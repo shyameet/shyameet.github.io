@@ -460,6 +460,26 @@ reads that and writes `coaching/YYYY-MM-DD.md` (plain text with `##` headings, `
 `**bold**`); the page shows the newest under *Coaching*. A nightly scheduled review and asking in
 chat ("review my speech") both do exactly this.
 
+**From the tablet (the drop box, built 24 Oct).** A tablet or phone has no helper, so it records, keeps
+each recording safe in the browser, and uploads it with the journal's sign-in to a **private GitHub repo**
+(`speechRepo` in `site.config.json`, `shyameet/speech-log`). The PC's helper (`Inbox` in `speakd.py`, a
+thread that runs every 45 s, or 15 s while it has work) keeps a `git` clone of that repo (with the login the
+PC already has, no token), takes new recordings in, writes the words out with Whisper, and puts the finished
+take (`done/<day>_<id>.json`), the coaching notes (`coaching/<day>.md`) and nothing else back, removing the
+audio from the repo's tip. Every device then shows the same history, streak and coaching. Layout:
+`inbox/<day>/<id>_<n>.webm`, `inbox/<day>/<id>.json` (written last: it means "complete"),
+`inbox/delete/<id>.json` (a device asking for a take to be deleted), `done/`, `coaching/`. The page picks
+where to send: the helper if it answers, else the repo (when signed in and the sign-in can see it), else it
+keeps the recording in the browser and says why. If the PC is off, recordings wait in the repo and are written
+out when it is on. The tablet cannot replay audio (it stays on the PC) and a delete from the tablet takes
+effect on the PC the next time it syncs. Git history keeps uploaded audio until the repo is trimmed (about
+1 MB per minute-long take at the recorder's 48 kbps). **Needs the owner**: create the private repo
+`speech-log` (tick *Add a README*) and add it to the journal's fine-grained token (Repository access,
+Contents: Read and write). Until then the helper's `/health` shows `dropbox.last_error: Repository not found`
+and the tablet says its sign-in cannot see the repo. Tested: 16 helper tests with a local bare git repo, and a
+full loop (the tablet page uploading to the fake GitHub, the PC code consuming it and answering, the page
+showing the words, facts, streak and coaching, and a delete).
+
 **Set-up (done 21 Oct on SUMEET-PC):** make a venv at `C:\Users\shyam\SpeechJournal\venv`, then
 `pip install -r tools/speakd/requirements.txt` (the `av==16.0.1` pin matters: faster-whisper 1.2.1
 fails with av 19), and put the model `Systran/faster-whisper-medium` in `SpeechJournal\models\medium`
@@ -478,12 +498,12 @@ speech with a quiet voice and room hiss is written out in full with its fillers.
 VAD or change the hint without re-running that check (`tools/speakd/try_whisper.py` on a tone).
 
 **Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
-miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Phones are
-not supported yet (the helper lives on the PC). The helper must be running; the page says when it
+miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Tablets and phones
+need the drop box (above) and a PC that is on to write the words out. The helper must be running; the page says when it
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 44 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 60 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Installing as an app

@@ -1173,3 +1173,7 @@ footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
 .installpage .inst summary { cursor: pointer; list-style: none; }
 .installpage .inst summary::-webkit-details-marker { display: none; }
 .installpage #inst-now { text-align: center; }
+
+/* the "not signed in" banner */
+.signbanner { display: block; margin: 6px 0 14px; padding: 11px 14px; border-radius: 14px; background: var(--miss-soft); border: 1px solid color-mix(in srgb, var(--miss) 35%, var(--line)); color: var(--ink); font-size: 14px; line-height: 1.45; text-decoration: none; }
+.signbanner u { color: var(--accent); font-weight: 700; text-underline-offset: 3px; }

@@ -53,8 +53,18 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
 
 - **Speak: a real talk on the real microphone** is the first thing to check. The pipeline was
   tested with a fake microphone and a spoken test clip; Hinglish accuracy is untested.
-- **Speak on the phone** is not supported (the helper lives on the PC). Options if wanted: send the
-  audio to the helper over Tailscale or a tunnel, or record on the phone and sync it through Drive.
+- **Speak from the tablet needs the owner's two GitHub steps** (24 Oct, built and tested, not live until
+  done): create the PRIVATE repo `shyameet/speech-log` (tick *Add a README*) and add it to the journal's
+  fine-grained token (Repository access, Contents: Read and write; editing a token's permissions does not
+  change the token, so the saved password still works). The PC helper already tries every 2 minutes:
+  `curl localhost:4777/health` shows `dropbox.last_error` (now "Repository not found") until it works.
+  README → *From the tablet (the drop box)* has the design. Not done: audio replay and instant delete
+  on the tablet; trimming the repo's history if it grows (about 1 MB per take).
+- **The timer did not sync with the tablet because the tablet was never signed in** (24 Oct: every
+  `timer:` commit on the `sync` branch said "Windows PC", none from the tablet). Cross-device timer sync
+  was re-tested with two signed-in devices and works both ways. Added a banner "This device is not signed
+  in" on every page (not Write, not the helper's own address). He forgot the password he set on 11 Oct: use
+  Write → ⚙ → *Copy connect link* on a signed-in device, open it on the tablet, then set a new password.
 - **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task for
   him (instead of choosing a section) is not built; Free talk stores a talk like any other.
 - **Scheduled tasks on this PC** (they run while the Claude app is open): `speech-nightly-review`

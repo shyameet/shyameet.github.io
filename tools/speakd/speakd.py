@@ -33,6 +33,7 @@ import mimetypes
 import os
 import queue
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -46,6 +47,7 @@ from urllib.request import Request, urlopen
 
 VERSION = 2
 UPSTREAM = 'https://shyameet.github.io'
+INBOX_REMOTE = 'https://github.com/shyameet/speech-log.git'   # private; made by the owner
 ALLOWED_ORIGINS = {
     'https://shyameet.github.io',
     'http://localhost:4321', 'http://127.0.0.1:4321',   # the local test server
@@ -179,8 +181,18 @@ class Store:
             t['mod'] = int(time.time() * 1000)
             return self.put(t)
 
+    def deleted_ids(self):
+        try:
+            return set(json.loads((self.root / 'deleted.json').read_text(encoding='utf-8')))
+        except Exception:
+            return set()
+
     def delete(self, tid):
         with self.lock:
+            gone = self.deleted_ids()
+            if tid not in gone:
+                gone.add(tid)
+                (self.root / 'deleted.json').write_text(json.dumps(sorted(gone)), encoding='utf-8')
             day = self.index.pop(tid, None)
             if not day:
                 return False
@@ -319,9 +331,191 @@ class Worker(threading.Thread):
         self.store.update(tid, **fields)
 
 
+# ---------------------------------------------------------------- the drop box
+
+NOWIN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)   # no console flashing up for each git call (pythonw)
+
+
+class Inbox(threading.Thread):
+    """Recordings made on another device (the tablet) reach this PC through a PRIVATE GitHub repo,
+    and the finished words go back the same way, so every device shows the same takes.
+
+    The layout of that repo (the Speak page writes inbox/, this helper writes the rest):
+      inbox/<day>/<id>_<n>.webm    the audio, part n (written first)
+      inbox/<day>/<id>.json        the take's details (written after its audio: it means "complete")
+      inbox/delete/<id>.json       a request from a device to delete a take
+      done/<day>_<id>.json         a finished take: words with times, as in takes/ here
+      coaching/<day>.md            the advice, copied from the data folder
+    A recording taken in is removed from the tip of the repo (its history keeps it until the repo is
+    trimmed). The audio itself is only ever transcribed here, on the PC. If the PC is off, recordings
+    simply wait in the repo.
+
+    All of it goes through plain `git` with the login this PC already has. Nothing here needs a token.
+    """
+
+    def __init__(self, store, worker, log, remote, workdir, interval=45):
+        super().__init__(daemon=True)
+        self.store, self.worker, self.log = store, worker, log
+        self.remote, self.dir, self.interval = remote, Path(workdir), interval
+        self.stop = threading.Event()
+        self.status = {'configured': True, 'last_ok': 0, 'last_error': '', 'imported': 0, 'cycles': 0}
+
+    # -- git
+    def git(self, *args, check=True, timeout=180):
+        env = dict(os.environ, GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', LC_ALL='C')
+        p = subprocess.run(['git', *args], cwd=str(self.dir), capture_output=True, text=True, encoding='utf-8',
+                           errors='replace', timeout=timeout, env=env, creationflags=NOWIN)
+        if check and p.returncode != 0:
+            raise RuntimeError('git %s failed: %s' % (' '.join(args[:2]), (p.stderr or p.stdout).strip()[:300]))
+        return p
+
+    def ensure_clone(self):
+        if (self.dir / '.git').exists():
+            return
+        self.dir.parent.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ, GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', LC_ALL='C')
+        p = subprocess.run(['git', 'clone', '-q', self.remote, str(self.dir)], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=300, env=env, creationflags=NOWIN)
+        if p.returncode != 0:
+            raise RuntimeError('git clone failed: %s' % (p.stderr or p.stdout).strip().replace('\n', ' ')[:300])
+        self.git('config', 'user.name', 'Speak helper')
+        self.git('config', 'user.email', 'speak-helper@users.noreply.github.com')
+
+    def branch(self):
+        p = self.git('symbolic-ref', '--short', 'HEAD', check=False)
+        return p.stdout.strip() or 'main'
+
+    def sync_down(self):
+        self.git('fetch', '-q', 'origin', check=False)
+        br = self.branch()
+        if self.git('rev-parse', '--verify', '-q', 'origin/' + br, check=False).returncode == 0:
+            p = self.git('rebase', '--autostash', 'origin/' + br, check=False)
+            if p.returncode != 0:
+                self.git('rebase', '--abort', check=False)
+                raise RuntimeError('could not rebase onto the remote: ' + (p.stderr or p.stdout).strip()[:200])
+
+    # -- from the repo to this PC
+    def import_new(self):
+        base = self.dir / 'inbox'
+        n = 0
+        if not base.exists():
+            return 0
+        # a device asked for a take to be deleted
+        for f in sorted((base / 'delete').glob('*.json')):
+            tid = f.stem
+            if ID_RE.match(tid):
+                self.store.delete(tid)
+            f.unlink()
+        for meta_path in sorted(base.glob('*/*.json')):
+            if meta_path.parent.name == 'delete':
+                continue
+            try:
+                m = json.loads(meta_path.read_text(encoding='utf-8'))
+            except Exception:
+                self.log('drop box: could not read %s' % meta_path.name)
+                continue
+            tid, day = str(m.get('id') or ''), str(m.get('day') or '')
+            if not ID_RE.match(tid) or not DAY_RE.match(day) or meta_path.parent.name != day:
+                continue
+            if self.store.get(tid) or tid in self.store.deleted_ids():
+                continue
+            parts = int(m.get('parts') or 0)
+            audio = [meta_path.parent / ('%s_%d.webm' % (tid, i)) for i in range(parts)]
+            if not 0 <= parts <= 50 or not all(p.exists() for p in audio):
+                continue   # still arriving
+            for i, p in enumerate(audio):
+                self.store.save_audio(day, tid, i, p.read_bytes())
+            self.store.put({
+                'id': tid, 'day': day, 'at': int(m.get('at') or time.time() * 1000), 'mod': int(time.time() * 1000),
+                'mode': 'free' if m.get('mode') == 'free' else 'topic',
+                'topic': str(m.get('topic') or '')[:300], 'cat': str(m.get('cat') or '')[:30],
+                'target': int(m.get('target') or 0), 'think': int(m.get('think') or 0), 'sec': int(m.get('sec') or 0),
+                'delay': None, 'parts': parts, 'text': '', 'origin': 'drop box',
+                'status': 'queued' if parts else 'error', 'error': '' if parts else 'no audio',
+            })
+            if parts:
+                self.worker.add(tid)
+            n += 1
+        self.status['imported'] += n
+        return n
+
+    # -- from this PC to the repo
+    def export(self):
+        changed = False
+        done = self.dir / 'done'
+        done.mkdir(exist_ok=True)
+        gone = self.store.deleted_ids()
+        for t in self.store.takes():
+            if t.get('status') not in ('done', 'error'):
+                continue
+            out = done / ('%s_%s.json' % (t['day'], t['id']))
+            doc = {k: v for k, v in t.items() if k not in ('fake', 'edited')}
+            text = json.dumps(doc, ensure_ascii=False, indent=1) + '\n'
+            if not out.exists() or out.read_text(encoding='utf-8') != text:
+                out.write_text(text, encoding='utf-8')
+                changed = True
+            # the audio of a recording that came in through the repo is not needed there any more
+            box = self.dir / 'inbox' / t['day']
+            for f in list(box.glob(t['id'] + '*')) if box.exists() else []:
+                f.unlink()
+                changed = True
+        # takes deleted (here, or by a device) are removed from the repo; nothing else ever is
+        for f in list(done.glob('*.json')):
+            tid = f.stem.split('_', 1)[-1]
+            if tid in gone:
+                f.unlink()
+                changed = True
+        coach = self.dir / 'coaching'
+        for f in sorted((self.store.root / 'coaching').glob('*.md')):
+            text = f.read_text(encoding='utf-8')
+            dst = coach / f.name
+            if not dst.exists() or dst.read_text(encoding='utf-8') != text:
+                coach.mkdir(exist_ok=True)
+                dst.write_text(text, encoding='utf-8')
+                changed = True
+        return changed
+
+    def push(self):
+        self.git('add', '-A')
+        if not self.git('status', '--porcelain').stdout.strip():
+            return False
+        self.git('commit', '-q', '-m', 'speak: sync')
+        last = ''
+        for _ in range(3):
+            p = self.git('push', '-q', 'origin', 'HEAD', check=False)
+            if p.returncode == 0:
+                return True
+            last = (p.stderr or p.stdout).strip()[:200]
+            self.sync_down()   # a device pushed in between: put ours on top and try again
+        raise RuntimeError('push failed: ' + last)
+
+    def cycle(self):
+        self.ensure_clone()
+        self.sync_down()
+        self.import_new()
+        self.export()
+        self.push()
+        self.status['cycles'] += 1
+        self.status['last_ok'] = int(time.time())
+        self.status['last_error'] = ''
+
+    def run(self):
+        while not self.stop.is_set():
+            wait = 15 if self.worker.pending() else self.interval
+            try:
+                self.cycle()
+            except Exception as e:
+                msg = str(e)
+                if msg != self.status['last_error']:
+                    self.log('drop box: ' + msg)
+                self.status['last_error'] = msg
+                wait = max(wait, 120)   # not reachable (or not set up yet): do not hammer it
+            self.stop.wait(wait)
+
+
 # ---------------------------------------------------------------- http
 
-def make_handler(store, worker, engine, log, upstream=UPSTREAM):
+def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None):
     class H(BaseHTTPRequestHandler):
         server_version = 'speakd/%d' % VERSION
         protocol_version = 'HTTP/1.1'
@@ -402,7 +596,7 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM):
             if p == '/health':
                 return self._send(200, {
                     'ok': True, 'v': VERSION, 'whisper': engine.state if engine.available() else 'missing',
-                    'pending': worker.pending(), 'data': str(store.root)})
+                    'pending': worker.pending(), 'data': str(store.root), 'dropbox': inbox.status if inbox else None})
             if p == '/takes':
                 since = (q.get('since') or [''])[0]
                 since = since if DAY_RE.match(since) else None
@@ -543,6 +737,10 @@ def main(argv=None):
     ap.add_argument('--model', default=os.environ.get('SPEAK_MODEL'))
     ap.add_argument('--fake', action='store_true', help='use a stand-in for Whisper (tests)')
     ap.add_argument('--upstream', default=os.environ.get('SPEAK_UPSTREAM', UPSTREAM), help="where the site's pages come from")
+    ap.add_argument('--inbox-remote', default=os.environ.get('SPEAK_INBOX_REMOTE'), help='the private git repo that carries recordings from other devices')
+    ap.add_argument('--inbox-dir', default=None, help='where this PC keeps its clone of it (default <data>/inbox)')
+    ap.add_argument('--inbox-interval', type=int, default=45)
+    ap.add_argument('--no-inbox', action='store_true', help='do not use the drop box')
     a = ap.parse_args(argv)
 
     store = Store(a.data)
@@ -559,7 +757,12 @@ def main(argv=None):
     for t in store.takes():
         if t.get('status') in ('queued', 'transcribing'):
             worker.add(t['id'])
-    srv = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(store, worker, engine, log, a.upstream))
+    inbox = None
+    remote = a.inbox_remote or (None if a.fake else INBOX_REMOTE)
+    if remote and not a.no_inbox:
+        inbox = Inbox(store, worker, log, remote, a.inbox_dir or str(store.root / 'inbox'), a.inbox_interval)
+        inbox.start()
+    srv = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(store, worker, engine, log, a.upstream, inbox))
     log('speakd %d listening on 127.0.0.1:%d, data %s, whisper %s' % (VERSION, a.port, store.root, 'FAKE' if a.fake else engine.model_dir))
     if sys.stdout:   # pythonw (no console) has none
         print('speakd listening on http://127.0.0.1:%d  (data: %s)' % (a.port, store.root), flush=True)

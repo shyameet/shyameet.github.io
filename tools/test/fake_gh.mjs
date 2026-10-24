@@ -102,7 +102,8 @@ http.createServer(async (req, res) => {
     const out = {};
     for (const [b, files] of Object.entries(speechBranches)) {
       out[b] = {};
-      for (const [k, v] of files) out[b][k] = v.buf.toString('utf8');
+      /* ?b64=1 gives the bytes exactly (audio is not text) */
+      for (const [k, v] of files) out[b][k] = url.searchParams.get('b64') ? v.buf.toString('base64') : v.buf.toString('utf8');
     }
     return send(res, 200, out);
   }
