@@ -83,7 +83,6 @@
     }
   ],
   "speechLang": "en-IN",
-  "speechRepo": "shyameet/speech-log",
   "routine": [
     {
       "name": "Face exercises"

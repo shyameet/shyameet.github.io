@@ -512,58 +512,117 @@ def run_git(cwd, *args):
     return subprocess.run(['git', *args], cwd=str(cwd), check=True, capture_output=True, text=True, encoding='utf-8', env=env)
 
 
+class TCrypt(unittest.TestCase):
+    """The helper's half of the drop box's lock."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix='speakd-crypt-'))
+        self.c = speakd.Crypt(self.dir / 'drop.key')
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_no_key_until_one_is_told(self):
+        self.assertIsNone(self.c.key())
+        with self.assertRaises(RuntimeError):
+            self.c.seal(b'x')
+
+    def test_a_key_is_kept_and_only_a_new_one_counts_as_new(self):
+        self.assertTrue(self.c.set_key('ab' * 32))
+        self.assertFalse(self.c.set_key('AB' * 32))   # the same key, written another way
+        self.assertEqual(self.c.key(), 'ab' * 32)
+        self.assertTrue(self.c.set_key('cd' * 32))
+
+    def test_bad_keys_are_refused(self):
+        for bad in ('', 'nothex', 'ab' * 31, 'ab' * 33, None, 'zz' * 32):
+            with self.assertRaises(ValueError):
+                self.c.set_key(bad)
+        self.assertIsNone(self.c.key())
+
+    def test_round_trip_including_nothing_and_utf8(self):
+        self.c.set_key('11' * 32)
+        for data in (b'', b'abc', 'मैं yeh'.encode('utf-8'), bytes(range(256)) * 400):
+            sealed = self.c.seal(data)
+            self.assertEqual(len(sealed), 12 + len(data) + 16)
+            self.assertEqual(self.c.open(sealed), data)
+
+    def test_wrong_key_or_changed_byte_is_none(self):
+        self.c.set_key('11' * 32)
+        sealed = self.c.seal(b'secret words')
+        flipped = bytearray(sealed)
+        flipped[14] ^= 1
+        self.assertIsNone(self.c.open(bytes(flipped)))
+        self.assertIsNone(self.c.open(b'short'))
+        self.c.set_key('22' * 32)
+        self.assertIsNone(self.c.open(sealed))
+
+    def test_the_same_data_is_locked_differently_each_time(self):
+        self.c.set_key('11' * 32)
+        self.assertNotEqual(self.c.seal(b'same'), self.c.seal(b'same'))
+
+
 class TInbox(unittest.TestCase):
-    """The drop box: recordings from another device arrive through a private git repo, the words go back.
-    A local bare repository stands in for the GitHub one; `tablet` is another device's clone of it."""
+    """The drop box: recordings from another device arrive through a branch of a git repo, locked, and the
+    words go back the same way. A local bare repository stands in for the journal's GitHub repo; `tablet`
+    is another device's clone of it."""
 
     DAY = '2026-10-24'
+    BRANCH = 'speech-drop'
+    KEY = '11' * 32
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix='speakd-inbox-'))
         self.remote = self.root / 'remote.git'
         run_git(self.root, 'init', '-q', '--bare', '-b', 'main', str(self.remote))
         self.tablet = self.root / 'tablet'
-        run_git(self.root, 'clone', '-q', str(self.remote), str(self.tablet))
+        self.tablet.mkdir()
+        run_git(self.tablet, 'init', '-q', '-b', self.BRANCH)
         run_git(self.tablet, 'config', 'user.name', 'Tablet')
         run_git(self.tablet, 'config', 'user.email', 'tablet@example.test')
-        run_git(self.tablet, 'checkout', '-q', '-B', 'main')
+        run_git(self.tablet, 'remote', 'add', 'origin', str(self.remote))
         self.store = speakd.Store(self.root / 'data')
+        self.tcrypt = speakd.Crypt(self.root / 'tablet.key')   # the tablet's copy of the key
+        self.tcrypt.set_key(self.KEY)
         self.worker = speakd.Worker(self.store, speakd.FakeWhisper(), lambda m: None)
         self.worker.start()
         self.logs = []
-        self.inbox = speakd.Inbox(self.store, self.worker, self.logs.append, str(self.remote), self.root / 'pc', interval=1)
+        self.inbox = self.make_inbox()
+        self.inbox.crypt.set_key(self.KEY)
+
+    def make_inbox(self, cls=None, **kw):
+        return (cls or speakd.Inbox)(self.store, self.worker, self.logs.append, str(self.remote), self.root / 'pc', interval=1, **kw)
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
-    def remote_has_commits(self):
-        p = subprocess.run(['git', 'rev-parse', '--verify', '-q', 'main'], cwd=str(self.remote), capture_output=True)
-        return p.returncode == 0
+    def remote_has_branch(self):
+        return subprocess.run(['git', 'rev-parse', '--verify', '-q', self.BRANCH], cwd=str(self.remote), capture_output=True).returncode == 0
 
     # what the Speak page does on the tablet
     def tablet_push(self, msg='tablet'):
         run_git(self.tablet, 'add', '-A')
         run_git(self.tablet, 'commit', '-q', '-m', msg)
-        if self.remote_has_commits():
-            run_git(self.tablet, 'pull', '-q', '--rebase', 'origin', 'main')
-        run_git(self.tablet, 'push', '-q', 'origin', 'HEAD:main')
+        if self.remote_has_branch():
+            run_git(self.tablet, 'pull', '-q', '--rebase', 'origin', self.BRANCH)
+        run_git(self.tablet, 'push', '-q', 'origin', 'HEAD:' + self.BRANCH)
 
-    def upload_audio(self, tid, day=None, parts=1):
-        d = self.tablet / 'inbox' / (day or self.DAY)
-        d.mkdir(parents=True, exist_ok=True)
+    def put_locked(self, rel, plain, crypt=None):
+        f = self.tablet / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes((crypt or self.tcrypt).seal(plain))
+
+    def upload_audio(self, tid, day=None, parts=1, crypt=None):
         for n in range(parts):
-            (d / ('%s_%d.webm' % (tid, n))).write_bytes(b'WEBM' * 50)
+            self.put_locked('inbox/%s/%s_%d.webm.enc' % (day or self.DAY, tid, n), b'WEBM' * 50, crypt)
 
-    def upload_meta(self, tid, day=None, parts=1, **extra):
+    def upload_meta(self, tid, day=None, parts=1, crypt=None, **extra):
         day = day or self.DAY
         meta = dict(id=tid, day=day, at=1792800000000, mode='topic', topic='Explain money.', cat='explain', target=60, think=30, sec=58, parts=parts)
         meta.update(extra)
-        d = self.tablet / 'inbox' / day
-        d.mkdir(parents=True, exist_ok=True)
-        (d / (tid + '.json')).write_text(json.dumps(meta), encoding='utf-8')
+        self.put_locked('inbox/%s/%s.json.enc' % (day, tid), json.dumps(meta).encode('utf-8'), crypt)
 
     def upload(self, tid, **kw):
-        self.upload_audio(tid, kw.get('day'), kw.get('parts', 1))
+        self.upload_audio(tid, kw.get('day'), kw.get('parts', 1), kw.get('crypt'))
         self.upload_meta(tid, **kw)
         self.tablet_push('upload ' + tid)
 
@@ -578,12 +637,17 @@ class TInbox(unittest.TestCase):
 
     def fresh_clone(self):
         d = self.root / ('check-%d' % time.time_ns())
-        run_git(self.root, 'clone', '-q', str(self.remote), str(d))
+        run_git(self.root, 'clone', '-q', '--branch', self.BRANCH, str(self.remote), str(d))
         return d
 
-    def done_file(self, clone, tid):
-        return clone / 'done' / ('%s_%s.json' % (self.DAY, tid))
+    def done_doc(self, clone, tid):
+        raw = (clone / 'done' / ('%s_%s.json.enc' % (self.DAY, tid))).read_bytes()
+        return json.loads(self.tcrypt.open(raw).decode('utf-8'))
 
+    def done_exists(self, clone, tid):
+        return (clone / 'done' / ('%s_%s.json.enc' % (self.DAY, tid))).exists()
+
+    # ---- the way in and the way back
     def test_recording_is_imported_transcribed_and_returned(self):
         self.upload('tab00001')
         self.inbox.cycle()
@@ -591,15 +655,32 @@ class TInbox(unittest.TestCase):
         self.assertIsNotNone(t)
         self.assertEqual(t['origin'], 'drop box')
         self.assertEqual(t['topic'], 'Explain money.')
-        self.assertTrue(self.store.audio_path(self.DAY, 'tab00001', 0).exists())
+        self.assertEqual(self.store.audio_path(self.DAY, 'tab00001', 0).read_bytes(), b'WEBM' * 50)   # unlocked on the way in
         self.assertEqual(self.wait_done('tab00001')['status'], 'done')
-        self.inbox.cycle()   # the words go back, the audio leaves the repo's tip
+        self.inbox.cycle()   # the words go back, the audio leaves the branch's tip
         c = self.fresh_clone()
-        doc = json.loads(self.done_file(c, 'tab00001').read_text(encoding='utf-8'))
+        doc = self.done_doc(c, 'tab00001')
         self.assertEqual(doc['status'], 'done')
         self.assertEqual(doc['words'][0]['w'], 'um')
         box = c / 'inbox' / self.DAY
         self.assertEqual(list(box.glob('tab00001*')) if box.exists() else [], [])
+
+    def test_every_file_in_the_branch_is_locked(self):
+        self.upload('tab00010')
+        self.inbox.cycle()
+        self.wait_done('tab00010')
+        (self.store.root / 'coaching' / '2026-10-24.md').write_text('## Today\nA private note about my speaking.', encoding='utf-8')
+        self.inbox.cycle()
+        c = self.fresh_clone()
+        seen = 0
+        for f in c.rglob('*'):
+            if f.is_file() and '.git' not in f.parts and f.name != 'README.md':
+                seen += 1
+                data = f.read_bytes()
+                for plain in (b'Explain money', b'topic', b'words', b'private note', b'speaking', b'WEBM', b'"id"'):
+                    self.assertNotIn(plain, data, f.name)
+                self.assertTrue(f.name.endswith('.enc'), f.name)
+        self.assertGreaterEqual(seen, 2)
 
     def test_a_take_with_two_parts(self):
         self.upload('tab00002', parts=2)
@@ -637,76 +718,124 @@ class TInbox(unittest.TestCase):
         self.assertEqual(len(self.store.takes()), 1)
         self.assertEqual(self.store.get('tab00005')['words'][0]['w'], 'um')
 
-    def test_takes_recorded_on_the_pc_go_to_the_repo_too(self):
+    def test_unchanged_files_are_not_locked_and_pushed_again_every_cycle(self):
+        self.store.put({'id': 'pc000009', 'day': self.DAY, 'at': 5, 'mod': 5, 'parts': 0, 'text': 'x', 'status': 'done'})
+        self.inbox.cycle()
+        head = run_git(self.remote, 'rev-parse', self.BRANCH).stdout.strip()
+        self.inbox.cycle()
+        self.inbox.cycle()
+        self.assertEqual(run_git(self.remote, 'rev-parse', self.BRANCH).stdout.strip(), head)
+
+    def test_takes_recorded_on_the_pc_go_to_the_branch_too(self):
         self.store.put({'id': 'pc000001', 'day': self.DAY, 'at': 5, 'mod': 5, 'parts': 0, 'text': 'typed', 'status': 'done', 'words': [{'w': 'hi', 's': 0.1, 'e': 0.3}]})
         self.inbox.cycle()
-        self.assertTrue(self.done_file(self.fresh_clone(), 'pc000001').exists())
+        self.assertEqual(self.done_doc(self.fresh_clone(), 'pc000001')['text'], 'typed')
 
     def test_a_take_that_failed_is_returned_with_its_error(self):
         self.upload_meta('tab00006', parts=0)
         self.tablet_push('no audio')
         self.inbox.cycle()
         self.inbox.cycle()
-        doc = json.loads(self.done_file(self.fresh_clone(), 'tab00006').read_text(encoding='utf-8'))
-        self.assertEqual(doc['status'], 'error')
+        self.assertEqual(self.done_doc(self.fresh_clone(), 'tab00006')['status'], 'error')
 
-    def test_coaching_goes_to_the_repo_and_updates(self):
+    def test_coaching_goes_to_the_branch_locked_and_updates(self):
         (self.store.root / 'coaching' / '2026-10-24.md').write_text('## Today\nGood. मैं', encoding='utf-8')
         self.inbox.cycle()
-        self.assertIn('मैं', (self.fresh_clone() / 'coaching' / '2026-10-24.md').read_text(encoding='utf-8'))
+        raw = (self.fresh_clone() / 'coaching' / '2026-10-24.md.enc').read_bytes()
+        self.assertIn('मैं', self.tcrypt.open(raw).decode('utf-8'))
         (self.store.root / 'coaching' / '2026-10-24.md').write_text('## Today\nBetter.', encoding='utf-8')
         self.inbox.cycle()
-        self.assertEqual((self.fresh_clone() / 'coaching' / '2026-10-24.md').read_text(encoding='utf-8'), '## Today\nBetter.')
+        raw = (self.fresh_clone() / 'coaching' / '2026-10-24.md.enc').read_bytes()
+        self.assertEqual(self.tcrypt.open(raw).decode('utf-8').replace('\r\n', '\n'), '## Today\nBetter.')   # Windows writes CRLF
 
+    # ---- deleting
     def test_a_device_can_ask_for_a_take_to_be_deleted(self):
         self.upload('tab00007')
         self.inbox.cycle()
         self.wait_done('tab00007')
         self.inbox.cycle()
-        d = self.tablet / 'inbox' / 'delete'
-        d.mkdir(parents=True, exist_ok=True)
-        (d / 'tab00007.json').write_text('{}', encoding='utf-8')
+        self.put_locked('inbox/delete/tab00007.enc', b'{}')
         self.tablet_push('delete')
         self.inbox.cycle()
         self.assertIsNone(self.store.get('tab00007'))
         self.assertFalse(self.store.audio_path(self.DAY, 'tab00007', 0).exists())
         c = self.fresh_clone()
-        self.assertFalse(self.done_file(c, 'tab00007').exists())
-        self.assertFalse((c / 'inbox' / 'delete' / 'tab00007.json').exists())
-        # uploading the same id again does not bring it back
-        self.upload('tab00007')
+        self.assertFalse(self.done_exists(c, 'tab00007'))
+        self.assertFalse((c / 'inbox' / 'delete' / 'tab00007.enc').exists())
+        self.upload('tab00007')   # the same id again does not bring it back
         self.inbox.cycle()
         self.assertIsNone(self.store.get('tab00007'))
 
-    def test_a_take_deleted_on_the_pc_leaves_the_repo(self):
+    def test_a_take_deleted_on_the_pc_leaves_the_branch(self):
         self.store.put({'id': 'pc000002', 'day': self.DAY, 'at': 5, 'mod': 5, 'parts': 0, 'text': 'x', 'status': 'done'})
         self.inbox.cycle()
-        self.assertTrue(self.done_file(self.fresh_clone(), 'pc000002').exists())
+        self.assertTrue(self.done_exists(self.fresh_clone(), 'pc000002'))
         self.store.delete('pc000002')
         self.inbox.cycle()
-        self.assertFalse(self.done_file(self.fresh_clone(), 'pc000002').exists())
+        self.assertFalse(self.done_exists(self.fresh_clone(), 'pc000002'))
 
-    def test_losing_the_local_folder_never_deletes_anything_in_the_repo(self):
+    def test_losing_the_local_folder_never_deletes_anything_in_the_branch(self):
         self.store.put({'id': 'pc000003', 'day': self.DAY, 'at': 5, 'mod': 5, 'parts': 0, 'text': 'x', 'status': 'done'})
         self.inbox.cycle()
-        # the data folder is wiped (disk trouble): no take, and no record of any deletion
-        shutil.rmtree(self.store.root / 'takes')
+        shutil.rmtree(self.store.root / 'takes')   # the data folder is wiped: no take, and no record of any deletion
         (self.store.root / 'takes').mkdir()
         self.store.index.clear()
         self.inbox.cycle()
-        self.assertTrue(self.done_file(self.fresh_clone(), 'pc000003').exists())
+        self.assertTrue(self.done_exists(self.fresh_clone(), 'pc000003'))
 
-    def test_garbage_in_the_inbox_is_ignored(self):
+    # ---- the key
+    def test_without_the_key_it_waits_and_says_so(self):
+        self.inbox.crypt.keyfile.unlink()
+        self.upload('tab00011')
+        with self.assertRaises(RuntimeError) as cm:
+            self.inbox.cycle()
+        self.assertIn('waiting for the key', str(cm.exception))
+        self.assertFalse(self.inbox.status['has_key'])
+        self.inbox.crypt.set_key(self.KEY)   # a signed-in page on the PC tells it
+        self.inbox.cycle()
+        self.assertIsNotNone(self.store.get('tab00011'))
+        self.assertTrue(self.inbox.status['has_key'])
+
+    def test_files_locked_with_another_key_are_ignored_and_logged(self):
+        other = speakd.Crypt(self.root / 'other.key')
+        other.set_key('99' * 32)
+        self.upload('tab00012', crypt=other)
+        self.inbox.cycle()
+        self.assertIsNone(self.store.get('tab00012'))
+        self.assertTrue(any('could not unlock tab00012.json.enc' in l for l in self.logs))
+
+    def test_garbage_in_the_branch_is_ignored(self):
         d = self.tablet / 'inbox' / self.DAY
         d.mkdir(parents=True, exist_ok=True)
-        (d / 'broken1.json').write_text('{ nope', encoding='utf-8')
-        (d / 'zzzz.json').write_text(json.dumps({'id': '../evil', 'day': self.DAY, 'parts': 0}), encoding='utf-8')
-        (d / 'wrongday.json').write_text(json.dumps({'id': 'wrongday', 'day': '2026-01-01', 'parts': 0}), encoding='utf-8')
-        (d / 'huge001.json').write_text(json.dumps({'id': 'huge001', 'day': self.DAY, 'parts': 9999}), encoding='utf-8')
+        (d / 'broken1.json.enc').write_bytes(b'not a locked file at all, just some bytes here....')
+        self.put_locked('inbox/%s/zzzz.json.enc' % self.DAY, json.dumps({'id': '../evil', 'day': self.DAY, 'parts': 0}).encode())
+        self.put_locked('inbox/%s/wrongday.json.enc' % self.DAY, json.dumps({'id': 'wrongday', 'day': '2026-01-01', 'parts': 0}).encode())
+        self.put_locked('inbox/%s/huge001.json.enc' % self.DAY, json.dumps({'id': 'huge001', 'day': self.DAY, 'parts': 9999}).encode())
+        self.put_locked('inbox/%s/notjson.json.enc' % self.DAY, b'locked but not json')
         self.tablet_push('junk')
         self.inbox.cycle()
         self.assertEqual(self.store.takes(), [])
-        self.assertTrue(any('could not read broken1.json' in l for l in self.logs))
+        self.assertTrue(any('could not unlock broken1.json.enc' in l for l in self.logs))
+        self.assertTrue(any('could not read notjson.json.enc' in l for l in self.logs))
+
+    # ---- the branch
+    def test_the_branch_is_made_on_first_use_and_holds_nothing_of_the_site(self):
+        self.assertFalse(self.remote_has_branch())
+        self.inbox.cycle()
+        self.assertTrue(self.remote_has_branch())
+        c = self.fresh_clone()
+        self.assertEqual(sorted(p.name for p in c.iterdir() if p.name != '.git'), ['README.md'])
+        self.assertEqual(run_git(c, 'rev-list', '--count', 'HEAD').stdout.strip(), '1')
+
+    def test_a_branch_that_already_has_other_files_is_fine(self):
+        (self.tablet / 'src').mkdir()
+        (self.tablet / 'src' / 'app.js').write_text('// the site', encoding='utf-8')   # a branch made from the site's main
+        self.upload('tab00013')
+        self.inbox.cycle()
+        self.assertIsNotNone(self.store.get('tab00013'))
+        self.wait_done('tab00013')
+        self.inbox.cycle()
+        self.assertTrue((self.fresh_clone() / 'src' / 'app.js').exists())   # not touched
 
     def test_a_push_that_loses_a_race_is_retried(self):
         self.upload('tab00008')
@@ -722,17 +851,52 @@ class TInbox(unittest.TestCase):
                     outer.tablet_push('race')
                 return super().export()
 
-        self.inbox = Racy(self.store, self.worker, self.logs.append, str(self.remote), self.root / 'pc', interval=1)
+        self.inbox = self.make_inbox(Racy)
         self.inbox.cycle()
         self.wait_done('tab00008')
         self.inbox.cycle()
         c = self.fresh_clone()
         self.assertTrue((c / 'note.txt').exists())
-        self.assertTrue(self.done_file(c, 'tab00008').exists())
+        self.assertTrue(self.done_exists(c, 'tab00008'))
+
+    def test_the_history_is_squashed_when_long_and_nothing_is_lost(self):
+        self.inbox = self.make_inbox(keep=4)
+        self.inbox.last_trim = time.time()   # no squash yet: build up a long history first
+        for i in range(7):   # seven cycles with something new each time: seven commits
+            self.store.put({'id': 'pc1000%02d' % i, 'day': self.DAY, 'at': 5 + i, 'mod': 5 + i, 'parts': 0, 'text': 'take %d' % i, 'status': 'done'})
+            self.inbox.cycle() if i < 6 else None
+        self.assertGreater(int(run_git(self.remote, 'rev-list', '--count', self.BRANCH).stdout.strip()), 4)
+        self.inbox.last_trim = 0
+        self.inbox.cycle()   # the seventh take, then the squash
+        c = self.fresh_clone()
+        self.assertEqual(run_git(c, 'rev-list', '--count', 'HEAD').stdout.strip(), '1')
+        for i in range(7):
+            self.assertEqual(self.done_doc(c, 'pc1000%02d' % i)['text'], 'take %d' % i)
+
+    def test_a_squash_never_overwrites_a_device_that_pushed_in_between(self):
+        self.inbox = self.make_inbox(keep=2)
+        self.inbox.last_trim = time.time()
+        for i in range(4):
+            self.store.put({'id': 'pc2000%02d' % i, 'day': self.DAY, 'at': 5 + i, 'mod': 5 + i, 'parts': 0, 'text': 't', 'status': 'done'})
+            self.inbox.cycle()
+        outer = self
+        self.inbox.last_trim = 0
+        orig = self.inbox.git
+
+        def git(*args, **kw):
+            if args[:2] == ('push', '-q') and any(str(a).startswith('--force-with-lease') for a in args):
+                self.put_locked('inbox/%s/late_0.webm.enc' % self.DAY, b'late upload')   # a device pushes just before the force push
+                outer.tablet_push('late')
+            return orig(*args, **kw)
+        self.inbox.git = git
+        with self.assertRaises(RuntimeError):
+            self.inbox.cycle()
+        c = self.fresh_clone()
+        self.assertTrue((c / 'inbox' / self.DAY / 'late_0.webm.enc').exists())   # the late upload is still there
 
     def test_an_unreachable_repo_is_an_error_not_a_crash_and_it_recovers(self):
         missing = self.root / 'later.git'
-        box = speakd.Inbox(self.store, self.worker, self.logs.append, str(missing), self.root / 'pc2', interval=1)
+        box = speakd.Inbox(self.store, self.worker, self.logs.append, str(missing), self.root / 'pc2', interval=1, crypt=self.inbox.crypt)
         with self.assertRaises(RuntimeError):
             box.cycle()
         run_git(self.root, 'init', '-q', '--bare', '-b', 'main', str(missing))
@@ -740,7 +904,7 @@ class TInbox(unittest.TestCase):
         self.assertEqual(box.status['last_error'], '')
 
     def test_the_loop_survives_errors_and_records_them(self):
-        box = speakd.Inbox(self.store, self.worker, self.logs.append, str(self.root / 'nowhere.git'), self.root / 'pc3', interval=1)
+        box = speakd.Inbox(self.store, self.worker, self.logs.append, str(self.root / 'nowhere.git'), self.root / 'pc3', interval=1, crypt=self.inbox.crypt)
         box.start()
         end = time.time() + 8
         while time.time() < end and not box.status['last_error']:
@@ -749,16 +913,50 @@ class TInbox(unittest.TestCase):
         self.assertIn('git clone failed', box.status['last_error'])
         self.assertTrue(any('drop box:' in l for l in self.logs))
 
-    def test_health_reports_the_drop_box(self):
+    # ---- the helper's door
+    def serve(self):
         srv = speakd.ThreadingHTTPServer(('127.0.0.1', 0), speakd.make_handler(self.store, self.worker, speakd.FakeWhisper(), lambda m: None, 'http://127.0.0.1:1', self.inbox))
-        port = srv.server_address[1]
         threading.Thread(target=srv.serve_forever, daemon=True).start()
+        return srv
+
+    def call(self, srv, method, path, body=None, origin='https://shyameet.github.io'):
+        c = http.client.HTTPConnection('127.0.0.1', srv.server_address[1], timeout=5)
+        h = {'Origin': origin} if origin else {}
+        if body is not None:
+            h['Content-Type'] = 'application/json'
+        c.request(method, path, body=json.dumps(body) if body is not None else None, headers=h)
+        r = c.getresponse()
+        raw = r.read().decode('utf-8')
+        c.close()
+        return r.status, (json.loads(raw) if raw else None)
+
+    def test_health_reports_the_drop_box_without_the_key(self):
+        srv = self.serve()
         try:
-            c = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
-            c.request('GET', '/health')
-            d = json.loads(c.getresponse().read().decode())
+            status, d = self.call(srv, 'GET', '/health')
+            self.assertEqual(status, 200)
             self.assertTrue(d['dropbox']['configured'])
-            self.assertIn('last_error', d['dropbox'])
+            self.assertTrue(d['dropbox']['has_key'])
+            self.assertNotIn(self.KEY, json.dumps(d))
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_a_signed_in_page_can_tell_the_helper_the_key_and_nobody_else_can(self):
+        self.inbox.crypt.keyfile.unlink()
+        srv = self.serve()
+        try:
+            self.assertEqual(self.call(srv, 'GET', '/dropkey'), (200, {'has': False}))
+            self.assertEqual(self.call(srv, 'POST', '/dropkey', {'key': 'bad'})[0], 400)
+            self.assertEqual(self.call(srv, 'POST', '/dropkey', {'key': self.KEY}, origin='https://evil.example')[0], 403)
+            self.assertEqual(self.call(srv, 'GET', '/dropkey')[1], {'has': False})
+            status, d = self.call(srv, 'POST', '/dropkey', {'key': self.KEY})
+            self.assertEqual((status, d['changed']), (200, True))
+            self.assertEqual(self.call(srv, 'POST', '/dropkey', {'key': self.KEY})[1]['changed'], False)
+            status, d = self.call(srv, 'GET', '/dropkey')
+            self.assertEqual(d, {'has': True})
+            self.assertNotIn(self.KEY, json.dumps(d))
+            self.assertTrue(self.inbox.status['has_key'])
         finally:
             srv.shutdown()
             srv.server_close()

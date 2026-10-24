@@ -181,7 +181,7 @@ const BUILT = new Date().toISOString();
    HTML that uses them can change on every deploy. Keyed by content, so a changed
    file is a new URL and old CSS can never meet new markup. */
 const ASSET_V = crypto.createHash('sha1')
-  .update(['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
+  .update(['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'dropcrypto.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src', f))).join('|'))
   .digest('hex').slice(0, 8);
 
 /* ---------- tasks ----------
@@ -442,8 +442,6 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '<meta name="repo" content="' + esc(CFG.repo) + '">\n'
     + '<meta name="branch" content="' + esc(CFG.branch) + '">\n'
     + '<meta name="sync-branch" content="' + esc(CFG.syncBranch || 'sync') + '">\n'
-    /* the PRIVATE repo the Speak page saves takes to (speak.js) */
-    + '<meta name="speech-repo" content="' + esc(CFG.speechRepo || '') + '">\n'
     + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
@@ -474,6 +472,8 @@ function shell({ title, desc, body, canonical, nav = '', scripts = [], cls = '' 
     + '</footer>\n'
     + '<nav class="tabbar" aria-label="Main">' + links(true) + '</nav>\n'
     + '<div id="toast" class="toast" role="status" aria-live="polite"></div>\n'
+    /* the drop box's lock (and, on a signed-in Windows PC, the key handed to the Speak helper) */
+    + '<script src="/dropcrypto.js?v=' + ASSET_V + '" defer></script>\n'
     + '<script src="/app.js?v=' + ASSET_V + '" defer></script>\n'
     /* the reminders ring on whatever page is open, so this is on every page */
     + '<script src="/todo.js?v=' + ASSET_V + '" defer></script>\n'
@@ -928,8 +928,8 @@ function todayPanel(k) {
 
 /* ---------- speak ----------
    Practise talking. The page is a shell; speak.js draws the practice into #sstage and
-   keeps takes in the private repo named by speechRepo in site.config.json. Nothing
-   spoken is in the build. The topics are, and they are public on purpose: they are only
+   keeps takes with the helper on the PC (or, from a tablet, through the encrypted
+   speech-drop branch of this repo: see speak.js). Nothing spoken is in the build. The topics are, and they are public on purpose: they are only
    prompts. */
 write('speak/index.html', shell({
   title: 'Speak', canonical: '/speak/', nav: 'speak', cls: 'speakpage',
@@ -1441,7 +1441,7 @@ write('admin/config.json', JSON.stringify({
   }).filter(Boolean),
 }));
 
-for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'sw.js']) {
+for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'dropcrypto.js', 'sw.js']) {
   fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
 }
 

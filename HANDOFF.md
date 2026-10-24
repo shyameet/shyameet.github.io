@@ -53,13 +53,16 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
 
 - **Speak: a real talk on the real microphone** is the first thing to check. The pipeline was
   tested with a fake microphone and a spoken test clip; Hinglish accuracy is untested.
-- **Speak from the tablet needs the owner's two GitHub steps** (24 Oct, built and tested, not live until
-  done): create the PRIVATE repo `shyameet/speech-log` (tick *Add a README*) and add it to the journal's
-  fine-grained token (Repository access, Contents: Read and write; editing a token's permissions does not
-  change the token, so the saved password still works). The PC helper already tries every 2 minutes:
-  `curl localhost:4777/health` shows `dropbox.last_error` (now "Repository not found") until it works.
-  README → *From the tablet (the drop box)* has the design. Not done: audio replay and instant delete
-  on the tablet; trimming the repo's history if it grows (about 1 MB per take).
+- **Speak from the tablet works through an ENCRYPTED branch of the journal repo** (24 Oct; built, tested,
+  not yet run on the real tablet). The owner refused any GitHub setup ("I'm not going to waste my time"),
+  so there is none: files go to the `speech-drop` branch of this repo with the journal's own sign-in,
+  locked with a key made from that sign-in (README → *From the tablet (the drop box)* has the design). The
+  one thing that must happen on the PC: a **signed-in page on the Windows PC hands the helper the key**
+  (automatic; open the journal on the PC once). Check with `curl localhost:4777/health`: `dropbox.has_key`
+  must be true and `last_error` empty. The private repo `shyameet/speech-log` he made is now unused and
+  holds plain copies of his first two takes and note (the helper pushed them before the redesign); he
+  can delete it (GitHub → the repo → Settings → Delete). Not done: audio replay and instant delete on the
+  tablet.
 - **The timer did not sync with the tablet because the tablet was never signed in** (24 Oct: every
   `timer:` commit on the `sync` branch said "Windows PC", none from the tablet). Cross-device timer sync
   was re-tested with two signed-in devices and works both ways. Added a banner "This device is not signed

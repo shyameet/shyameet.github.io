@@ -415,44 +415,35 @@
   };
 
   /* ---------- the drop box: another way in, for a device that is not the PC ----------
-     The PC has the helper; a tablet or phone does not. It uploads each recording to a PRIVATE GitHub
-     repo (meta "speech-repo") with the sign-in the journal already uses, the PC's helper picks it up
-     whenever it is on, writes the words out, and puts the finished take (and the coaching notes) back
-     in the same repo, which this page reads. Layout (see Inbox in tools/speakd/speakd.py):
-       inbox/<day>/<id>_<n>.webm  inbox/<day>/<id>.json (written last)  inbox/delete/<id>.json
-       done/<day>_<id>.json       coaching/<day>.md                                              */
-  var SPEECH = metaOf('speech-repo');
+     The PC has the helper; a tablet or phone does not. It uploads each recording to the `speech-drop`
+     branch of the journal's own repo, with the sign-in the journal already uses. That repo is PUBLIC, so
+     every file is locked first (src/dropcrypto.js: the key comes from the sign-in itself, nothing to set
+     up). The PC's helper picks the recording up whenever it is on, writes the words out, and puts the
+     finished take and the coaching notes back, locked the same way; this page reads and unlocks them.
+     Layout (see Inbox in tools/speakd/speakd.py):
+       inbox/<day>/<id>_<n>.webm.enc  inbox/<day>/<id>.json.enc (written last)  inbox/delete/<id>.enc
+       done/<day>_<id>.json.enc       coaching/<day>.md.enc                                           */
+  var REPO = metaOf('repo');
+  var BRANCH = 'speech-drop';
   var LS_WAIT = 'speak_wait_v1';       // uploaded, not yet written out: id -> {day, meta}
   var LS_DEL = 'speak_del_v1';         // deletion asked for, the PC has not removed it yet: id -> true
-  var R = { state: 'unknown', etag: {}, sha: {}, cache: {}, listing: null, coachList: null, wait: load(LS_WAIT, {}), del: load(LS_DEL, {}) };
+  var R = { state: 'unknown', etag: {}, sha: {}, cache: {}, listing: null, coachList: null, wait: load(LS_WAIT, {}), del: load(LS_DEL, {}), key: null, keyFor: '' };
   var MODE = 'none';                   // 'helper' | 'repo' | 'none': where recordings go right now
   var getToken = function () { try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; } };
+  var utf8 = function (s) { return new TextEncoder().encode(s); };
 
-  function b64decode(b64) {
-    var bin = atob(b64.replace(/\s/g, ''));
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
+  /* the lock's key, from this device's sign-in */
+  function rKey() {
+    var t = getToken();
+    if (!window.drop) return Promise.reject(new Error('the lock is missing'));
+    if (R.key && R.keyFor === t) return Promise.resolve(R.key);
+    return window.drop.keyOf(t).then(function (k) { R.key = k; R.keyFor = t; return k; });
   }
-  function b64encode(str) {
-    var bytes = new TextEncoder().encode(str);
-    var bin = '';
-    for (var i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-    return btoa(bin);
-  }
-  function blobB64(blob) {
-    return new Promise(function (res, rej) {
-      var r = new FileReader();
-      r.onload = function () { res(String(r.result).split(',')[1] || ''); };
-      r.onerror = function () { rej(new Error('could not read the recording')); };
-      r.readAsDataURL(blob);
-    });
-  }
-  /* GitHub's contents API; a failed call carries .status. A 304 (nothing changed) costs no allowance. */
+  /* GitHub's API for the journal repo; a failed call carries .status. A 304 (nothing changed) costs no allowance. */
   function rapi(method, path, body, etag) {
     var headers = { 'Authorization': 'Bearer ' + getToken(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     if (etag) headers['If-None-Match'] = etag;
-    return fetch('https://api.github.com/repos/' + SPEECH + path, { method: method, cache: 'no-store', headers: headers, body: body ? JSON.stringify(body) : undefined })
+    return fetch('https://api.github.com/repos/' + REPO + path, { method: method, cache: 'no-store', headers: headers, body: body ? JSON.stringify(body) : undefined })
       .then(function (r) {
         if (r.status === 304) return { notModified: true };
         return r.text().then(function (t) {
@@ -468,30 +459,52 @@
   function rState(err) {
     if (err.offline) return 'offline';
     if (err.status === 401) return 'badtoken';
-    if (err.status === 404) return 'noaccess';            // what GitHub answers for a private repo the token cannot see
-    if (err.status === 403 && !/rate limit|abuse|secondary/i.test(err.message)) return 'noaccess';
+    if (err.status === 403 && !/rate limit|abuse|secondary/i.test(err.message)) return 'badtoken';
     return 'error';
+  }
+  /* the branch is made on first use (the PC's helper normally makes it, empty; a tablet that gets there first
+     makes it from the site's main, which only costs the PC a bigger first download) */
+  function rEnsureBranch() {
+    return rapi('GET', '/git/ref/heads/' + BRANCH).then(function () { return true; }, function (err) {
+      if (err.status !== 404) throw err;
+      return rapi('GET', '/git/ref/heads/main').then(function (ref) {
+        return rapi('POST', '/git/refs', { ref: 'refs/heads/' + BRANCH, sha: ref.object.sha });
+      }).then(function () { return true; }, function (e2) { if (e2.status === 422) return true; throw e2; });
+    });
   }
   function rCheck() {
     if (!getToken()) { R.state = 'notoken'; return Promise.resolve(false); }
-    if (!SPEECH) { R.state = 'noaccess'; return Promise.resolve(false); }
-    return rapi('GET', '').then(function () { R.state = 'ok'; return true; }, function (e) { R.state = rState(e); R.error = e.message; return false; });
+    if (!window.drop) { R.state = 'error'; R.error = 'the lock is missing'; return Promise.resolve(false); }
+    return rEnsureBranch().then(function () { R.state = 'ok'; return true; }, function (e) { R.state = rState(e); R.error = e.message; return false; });
   }
-  /* put a file (an upload that is already there counts as done) */
-  function rPut(path, b64) {
-    return rapi('PUT', '/contents/' + path, { message: 'speak: upload', content: b64 }).catch(function (e) { if (e.status === 422) return null; throw e; });
+  /* lock and put a file in the branch (one already there counts as done) */
+  function rPutFile(rel, bytes, retried) {
+    return rKey().then(function (key) { return window.drop.seal(key, bytes); }).then(function (sealed) {
+      return rapi('PUT', '/contents/' + rel, { message: 'speak: upload', content: window.drop.toB64(sealed), branch: BRANCH });
+    }).catch(function (e) {
+      if (e.status === 422) return null;
+      if (e.status === 404 && !retried) return rEnsureBranch().then(function () { return rPutFile(rel, bytes, true); });
+      throw e;
+    });
+  }
+  function rGetFile(rel) {
+    return rapi('GET', '/contents/' + rel + '?ref=' + BRANCH).then(function (f) {
+      return rKey().then(function (key) { return window.drop.open(key, window.drop.fromB64(f.content || '')); });
+    });
   }
   function rSend(rec) {
     if (sending[rec.id]) return Promise.resolve();
     sending[rec.id] = true;
     var chain = Promise.resolve();
     rec.parts.forEach(function (blob, n) {
-      chain = chain.then(function () { return blobB64(blob).then(function (b) { return rPut('inbox/' + rec.day + '/' + rec.id + '_' + n + '.webm', b); }); });
+      chain = chain.then(function () {
+        return blob.arrayBuffer().then(function (ab) { return rPutFile('inbox/' + rec.day + '/' + rec.id + '_' + n + '.webm.enc', new Uint8Array(ab)); });
+      });
     });
     return chain.then(function () {
       var m = rec.meta;
       var meta = { id: rec.id, day: rec.day, at: m.at, mode: m.mode, topic: m.topic, cat: m.cat, target: m.target, think: m.think, sec: m.sec, parts: rec.parts.length };
-      return rPut('inbox/' + rec.day + '/' + rec.id + '.json', b64encode(JSON.stringify(meta)));   // last: it means "complete"
+      return rPutFile('inbox/' + rec.day + '/' + rec.id + '.json.enc', utf8(JSON.stringify(meta)));   // last: it means "complete"
     }).then(function () {
       R.wait[rec.id] = { day: rec.day, meta: rec.meta };
       save(LS_WAIT, R.wait);
@@ -504,28 +517,28 @@
       R.state = rState(e);
     });
   }
-  /* the finished takes and the newest coaching note, from the repo (changed files only are fetched) */
+  /* the finished takes and the newest coaching note, from the branch (only changed files are fetched) */
   function rRefresh() {
     var fetchOne = function (item) {
       if (R.sha[item.name] === item.sha && R.cache[item.name]) return Promise.resolve(R.cache[item.name]);
-      return rapi('GET', '/contents/done/' + encodeURIComponent(item.name)).then(function (f) {
-        var t = JSON.parse(b64decode(f.content || ''));
+      return rGetFile('done/' + encodeURIComponent(item.name)).then(function (bytes) {
+        var t = JSON.parse(new TextDecoder().decode(bytes));
         R.cache[item.name] = t; R.sha[item.name] = item.sha;
         return t;
       });
     };
-    return rapi('GET', '/contents/done', null, R.etag.done).then(function (list) {
+    return rapi('GET', '/contents/done?ref=' + BRANCH, null, R.etag.done).then(function (list) {
       if (list.notModified) return R.listing || [];
       R.etag.done = list.__etag; R.listing = list;
       return list;
     }, function (e) { if (e.status === 404) { R.listing = []; return []; } throw e; }).then(function (list) {
-      var all = list.filter(function (f) { return /^\d{4}-\d\d-\d\d_[A-Za-z0-9_-]+\.json$/.test(f.name); });
+      var all = list.filter(function (f) { return /^\d{4}-\d\d-\d\d_[A-Za-z0-9_-]+\.json\.enc$/.test(f.name); });
       /* a deletion asked for stays hidden until the PC has removed the take; then the record of it can go */
       var present = {};
-      all.forEach(function (f) { present[f.name.slice(11, -5)] = 1; });
+      all.forEach(function (f) { present[f.name.slice(11, -9)] = 1; });
       Object.keys(R.del).forEach(function (id) { if (!present[id]) delete R.del[id]; });
       save(LS_DEL, R.del);
-      var items = all.filter(function (f) { return !R.del[f.name.slice(11, -5)]; })
+      var items = all.filter(function (f) { return !R.del[f.name.slice(11, -9)]; })
         .sort(function (a, b) { return a.name < b.name ? 1 : -1; });
       var days = {};
       items.forEach(function (f) { days[f.name.slice(0, 10)] = 1; });
@@ -538,22 +551,23 @@
       H.takes.forEach(function (t) { have[t.id] = 1; });
       Object.keys(R.wait).forEach(function (id) { if (have[id]) delete R.wait[id]; });
       save(LS_WAIT, R.wait);
-      return rapi('GET', '/contents/coaching', null, R.etag.coach).then(function (list) {
+      return rapi('GET', '/contents/coaching?ref=' + BRANCH, null, R.etag.coach).then(function (list) {
         if (list.notModified) list = R.coachList || [];
         else { R.etag.coach = list.__etag; R.coachList = list; }
-        var md = list.filter(function (f) { return /^\d{4}-\d\d-\d\d\.md$/.test(f.name); }).sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+        var md = list.filter(function (f) { return /^\d{4}-\d\d-\d\d\.md\.enc$/.test(f.name); }).sort(function (a, b) { return a.name < b.name ? -1 : 1; });
         if (!md.length) { H.coach = null; return; }
         var newest = md[md.length - 1];
-        if (H.coach && H.coach.name === newest.name && R.sha['c:' + newest.name] === newest.sha) return;
-        return rapi('GET', '/contents/coaching/' + newest.name).then(function (f) {
-          H.coach = { name: newest.name, text: b64decode(f.content || '') };
+        var plainName = newest.name.slice(0, -4);
+        if (H.coach && H.coach.name === plainName && R.sha['c:' + newest.name] === newest.sha) return;
+        return rGetFile('coaching/' + newest.name).then(function (bytes) {
+          H.coach = { name: plainName, text: new TextDecoder().decode(bytes) };
           R.sha['c:' + newest.name] = newest.sha;
         });
       }, function (e) { if (e.status === 404) { H.coach = null; return; } throw e; });
     }).then(function () { R.state = 'ok'; }, function (e) { R.state = rState(e); R.error = e.message; });
   }
-  function rDelete(id, day) {
-    return rPut('inbox/delete/' + id + '.json', b64encode('{}')).then(function () {
+  function rDelete(id) {
+    return rPutFile('inbox/delete/' + id + '.enc', utf8('{}')).then(function () {
       H.takes = H.takes.filter(function (t) { return t.id !== id; });
       delete R.wait[id];
       save(LS_WAIT, R.wait);
@@ -1038,9 +1052,7 @@
     }
     if (MODE === 'none' && H.asked && !H.up) {
       var wait2 = PEND.length ? ' Your ' + PEND.length + ' recording' + (PEND.length > 1 ? 's are' : ' is') + ' safe on this device.' : '';
-      if (R.state === 'noaccess') msg = 'Your sign-in cannot see the private repo <b>' + esc(SPEECH) + '</b> yet.' + wait2
-        + ' In GitHub: Settings → Developer settings → Fine-grained tokens → your journal token → Repository access → add <b>speech-log</b>, and set Contents to Read and write.';
-      else if (R.state === 'badtoken') msg = 'Your sign-in has expired. Sign in again on the <a href="/admin/#signin">Write page</a>.' + wait2;
+      if (R.state === 'badtoken') msg = 'Your sign-in has expired or was refused. Sign in again on the <a href="/admin/#signin">Write page</a>.' + wait2;
       else if (R.state === 'offline') msg = 'No connection right now.' + wait2 + ' It goes up when you are back online.';
       else if (R.state === 'error') msg = 'The private repo did not answer (' + esc(R.error || '') + ').' + wait2 + ' It is tried again shortly.';
       else if (R.state === 'notoken' && !ON_HELPER) msg = 'This device is not signed in, and the Speak helper is not reachable from here. Sign in on the <a href="/admin/#signin">Write page</a> so recordings can go to your private repo and be written out by your PC.' + wait2;
@@ -1068,7 +1080,7 @@
     if (!window.confirm('Delete this take and its recording for good?')) return;
     var t = takeOf(id);
     var gone = MODE === 'repo'
-      ? rDelete(id, t && t.day).then(function () { toast('Delete requested: your PC removes it the next time it is on.'); })
+      ? rDelete(id).then(function () { toast('Delete requested: your PC removes it the next time it is on.'); })
       : hjson('/take/' + encodeURIComponent(id), { method: 'DELETE' }, 8000).then(function () {
         H.takes = H.takes.filter(function (x) { return x.id !== id; });
         return refreshTakes();

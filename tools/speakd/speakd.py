@@ -33,6 +33,7 @@ import mimetypes
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -47,7 +48,7 @@ from urllib.request import Request, urlopen
 
 VERSION = 2
 UPSTREAM = 'https://shyameet.github.io'
-INBOX_REMOTE = 'https://github.com/shyameet/speech-log.git'   # private; made by the owner
+INBOX_REMOTE = 'https://github.com/shyameet/shyameet.github.io.git'   # public: everything in the drop box branch is encrypted
 ALLOWED_ORIGINS = {
     'https://shyameet.github.io',
     'http://localhost:4321', 'http://127.0.0.1:4321',   # the local test server
@@ -334,83 +335,170 @@ class Worker(threading.Thread):
 # ---------------------------------------------------------------- the drop box
 
 NOWIN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)   # no console flashing up for each git call (pythonw)
+HEX64 = re.compile(r'^[0-9a-f]{64}$', re.I)
+
+
+class Crypt:
+    """The drop box's lock, the same as the pages' (src/dropcrypto.js): AES-256-GCM, done with Node
+    (tools/speakd/crypt.mjs). The key is made from the journal's sign-in; a signed-in page on this PC
+    tells it to the helper (POST /dropkey) and it is kept in <data>/drop.key."""
+
+    def __init__(self, keyfile):
+        self.keyfile = Path(keyfile)
+        self.node = shutil.which('node') or 'node'
+        self.tool = Path(__file__).with_name('crypt.mjs')
+
+    def key(self):
+        try:
+            k = self.keyfile.read_text(encoding='ascii').strip().lower()
+        except OSError:
+            return None
+        return k if HEX64.match(k) else None
+
+    def set_key(self, hexkey):
+        """-> True if this is a new key."""
+        if not HEX64.match(str(hexkey or '')):
+            raise ValueError('the key must be 64 hex digits')
+        hexkey = hexkey.lower()
+        if self.key() == hexkey:
+            return False
+        tmp = self.keyfile.with_suffix('.tmp')
+        tmp.write_text(hexkey, encoding='ascii')
+        os.replace(tmp, self.keyfile)
+        return True
+
+    def _run(self, mode, data):
+        k = self.key()
+        if not k:
+            raise RuntimeError('no key yet')
+        p = subprocess.run([self.node, str(self.tool), mode, k], input=data, capture_output=True, timeout=120, creationflags=NOWIN)
+        return p.returncode, p.stdout
+
+    def seal(self, data):
+        rc, out = self._run('enc', data)
+        if rc != 0:
+            raise RuntimeError('could not lock a file')
+        return out
+
+    def open(self, data):
+        """-> the bytes, or None if the key is wrong or the file was changed."""
+        rc, out = self._run('dec', data)
+        return out if rc == 0 else None
 
 
 class Inbox(threading.Thread):
-    """Recordings made on another device (the tablet) reach this PC through a PRIVATE GitHub repo,
-    and the finished words go back the same way, so every device shows the same takes.
+    """Recordings made on another device (the tablet) reach this PC through a branch of the journal's own
+    repository, and the finished words go back the same way, so every device shows the same takes. That
+    repository is PUBLIC, so every file in the branch is encrypted (see Crypt); the key comes from the
+    journal's sign-in, so there is nothing for the owner to set up.
 
-    The layout of that repo (the Speak page writes inbox/, this helper writes the rest):
-      inbox/<day>/<id>_<n>.webm    the audio, part n (written first)
-      inbox/<day>/<id>.json        the take's details (written after its audio: it means "complete")
-      inbox/delete/<id>.json       a request from a device to delete a take
-      done/<day>_<id>.json         a finished take: words with times, as in takes/ here
-      coaching/<day>.md            the advice, copied from the data folder
-    A recording taken in is removed from the tip of the repo (its history keeps it until the repo is
-    trimmed). The audio itself is only ever transcribed here, on the PC. If the PC is off, recordings
-    simply wait in the repo.
+    The layout of the branch `speech-drop` (the Speak page writes inbox/, this helper writes the rest):
+      inbox/<day>/<id>_<n>.webm.enc   the audio, part n (written first)
+      inbox/<day>/<id>.json.enc       the take's details (written after its audio: it means "complete")
+      inbox/delete/<id>.enc           a request from a device to delete a take
+      done/<day>_<id>.json.enc        a finished take: words with times, as in takes/ here
+      coaching/<day>.md.enc           the advice, copied from the data folder
+    A recording taken in is removed from the tip of the branch. The branch's history is squashed now and then
+    (never when a device has pushed in between), so old ciphertext does not pile up. The audio is only ever
+    transcribed here, on the PC. If the PC is off, recordings simply wait in the branch.
 
     All of it goes through plain `git` with the login this PC already has. Nothing here needs a token.
     """
 
-    def __init__(self, store, worker, log, remote, workdir, interval=45):
+    def __init__(self, store, worker, log, remote, workdir, interval=45, crypt=None, branch='speech-drop', keep=150):
         super().__init__(daemon=True)
         self.store, self.worker, self.log = store, worker, log
         self.remote, self.dir, self.interval = remote, Path(workdir), interval
+        self.crypt = crypt or Crypt(store.root / 'drop.key')
+        self.branch_name, self.keep = branch, keep
         self.stop = threading.Event()
-        self.status = {'configured': True, 'last_ok': 0, 'last_error': '', 'imported': 0, 'cycles': 0}
+        self.statefile = store.root / 'dropbox_state.json'   # what was last written to the branch: plaintext hashes
+        self.last_trim = 0
+        self.status = {'configured': True, 'has_key': bool(self.crypt.key()), 'last_ok': 0, 'last_error': '', 'imported': 0, 'cycles': 0}
 
     # -- git
+    def _env(self):
+        return dict(os.environ, GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', LC_ALL='C')
+
     def git(self, *args, check=True, timeout=180):
-        env = dict(os.environ, GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', LC_ALL='C')
         p = subprocess.run(['git', *args], cwd=str(self.dir), capture_output=True, text=True, encoding='utf-8',
-                           errors='replace', timeout=timeout, env=env, creationflags=NOWIN)
+                           errors='replace', timeout=timeout, env=self._env(), creationflags=NOWIN)
         if check and p.returncode != 0:
             raise RuntimeError('git %s failed: %s' % (' '.join(args[:2]), (p.stderr or p.stdout).strip()[:300]))
         return p
+
+    def _config(self):
+        self.git('config', 'user.name', 'Speak helper')
+        self.git('config', 'user.email', 'speak-helper@users.noreply.github.com')
 
     def ensure_clone(self):
         if (self.dir / '.git').exists():
             return
         self.dir.parent.mkdir(parents=True, exist_ok=True)
-        env = dict(os.environ, GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', LC_ALL='C')
-        p = subprocess.run(['git', 'clone', '-q', self.remote, str(self.dir)], capture_output=True, text=True,
-                           encoding='utf-8', errors='replace', timeout=300, env=env, creationflags=NOWIN)
-        if p.returncode != 0:
-            raise RuntimeError('git clone failed: %s' % (p.stderr or p.stdout).strip().replace('\n', ' ')[:300])
-        self.git('config', 'user.name', 'Speak helper')
-        self.git('config', 'user.email', 'speak-helper@users.noreply.github.com')
+        p = subprocess.run(['git', 'clone', '-q', '--single-branch', '--branch', self.branch_name, self.remote, str(self.dir)],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300,
+                           env=self._env(), creationflags=NOWIN)
+        err = (p.stderr or p.stdout).strip().replace('\n', ' ')
+        if p.returncode == 0:
+            self._config()
+            return
+        shutil.rmtree(self.dir, ignore_errors=True)
+        if 'not found in upstream' in err or 'Could not find remote branch' in err:
+            self._create_branch()   # the first time ever: an empty branch of its own, with nothing of the site in it
+            return
+        raise RuntimeError('git clone failed: ' + err[:300])
 
-    def branch(self):
-        p = self.git('symbolic-ref', '--short', 'HEAD', check=False)
-        return p.stdout.strip() or 'main'
+    def _create_branch(self):
+        self.dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.git('init', '-q', '-b', self.branch_name)
+            self._config()
+            self.git('remote', 'add', 'origin', self.remote)
+            (self.dir / 'README.md').write_text(
+                'Encrypted drop box for the Speak page. Every file here is locked; none can be read without the key.\n', encoding='utf-8')
+            self.git('add', '-A')
+            self.git('commit', '-q', '-m', 'speak: drop box')
+            self.git('push', '-q', '-u', 'origin', self.branch_name)
+        except Exception:
+            shutil.rmtree(self.dir, ignore_errors=True)   # e.g. a device made the branch first: the next cycle clones it
+            raise
 
     def sync_down(self):
         self.git('fetch', '-q', 'origin', check=False)
-        br = self.branch()
-        if self.git('rev-parse', '--verify', '-q', 'origin/' + br, check=False).returncode == 0:
-            p = self.git('rebase', '--autostash', 'origin/' + br, check=False)
+        if self.git('rev-parse', '--verify', '-q', 'origin/' + self.branch_name, check=False).returncode == 0:
+            p = self.git('rebase', '--autostash', 'origin/' + self.branch_name, check=False)
             if p.returncode != 0:
                 self.git('rebase', '--abort', check=False)
                 raise RuntimeError('could not rebase onto the remote: ' + (p.stderr or p.stdout).strip()[:200])
 
-    # -- from the repo to this PC
+    # -- reading the branch
+    def _read(self, path):
+        """-> the plain bytes of a locked file, or None (wrong key, damaged)."""
+        try:
+            return self.crypt.open(path.read_bytes())
+        except OSError:
+            return None
+
     def import_new(self):
         base = self.dir / 'inbox'
         n = 0
         if not base.exists():
             return 0
         # a device asked for a take to be deleted
-        for f in sorted((base / 'delete').glob('*.json')):
-            tid = f.stem
+        for f in sorted((base / 'delete').glob('*.enc')):
+            tid = f.name[:-4]
             if ID_RE.match(tid):
                 self.store.delete(tid)
             f.unlink()
-        for meta_path in sorted(base.glob('*/*.json')):
+        for meta_path in sorted(base.glob('*/*.json.enc')):
             if meta_path.parent.name == 'delete':
                 continue
+            raw = self._read(meta_path)
+            if raw is None:
+                self.log('drop box: could not unlock %s (a different key?)' % meta_path.name)
+                continue
             try:
-                m = json.loads(meta_path.read_text(encoding='utf-8'))
+                m = json.loads(raw.decode('utf-8'))
             except Exception:
                 self.log('drop box: could not read %s' % meta_path.name)
                 continue
@@ -420,11 +508,15 @@ class Inbox(threading.Thread):
             if self.store.get(tid) or tid in self.store.deleted_ids():
                 continue
             parts = int(m.get('parts') or 0)
-            audio = [meta_path.parent / ('%s_%d.webm' % (tid, i)) for i in range(parts)]
-            if not 0 <= parts <= 50 or not all(p.exists() for p in audio):
+            files = [meta_path.parent / ('%s_%d.webm.enc' % (tid, i)) for i in range(parts)]
+            if not 0 <= parts <= 50 or not all(p.exists() for p in files):
                 continue   # still arriving
-            for i, p in enumerate(audio):
-                self.store.save_audio(day, tid, i, p.read_bytes())
+            audio = [self._read(p) for p in files]
+            if any(a is None for a in audio):
+                self.log('drop box: could not unlock the audio of %s' % tid)
+                continue
+            for i, a in enumerate(audio):
+                self.store.save_audio(day, tid, i, a)
             self.store.put({
                 'id': tid, 'day': day, 'at': int(m.get('at') or time.time() * 1000), 'mod': int(time.time() * 1000),
                 'mode': 'free' if m.get('mode') == 'free' else 'topic',
@@ -439,40 +531,51 @@ class Inbox(threading.Thread):
         self.status['imported'] += n
         return n
 
-    # -- from this PC to the repo
+    # -- writing the branch
+    def _state(self):
+        try:
+            return json.loads(self.statefile.read_text(encoding='utf-8'))
+        except Exception:
+            return {}
+
+    def _write_locked(self, state, rel, plain):
+        """Lock `plain` into <rel> unless the branch already holds exactly this (locking is random, so compare the plain)."""
+        h = hashlib.sha256(plain).hexdigest()
+        out = self.dir / rel
+        if state.get(rel) == h and out.exists():
+            return False
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(self.crypt.seal(plain))
+        state[rel] = h
+        return True
+
     def export(self):
         changed = False
-        done = self.dir / 'done'
-        done.mkdir(exist_ok=True)
+        state = self._state()
         gone = self.store.deleted_ids()
         for t in self.store.takes():
             if t.get('status') not in ('done', 'error'):
                 continue
-            out = done / ('%s_%s.json' % (t['day'], t['id']))
             doc = {k: v for k, v in t.items() if k not in ('fake', 'edited')}
-            text = json.dumps(doc, ensure_ascii=False, indent=1) + '\n'
-            if not out.exists() or out.read_text(encoding='utf-8') != text:
-                out.write_text(text, encoding='utf-8')
-                changed = True
-            # the audio of a recording that came in through the repo is not needed there any more
+            plain = (json.dumps(doc, ensure_ascii=False, indent=1) + '\n').encode('utf-8')
+            changed |= self._write_locked(state, 'done/%s_%s.json.enc' % (t['day'], t['id']), plain)
+            # the audio of a recording that came in through the branch is not needed there any more
             box = self.dir / 'inbox' / t['day']
             for f in list(box.glob(t['id'] + '*')) if box.exists() else []:
                 f.unlink()
                 changed = True
-        # takes deleted (here, or by a device) are removed from the repo; nothing else ever is
-        for f in list(done.glob('*.json')):
-            tid = f.stem.split('_', 1)[-1]
+        # takes deleted (here, or by a device) are removed from the branch; nothing else ever is
+        for f in list((self.dir / 'done').glob('*.json.enc')) if (self.dir / 'done').exists() else []:
+            tid = f.name[:-9].split('_', 1)[-1]
             if tid in gone:
                 f.unlink()
+                state.pop('done/' + f.name, None)
                 changed = True
-        coach = self.dir / 'coaching'
         for f in sorted((self.store.root / 'coaching').glob('*.md')):
-            text = f.read_text(encoding='utf-8')
-            dst = coach / f.name
-            if not dst.exists() or dst.read_text(encoding='utf-8') != text:
-                coach.mkdir(exist_ok=True)
-                dst.write_text(text, encoding='utf-8')
-                changed = True
+            changed |= self._write_locked(state, 'coaching/%s.enc' % f.name, f.read_bytes())
+        tmp = self.statefile.with_suffix('.tmp')
+        tmp.write_text(json.dumps(state), encoding='utf-8')
+        os.replace(tmp, self.statefile)
         return changed
 
     def push(self):
@@ -482,19 +585,46 @@ class Inbox(threading.Thread):
         self.git('commit', '-q', '-m', 'speak: sync')
         last = ''
         for _ in range(3):
-            p = self.git('push', '-q', 'origin', 'HEAD', check=False)
+            p = self.git('push', '-q', 'origin', 'HEAD:' + self.branch_name, check=False)
             if p.returncode == 0:
                 return True
             last = (p.stderr or p.stdout).strip()[:200]
             self.sync_down()   # a device pushed in between: put ours on top and try again
         raise RuntimeError('push failed: ' + last)
 
+    def trim(self):
+        """Squash the branch's history when it is long (about once a day at most). A force push that only
+        replaces exactly the commit just fetched, so a device that pushed in between is never overwritten."""
+        if time.time() - self.last_trim < 86400:
+            return False
+        n = int(self.git('rev-list', '--count', 'HEAD').stdout.strip() or 0)
+        if n <= self.keep:
+            return False
+        self.last_trim = time.time()
+        self.git('fetch', '-q', 'origin')
+        tip = self.git('rev-parse', 'origin/' + self.branch_name).stdout.strip()
+        if self.git('rev-parse', 'HEAD').stdout.strip() != tip:
+            return False   # something new arrived: try another day
+        self.git('checkout', '-q', '--orphan', 'trim-tmp')
+        self.git('add', '-A')
+        self.git('commit', '-q', '-m', 'speak: history squashed')
+        self.git('branch', '-q', '-M', self.branch_name)
+        self.git('push', '-q', '--force-with-lease=%s:%s' % (self.branch_name, tip), 'origin', self.branch_name)
+        self.git('reflog', 'expire', '--expire=now', '--all', check=False)
+        self.git('gc', '-q', '--prune=now', check=False)
+        self.log('drop box: history squashed (%d commits)' % n)
+        return True
+
     def cycle(self):
+        self.status['has_key'] = bool(self.crypt.key())
+        if not self.status['has_key']:
+            raise RuntimeError('waiting for the key: open the journal once on this PC while signed in')
         self.ensure_clone()
         self.sync_down()
         self.import_new()
         self.export()
         self.push()
+        self.trim()
         self.status['cycles'] += 1
         self.status['last_ok'] = int(time.time())
         self.status['last_error'] = ''
@@ -509,13 +639,14 @@ class Inbox(threading.Thread):
                 if msg != self.status['last_error']:
                     self.log('drop box: ' + msg)
                 self.status['last_error'] = msg
-                wait = max(wait, 120)   # not reachable (or not set up yet): do not hammer it
+                wait = max(wait, 60 if not self.status['has_key'] else 120)   # not reachable, or no key yet: do not hammer it
             self.stop.wait(wait)
 
 
 # ---------------------------------------------------------------- http
 
-def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None):
+def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None, crypt=None):
+    crypt = crypt or (inbox.crypt if inbox else Crypt(store.root / 'drop.key'))
     class H(BaseHTTPRequestHandler):
         server_version = 'speakd/%d' % VERSION
         protocol_version = 'HTTP/1.1'
@@ -596,7 +727,8 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None):
             if p == '/health':
                 return self._send(200, {
                     'ok': True, 'v': VERSION, 'whisper': engine.state if engine.available() else 'missing',
-                    'pending': worker.pending(), 'data': str(store.root), 'dropbox': inbox.status if inbox else None})
+                    'pending': worker.pending(), 'data': str(store.root),
+                    'dropbox': dict(inbox.status, has_key=bool(inbox.crypt.key())) if inbox else None})
             if p == '/takes':
                 since = (q.get('since') or [''])[0]
                 since = since if DAY_RE.match(since) else None
@@ -612,6 +744,8 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None):
                 if not f or not f.exists():
                     return self._send(404, {'error': 'no audio'})
                 return self._send(200, f.read_bytes(), 'audio/webm')
+            if p == '/dropkey':
+                return self._send(200, {'has': bool(crypt.key())})   # whether it has one, never the key
             if p == '/coaching':
                 c = store.coaching()
                 return self._send(200, c or {'name': '', 'text': '', 'all': []})
@@ -666,6 +800,15 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None):
             q = parse_qs(u.query)
             p = u.path
             try:
+                if p == '/dropkey':
+                    b = self._json_body()
+                    try:
+                        changed = crypt.set_key(str(b.get('key') or ''))
+                    except ValueError as e:
+                        return self._send(400, {'error': str(e)})
+                    if inbox:
+                        inbox.status['has_key'] = True
+                    return self._send(200, {'ok': True, 'changed': changed})
                 if p == '/audio':
                     tid = (q.get('id') or [''])[0]
                     day = (q.get('day') or [''])[0]
@@ -737,8 +880,8 @@ def main(argv=None):
     ap.add_argument('--model', default=os.environ.get('SPEAK_MODEL'))
     ap.add_argument('--fake', action='store_true', help='use a stand-in for Whisper (tests)')
     ap.add_argument('--upstream', default=os.environ.get('SPEAK_UPSTREAM', UPSTREAM), help="where the site's pages come from")
-    ap.add_argument('--inbox-remote', default=os.environ.get('SPEAK_INBOX_REMOTE'), help='the private git repo that carries recordings from other devices')
-    ap.add_argument('--inbox-dir', default=None, help='where this PC keeps its clone of it (default <data>/inbox)')
+    ap.add_argument('--inbox-remote', default=os.environ.get('SPEAK_INBOX_REMOTE'), help='the git repo whose speech-drop branch carries (encrypted) recordings from other devices')
+    ap.add_argument('--inbox-dir', default=None, help='where this PC keeps its clone of it (default <data>/dropbox)')
     ap.add_argument('--inbox-interval', type=int, default=45)
     ap.add_argument('--no-inbox', action='store_true', help='do not use the drop box')
     a = ap.parse_args(argv)
@@ -760,7 +903,7 @@ def main(argv=None):
     inbox = None
     remote = a.inbox_remote or (None if a.fake else INBOX_REMOTE)
     if remote and not a.no_inbox:
-        inbox = Inbox(store, worker, log, remote, a.inbox_dir or str(store.root / 'inbox'), a.inbox_interval)
+        inbox = Inbox(store, worker, log, remote, a.inbox_dir or str(store.root / 'dropbox'), a.inbox_interval)
         inbox.start()
     srv = ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(store, worker, engine, log, a.upstream, inbox))
     log('speakd %d listening on 127.0.0.1:%d, data %s, whisper %s' % (VERSION, a.port, store.root, 'FAKE' if a.fake else engine.model_dir))

@@ -98,6 +98,12 @@ http.createServer(async (req, res) => {
     }
     return send(res, 200, out);
   }
+  if (p === '/__branch') {   // one branch of the journal repo, every file as base64 (the drop box's locked files are binary)
+    const files = branches[url.searchParams.get('name') || 'main'];
+    const out = {};
+    for (const [k, v] of files || []) out[k] = v.buf.toString('base64');
+    return send(res, files ? 200 : 404, out);
+  }
   if (p === '/__speech') {
     const out = {};
     for (const [b, files] of Object.entries(speechBranches)) {
