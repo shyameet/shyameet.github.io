@@ -1107,6 +1107,37 @@
     } catch (e) { /* not supported; not important */ }
   }
 
+  /* dictationText:start
+     What one listening session has said so far, from its list of results. Browsers disagree about the list:
+       desktop Chrome   each result holds its own phrase                  ["hello", "how are you"]
+       Android Chrome   each result holds the WHOLE sentence so far,      ["any", "any understand",
+                        a new entry every time, sometimes revised         "can you understand what I"]
+     A result that carries most of the words of the one before it is the same sentence grown (or corrected):
+     it replaces it. Anything else is a new phrase. (The 24 Oct tablet typed "any any understand any understand
+     what ..." because every growing result was appended as if it were new.) */
+  function dictationText(texts) {
+    var norm = function (t) { return String(t).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean); };
+    /* is `b` the sentence `a` grown or corrected? Either b starts with all of a, or b is longer than a and holds a's
+       last two words in a row with more words after them (the engine changed its first guess, then kept going) */
+    var grown = function (a, b) {
+      if (!a.length || b.length < a.length) return false;
+      if (a.every(function (w, i) { return b[i] === w; })) return true;
+      if (a.length < 2 || b.length <= a.length) return false;
+      var t1 = a[a.length - 2], t2 = a[a.length - 1];
+      for (var i = 0; i + 2 < b.length; i++) if (b[i] === t1 && b[i + 1] === t2) return true;
+      return false;
+    };
+    var out = [];
+    texts.forEach(function (raw) {
+      var t = String(raw || '').trim();
+      if (!t) return;
+      if (out.length && grown(norm(out[out.length - 1]), norm(t))) out[out.length - 1] = t;
+      else out.push(t);
+    });
+    return out.join(' ');
+  }
+  /* dictationText:end */
+
   function insertSpoken(text) {
     if (!text) return;
     var el = $('body');
@@ -1129,26 +1160,37 @@
     r.continuous = true;
     r.interimResults = true;
     r.lang = CFG.speechLang || 'en-IN';
-    /* Which results of THIS session have already been written. Android Chrome resends the whole list of results
-       with every event and leaves resultIndex at 0, so trusting resultIndex types every word again each time
-       ("hello" became a hundred hellos, 24 Oct). Counting what was written, per session, is right on every
-       browser; a fresh recogniser starts from zero. */
-    var done = 0, lastText = '', lastAt = 0;
+    /* Where this listening session's words sit in the box, and how long they are. Android Chrome resends the whole
+       list of results with every event (leaving resultIndex at 0), and on the tablet every result holds the whole
+       sentence so far, so appending anything ("hello" became a hundred hellos, "any any understand any understand
+       what ...") is wrong. The session's region is rewritten from its results each time instead. A fresh
+       recogniser (after a pause) starts a new region after the old one. */
+    var ses = { start: -1, len: 0 };
 
     r.onresult = function (e) {
-      var interim = '';
-      for (var i = done; i < e.results.length; i++) {
+      var finals = [], interim = '';
+      for (var i = 0; i < e.results.length; i++) {
         var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          done = i + 1;
-          var said = t.trim();
-          /* the same finished phrase twice within a moment is the engine repeating itself, not the speaker */
-          if (said && said === lastText && Date.now() - lastAt < 2000) continue;
-          lastText = said; lastAt = Date.now();
-          diag.results++;
-          insertSpoken(said);
-        } else interim += t;
+        if (e.results[i].isFinal) finals.push(t); else interim += ' ' + t;
       }
+      /* this session's words are written as one region and REWRITTEN on every event, so the box always holds
+         exactly what the session has said, once, whatever shape the list of results has */
+      var el = $('body');
+      var text = dictationText(finals);
+      if (ses.start < 0) ses.start = Math.min(insertAt, el.value.length);
+      var v = el.value;
+      var before = v.slice(0, ses.start);
+      var gap = (before === '' || /[\s\n]$/.test(before)) ? '' : ' ';
+      var chunk = text ? gap + text : '';
+      var atEnd = ses.start + ses.len >= v.length;
+      el.value = before + chunk + v.slice(ses.start + ses.len);
+      diag.chars += Math.max(0, chunk.length - ses.len);
+      ses.len = chunk.length;
+      insertAt = ses.start + ses.len;
+      diag.results = e.results.length;
+      if (atEnd) el.scrollTop = el.scrollHeight;
+      saveDraft();
+      interim = interim.trim();
       if (interim) caption(interim, 'live');
       else if (wantOn) caption('Listening. It keeps going through pauses.', 'live');
     };

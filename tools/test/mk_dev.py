@@ -94,6 +94,26 @@ STUB = r"""<script>
        sr=desktop   each result event carries only the NEW result (resultIndex says which)
        sr=android   what Android Chrome does: every event resends the WHOLE list of results, resultIndex stays 0
      it "hears" three phrases 200 ms apart ("hello", "how are you", "fine thanks"), then the browser ends the listen */
+  if (q.get('sr') === 'cumulative') {
+    /* the 24 Oct tablet: every event ADDS a result holding the whole sentence so far (all marked final), and the
+       engine corrects its first guess half way: "any" ... "can you understand what I am saying" */
+    var FakeCum = function () { this.continuous = false; this.interimResults = false; this.lang = ''; };
+    FakeCum.prototype.start = function () {
+      var self = this, said = ['any', 'any understand', 'any understand what', 'can you understand what I', 'can you understand what I am', 'can you understand what I am saying'], list = [], i = 0;
+      window.__srStarts = (window.__srStarts || 0) + 1;
+      setTimeout(function () { self.onstart && self.onstart(); }, 10);
+      this._t = setInterval(function () {
+        if (i < said.length) {
+          var r = [{ transcript: said[i] }]; r.isFinal = true; list.push(r);
+          self.onresult && self.onresult({ resultIndex: 0, results: list.slice() });
+          i++;
+        } else { clearInterval(self._t); }   // the session just stays open
+      }, 200);
+    };
+    FakeCum.prototype.stop = function () { clearInterval(this._t); var s = this; setTimeout(function () { s.onend && s.onend(); }, 10); };
+    FakeCum.prototype.abort = FakeCum.prototype.stop;
+    window.SpeechRecognition = FakeCum; window.webkitSpeechRecognition = FakeCum;
+  }
   if (q.get('sr') === 'desktop' || q.get('sr') === 'android') {
     var droid = q.get('sr') === 'android';
     var FakeSR = function () { this.continuous = false; this.interimResults = false; this.lang = ''; };

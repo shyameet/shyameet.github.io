@@ -17,6 +17,7 @@ file in a VM through the `window.__todoTest` hook. Run it after any change to `t
 node tools/test/test_speak.mjs
 node tools/test/test_drop.mjs
 node tools/test/test_sw.mjs
+node tools/test/test_dictation.mjs
 ```
 
 106 checks on `src/speak.js`: the filler count (and the phrases it must not flag), words a
@@ -61,8 +62,8 @@ To open a test copy through the helper (same origin, as in daily use), start it 
 `--upstream http://localhost:4321` and visit `http://localhost:4777/_t_speak.html?mic=tone`.
 
 The Write page's Talk button (browser dictation) can be tried with `mk_dev.py admin/index.html
-admin/_t_admin.html` and `?sr=android` (a fake dictation engine that resends the whole list of results with
-`resultIndex` stuck at 0, as Android Chrome does) or `?sr=desktop`; after "Talk" then "Stop" the box
+admin/_t_admin.html` and `?sr=cumulative` (the tablet: every result holds the whole sentence so far, corrected half way),
+`?sr=android` (the whole list resent, `resultIndex` stuck at 0) or `?sr=desktop`; after "Talk" then "Stop" the box
 `#body` must hold each phrase once.
 
 Never point these at the real repo or at the real data folder. `fake_gh.mjs` accepts any token.
