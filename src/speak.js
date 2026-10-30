@@ -594,7 +594,10 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
       return Promise.reject(new Error('This browser cannot record. Use Chrome on the PC.'));
     }
-    var audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    /* Automatic volume OFF. The first real tablet recording (24 Oct) peaked at 0.99 (near distortion) and had
+       noise in the pauses as loud as the voice: the tablet's auto-volume was pumping everything up. Whisper
+       reads a clean, steady recording better than a boosted one. Noise reduction stays on. */
+    var audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 };
     if (pref.device) audio.deviceId = { ideal: pref.device };
     return navigator.mediaDevices.getUserMedia({ audio: audio }).then(function (stream) {
       MIC.stream = stream;
@@ -612,11 +615,27 @@
         MIC.data = new Uint8Array(MIC.an.fftSize);
       } catch (e) { MIC.an = null; }
       MIC.lastSound = Date.now();
-      try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (l) { MIC.lock = l; }, function () {}); } catch (e) {}
+      holdScreen();
       listDevices();
       return stream;
     });
   }
+  /* keep the screen awake while the microphone is on: a tablet that dims and sleeps mid-talk stops the page
+     (and the recorder). The browser lets go of the lock whenever the page is hidden, so it is taken again
+     when the page comes back. */
+  function holdScreen() {
+    try {
+      if (navigator.wakeLock && !MIC.lock && micAlive()) {
+        navigator.wakeLock.request('screen').then(function (l) {
+          MIC.lock = l;
+          l.addEventListener('release', function () { if (MIC.lock === l) MIC.lock = null; });
+        }, function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && micAlive()) holdScreen();
+  });
   function closeMic() {
     if (MIC.rec && MIC.rec.state !== 'inactive') { try { MIC.rec.stop(); } catch (e) {} }
     if (MIC.stream) MIC.stream.getTracks().forEach(function (t) { t.onended = null; try { t.stop(); } catch (e) {} });
@@ -797,13 +816,20 @@
     var clock = $('sclock');
     var lv = level();
     var fill = $('slevelfill');
-    if (fill) fill.style.width = Math.min(100, Math.round(lv * 500)) + '%';
-    if (lv > 0.012) { MIC.lastSound = now; if (warnedQuiet) { warnedQuiet = false; micNote(S.phase === 'talk' ? 'Recording…' : 'The microphone is on.', false); } }
+    if (fill) fill.style.width = Math.min(100, Math.round(lv * 800)) + '%';
+    if (lv > 0.006) { MIC.lastSound = now; if (warnedQuiet) { warnedQuiet = false; micNote(S.phase === 'talk' ? 'Recording…' : 'The microphone is on.', false); } }
     else if (!S.lost && micAlive() && now - MIC.lastSound > 6000 && !warnedQuiet) {
       warnedQuiet = true;
       micNote('I cannot hear anything. Is the microphone muted, or is the wrong one chosen? Pick another below.', true);
       var sel = $('sdev');
       if (sel) { fillDevSelect(sel); sel.hidden = false; }
+    }
+    /* the recorder can be stopped by the system (a tablet short of memory, a call): keep what it had and start again */
+    if (S.phase === 'talk' && !S.lost && micAlive() && MIC.rec && MIC.rec.state === 'inactive') {
+      var kept = MIC.chunks.length ? new Blob(MIC.chunks, { type: (MIC.mime || 'audio/webm').split(';')[0] }) : null;
+      MIC.chunks = [];
+      if (kept && kept.size) S.parts.push(kept);
+      if (startRec()) micNote('The recorder stopped by itself, so it was started again. What you said before is kept.', false);
     }
     if (S.phase === 'think') {
       var left = pref.think - (now - S.think0) / 1000;

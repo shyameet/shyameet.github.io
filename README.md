@@ -502,14 +502,24 @@ resumes). `tools/speakd/try_whisper.py <audio>` checks it by hand. Tested on a s
 speech written out in about 15 s on the i7-9700 (model load 5 s), with "Umm", "like", "You know" and
 "Basically" kept and every word timed.
 
-**Whisper makes things up over silence, so it is never given silence.** Found on 21 Oct by sending
-it a plain tone: with the hint text that keeps "um"/"uh" it repeated the hint ("Umm, so, uh,
-basically..."), and with no hint it wrote "Thanks for watching!". That would put invented fillers in
-a transcript. So only stretches where a voice is detected (VAD, threshold 0.35, soft enough for a
-quiet "um") go to Whisper, and `keep_segment` drops what still looks like an echo of the hint or a
-stock phrase. Checked: silence, noise, a tone and a Chrome recording of a tone all give nothing;
-speech with a quiet voice and room hiss is written out in full with its fillers. Do not remove the
-VAD or change the hint without re-running that check (`tools/speakd/try_whisper.py` on a tone).
+**Whisper makes things up over silence, so it is never given a recording with no voice in it.** Found on 21 Oct
+by sending it a plain tone: with the hint text that keeps "um"/"uh" it repeated the hint ("Umm, so, uh,
+basically..."), and with no hint it wrote "Thanks for watching!". But a first fix that cut the audio with a voice
+detector before Whisper saw it (30 Oct, on the first real tablet talk) made the transcript tidier and WRONG: it
+hid two of the owner's "so"s, turned "my opinion" into "mapping your work" and made the pauses look different.
+So now: the detector (VAD, threshold 0.35, soft enough for a quiet "um") only answers **is there a voice at all**
+(at least 1 s of it, else nothing is written); then Whisper reads the **whole recording** (no VAD cuts, the hint
+kept, `temperature` falling back through 0.0, 0.2, 0.4 when a pass loops or is unsure). Whatever still looks
+wrong is dropped: `keep_segment` (Whisper's own no-speech call, stock phrases over noise, the hint's own words
+repeated) and `collapse_runs` (one word more than four times in a row is a loop, cut to two). Checked on
+silence, noise, a tone, and speech surrounded by 19 s of room noise (only the speech comes out); a loop is
+unit-tested. Do not change these settings without re-running that check (`tools/speakd/try_whisper.py`).
+
+**The recording itself (30 Oct).** The first tablet recording peaked at 0.99 and had noise in the pauses as
+loud as the voice: the tablet's automatic volume was pumping everything up. The recorder now asks for
+`autoGainControl: false` (noise reduction and echo cancellation stay on, one channel), keeps the screen awake
+with a wake lock (taken again when the page comes back to the front), and restarts the recorder if the
+system stops it, keeping what it had.
 
 **Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
 miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Tablets and phones
@@ -517,7 +527,7 @@ need the drop box (above) and a PC that is on to write the words out. The helper
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 75 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 81 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Installing as an app

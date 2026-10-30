@@ -61,16 +61,22 @@ ID_RE = re.compile(r'^[A-Za-z0-9_-]{4,40}$')
 # A hint that makes Whisper write the way the owner speaks: English with Hindi mixed in, Hindi
 # in Roman letters, and the filler words kept rather than tidied away. A hint has a cost, found by
 # testing on 21 Oct: on a stretch with no speech Whisper repeats it ("Umm, so, uh, basically..."),
-# and with no hint at all it writes "Thanks for watching!". So only stretches where a voice was
-# detected (VAD) are ever given to Whisper, and anything that still looks like an echo is dropped.
+# and with no hint at all it writes "Thanks for watching!". So a recording with no voice in it is
+# never given to Whisper (VAD is used ONLY to decide that), and anything that still looks like an
+# echo of the hint, a stock phrase or a loop is dropped.
 PROMPT = ("Umm, so, uh, basically I was like, you know, thinking about it. "
           "Haan, main yeh bol raha hoon, matlab, kuch toh karna padega, na? "
           "Okay, so, uh, let me explain.")
-# a soft "um" is voice too: a lower threshold than the default 0.5; a silence of 1.5 s splits the
-# stretches (times stay those of the whole recording)
+# What counts as "a voice" for that decision: a soft "um" is voice too, hence a threshold below the default 0.5.
 VAD = dict(threshold=0.35, min_silence_duration_ms=1500, speech_pad_ms=400)
+MIN_SPEECH = 1.0         # seconds of voice a recording needs before Whisper is asked to write anything
+# Whisper is NOT given the VAD's cut-up audio: on the first real tablet talk (24 Oct) that made the
+# transcript tidier and wrong, hiding two of the owner's "so"s and turning "my opinion" into "mapping your
+# work". It reads the whole recording, with a fallback to a little randomness when a pass loops or is unsure.
+TEMPS = (0.0, 0.2, 0.4)
 NO_SPEECH_HARD = 0.85    # a stretch Whisper itself is this sure has no speech is dropped
-NO_SPEECH_SOFT = 0.30    # with this much doubt, text that is only the hint repeated is dropped
+NO_SPEECH_SOFT = 0.30    # with this much doubt, a stretch made only of the hint's own words, or of a stock phrase, is dropped
+MAX_RUN = 4              # the same word more than this many times in a row is the model looping, not a person
 KNOWN_NOISE_TEXT = ('thanks for watching', 'thank you for watching', 'thank you very much', 'subscribe')
 
 
@@ -93,7 +99,25 @@ def keep_segment(seg, prompt=PROMPT):
             return False
         if flat.strip() in ' ' + ' '.join(_norm(prompt)) + ' ':
             return False
+        hint = set(_norm(prompt))
+        if len(words) >= 3 and sum(1 for w in words if w in hint) / len(words) >= 0.8:
+            return False   # the hint's own words again and again: a loop over noise
     return True
+
+
+def collapse_runs(words, max_run=MAX_RUN):
+    """Whisper sometimes loops on one word ("hello hello hello ..." a hundred times). A person does not say
+    a word more than a few times in a row: a run longer than `max_run` is cut to its first two."""
+    key = lambda w: ' '.join(_norm(w['w'])) or w['w']
+    out, i = [], 0
+    while i < len(words):
+        j = i
+        while j < len(words) and key(words[j]) == key(words[i]):
+            j += 1
+        run = words[i:j]
+        out.extend(run if len(run) <= max_run else run[:2])
+        i = j
+    return out
 
 
 class Store:
@@ -246,25 +270,37 @@ class Whisper:
                                   cpu_threads=max(2, (os.cpu_count() or 4) - 2))
         self.state = 'ready'
 
+    def _audio(self, path):
+        from faster_whisper.audio import decode_audio
+        return decode_audio(str(path), sampling_rate=16000)
+
+    def _speech_seconds(self, audio):
+        """Seconds of voice in the recording (VAD is used for this and nothing else)."""
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
+        return sum(t['end'] - t['start'] for t in get_speech_timestamps(audio, VadOptions(**VAD))) / 16000.0
+
     def transcribe(self, paths):
         """-> {'text', 'words': [{w, s, e}], 'lang'}; the parts of a take are joined in order,
         each part's times shifted by the length of the parts before it."""
         self.load()
-        words, texts, offset, lang = [], [], 0.0, ''
+        words, offset, lang = [], 0.0, ''
         for p in paths:
-            segs, info = self.model.transcribe(
-                str(p), language='en', task='transcribe', beam_size=5, temperature=0.0,
-                word_timestamps=True, vad_filter=True, vad_parameters=VAD,
-                condition_on_previous_text=False, initial_prompt=PROMPT)
-            lang = info.language
-            for seg in segs:
-                if not keep_segment(seg):
-                    continue
-                texts.append(seg.text.strip())
-                for w in (seg.words or []):
-                    words.append({'w': w.word.strip(), 's': round(offset + w.start, 2), 'e': round(offset + w.end, 2)})
-            offset += info.duration
-        return {'text': ' '.join(t for t in texts if t), 'words': [w for w in words if w['w']], 'lang': lang}
+            audio = self._audio(p)
+            if self._speech_seconds(audio) >= MIN_SPEECH:
+                segs, info = self.model.transcribe(
+                    audio, language='en', task='transcribe', beam_size=5, temperature=TEMPS,
+                    word_timestamps=True, vad_filter=False, condition_on_previous_text=False,
+                    initial_prompt=PROMPT)
+                lang = info.language
+                part = []
+                for seg in segs:
+                    if not keep_segment(seg):
+                        continue
+                    for w in (seg.words or []):
+                        part.append({'w': w.word.strip(), 's': round(offset + w.start, 2), 'e': round(offset + w.end, 2)})
+                words.extend(collapse_runs([w for w in part if w['w']]))
+            offset += len(audio) / 16000.0
+        return {'text': ' '.join(w['w'] for w in words), 'words': words, 'lang': lang}
 
 
 class FakeWhisper:

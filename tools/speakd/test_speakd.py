@@ -446,32 +446,77 @@ class TWhisperGuard(unittest.TestCase):
         self.assertFalse(speakd.keep_segment(self.seg('  ', 0.0)))
         self.assertFalse(speakd.keep_segment(self.seg('...', 0.0)))
 
-    def test_transcribe_asks_for_voice_detection_and_joins_parts(self):
+    def test_a_loop_over_noise_made_of_the_hints_words_is_dropped(self):
+        loop = 'Umm, so, uh, basically I was like, you know, uh, basically I was like, you know, uh, basically I was like'
+        self.assertFalse(speakd.keep_segment(self.seg(loop, 0.75)))
+        self.assertTrue(speakd.keep_segment(self.seg(loop, 0.0)))   # the same, said by a person
+
+    def test_a_word_looped_a_hundred_times_is_cut_to_two(self):
+        ws = [{'w': 'hello', 's': i * 0.3, 'e': i * 0.3 + 0.2} for i in range(100)]
+        out = speakd.collapse_runs(ws)
+        self.assertEqual([w['w'] for w in out], ['hello', 'hello'])
+        self.assertEqual(out[0]['s'], 0.0)
+
+    def test_real_repeats_are_left_alone(self):
+        def run(words):
+            return [w['w'] for w in speakd.collapse_runs([{'w': w, 's': i, 'e': i + 0.5} for i, w in enumerate(words)])]
+        self.assertEqual(run('no no no'.split()), ['no', 'no', 'no'])
+        self.assertEqual(run('very very very very good'.split()), ['very', 'very', 'very', 'very', 'good'])   # four is still a person
+        self.assertEqual(run('go go go go go now'.split()), ['go', 'go', 'now'])   # five is a loop
+        self.assertEqual(run('hello, Hello. HELLO hello hello hello'.split()), ['hello,', 'Hello.'])   # case and punctuation do not hide a loop
+        self.assertEqual(run([]), [])
+
+    def test_a_loop_in_the_middle_keeps_the_words_around_it(self):
+        words = ['I', 'said'] + ['hello'] * 30 + ['and', 'left']
+        out = speakd.collapse_runs([{'w': w, 's': i, 'e': i + 0.5} for i, w in enumerate(words)])
+        self.assertEqual([w['w'] for w in out], ['I', 'said', 'hello', 'hello', 'and', 'left'])
+
+    def make_whisper(self, speech_seconds, parts=1):
         from types import SimpleNamespace as NS
         calls = []
 
         class Model:
-            def transcribe(self, path, **kw):
-                calls.append(kw)
-                n = len(calls)
-                w = NS(word='hello', start=1.0, end=1.4)
+            def transcribe(self, audio, **kw):
+                calls.append((audio, kw))
+                w = NS(word=' hello', start=1.0, end=1.4)
                 segs = [NS(text=' hello', no_speech_prob=0.0, words=[w], start=1.0),
                         NS(text=' Thanks for watching!', no_speech_prob=0.9, words=[NS(word='Thanks', start=5.0, end=5.5)], start=5.0)]
                 return iter(segs), NS(language='en', duration=10.0)
 
         w = speakd.Whisper(self.id())
         w.model = Model()
+        w._audio = lambda path: [0.0] * (16000 * 10)   # ten seconds of "audio"
+        w._speech_seconds = lambda audio: speech_seconds
+        return w, calls
+
+    def test_transcribe_reads_the_whole_recording_not_the_voice_detectors_cuts(self):
+        w, calls = self.make_whisper(5.0)
         res = w.transcribe(['a.webm', 'b.webm'])
         self.assertEqual([x['w'] for x in res['words']], ['hello', 'hello'])
         self.assertEqual([x['s'] for x in res['words']], [1.0, 11.0])   # the second part is shifted by the first
         self.assertEqual(res['text'], 'hello hello')
-        for kw in calls:
-            self.assertTrue(kw['vad_filter'])
-            self.assertEqual(kw['vad_parameters']['threshold'], 0.35)
+        self.assertEqual(len(calls), 2)
+        for audio, kw in calls:
+            self.assertFalse(kw['vad_filter'])          # the VAD only decides whether there is a voice at all
+            self.assertEqual(kw['temperature'], speakd.TEMPS)   # falls back to a little randomness if a pass loops
             self.assertEqual(kw['language'], 'en')
             self.assertTrue(kw['word_timestamps'])
             self.assertFalse(kw['condition_on_previous_text'])
             self.assertEqual(kw['initial_prompt'], speakd.PROMPT)
+
+    def test_a_recording_with_no_voice_is_never_given_to_whisper(self):
+        w, calls = self.make_whisper(0.4)
+        res = w.transcribe(['a.webm'])
+        self.assertEqual(calls, [])
+        self.assertEqual(res, {'text': '', 'words': [], 'lang': ''})
+
+    def test_a_silent_part_still_moves_the_clock_for_the_next_one(self):
+        w, calls = self.make_whisper(5.0)
+        speech = iter([0.2, 5.0])
+        w._speech_seconds = lambda audio: next(speech)   # part one has no voice, part two does
+        res = w.transcribe(['quiet.webm', 'talk.webm'])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([x['s'] for x in res['words']], [11.0])   # 10 s of part one, then 1.0 s into part two
 
 
 class TLog(unittest.TestCase):

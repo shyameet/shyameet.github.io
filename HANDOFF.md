@@ -117,8 +117,11 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   `resultIndex`. Reproduce with `mk_dev.py admin/index.html ...` and `?sr=android` (a fake dictation
   engine that behaves like that); `?sr=desktop` is the well-behaved kind.
 - A microphone started by a timer with no tap is not reliable in Chrome: open it in the tap.
-- Whisper invents text over silence or noise (the hint repeated, or "Thanks for watching!"): keep VAD
-  on and `keep_segment`; re-check with a tone through `try_whisper.py` after any change to the settings.
+- Whisper invents text over silence or noise (the hint repeated, or "Thanks for watching!"), but cutting the audio
+  with a VAD before Whisper made real transcripts wrong (hid "so"s, garbled words). Now VAD only decides whether
+  there is a voice; Whisper reads the whole recording; `keep_segment`/`collapse_runs` drop echoes and loops.
+  README → *Whisper makes things up…*. Re-check with a tone and a take after any change to the settings.
+- The tablet recorder had automatic volume on (peak 0.99, loud noise in pauses); it is off now.
 - faster-whisper 1.2.1 needs `av==16.0.1` (av 19 breaks decoding); see `tools/speakd/requirements.txt`.
 - "I saved a take but it is not in the folder": read `C:\Users\shyam\SpeechJournal\speakd.log` (every
   write and every failed request is logged) and the saved screen (it now says why a send failed).
