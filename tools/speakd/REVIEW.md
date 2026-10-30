@@ -15,7 +15,9 @@ the facts (pace, fillers, pauses, the marked transcript); the review is the part
 1. Run `python tools/speakd/review_pack.py --days 7` (the data folder is `C:\Users\shyam\SpeechJournal`).
    It prints each take with its transcript, silences marked inline like `[1.7s]`, and the last two
    notes already written.
-2. Read today's takes the way a listener would. If there are no takes today, write nothing and stop
+2. Talks recorded on the tablet reach the PC hours (or a day) late, so review every day of the last
+   seven that has finished takes and no note yet, oldest first, not only today. Then read those takes
+   the way a listener would. If there are no takes today, write nothing and stop
    (never an empty or invented note). If a note for today already exists, read it: rewrite it only when
    there are takes newer than the note (add them in and keep its numbers right), otherwise leave it alone.
 3. Read the last two notes. Do not repeat advice that was followed; if a drill was not followed or
