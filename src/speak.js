@@ -274,12 +274,24 @@
     return out.join('');
   }
 
+  /* Notes on the RECORDING (not on how he spoke), from the numbers the PC measured: levels are 0..1. */
+  function audioNotes(a) {
+    var out = [];
+    if (!a || !a.length) return out;
+    var peak = 0, rms = 1, clipped = 0, floor = 0;
+    a.forEach(function (x) { peak = Math.max(peak, x.peak || 0); rms = Math.min(rms, x.rms == null ? 1 : x.rms); clipped = Math.max(clipped, x.clipped_pct || 0); floor = Math.max(floor, x.floor || 0); });
+    if (peak >= 0.98 && clipped >= 0.2) out.push('The recording is too loud and distorts at the loudest moments. Hold the tablet a little further away, or speak a little softer.');
+    if (rms < 0.01) out.push('The recording is very quiet, so words may be missed. Speak closer to the microphone.');
+    if (floor >= 0.02) out.push('There is a lot of background noise in the pauses. A quieter spot, or the microphone nearer your mouth, will help.');
+    return out;
+  }
+
   /* a hook for the tests, nothing else */
   if (typeof window.__speakTest === 'function') {
     window.__speakTest({
       tokenize: tokenize, analyze: analyze, analyzeWords: analyzeWords, pausesOf: pausesOf, factsOf: factsOf, openersOf: openersOf,
       segmentsOf: segmentsOf, streakOf: streakOf, pickTopic: pickTopic, dayKey: dayKey, addDays: addDays,
-      average: average, noteHtml: noteHtml
+      average: average, noteHtml: noteHtml, audioNotes: audioNotes
     });
   }
 
@@ -305,6 +317,25 @@
     try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
   }
   function toast(text, kind, ms) { if (window.journalToast) window.journalToast(text, kind, ms); }
+
+  /* What the recorder did, event by event, for the take in progress; sent with the take (to diag/ on the PC)
+     so a glitch on a tablet can be read there. Levels, settings and timings only: never the words. */
+  var LOG = [], LOG0 = Date.now();
+  function dlog(kind, data) {
+    LOG.push([Date.now() - LOG0, kind, data == null ? null : data]);
+    if (LOG.length > 500) LOG.shift();
+  }
+  function diagDoc(id) {
+    return {
+      v: 1, id: id, at: Date.now(), ua: navigator.userAgent,
+      screen: { w: innerWidth, h: innerHeight, dpr: window.devicePixelRatio || 1 },
+      standalone: !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches),
+      online: navigator.onLine, events: LOG.slice()
+    };
+  }
+  window.addEventListener('error', function (e) { dlog('error', String(e.message || e).slice(0, 200)); });
+  window.addEventListener('unhandledrejection', function (e) { dlog('rejection', String((e.reason && e.reason.message) || e.reason).slice(0, 200)); });
+  document.addEventListener('visibilitychange', function () { dlog('visibility', document.visibilityState); });
 
   /* ---------- the helper ---------- */
   var H = { up: false, info: null, takes: [], days: load(LS_DAYS, []), coach: null, asked: false };
@@ -391,6 +422,7 @@
     });
     return chain.then(function () {
       var m = rec.meta;
+      if (rec.diag) hjson('/diag?id=' + rec.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec.diag) }, 15000).catch(function () {});
       return hjson('/take', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: rec.id, day: rec.day, at: m.at, mode: m.mode, topic: m.topic, cat: m.cat, target: m.target, think: m.think, sec: m.sec, parts: rec.parts.length, text: '' })
@@ -504,7 +536,8 @@
     return chain.then(function () {
       var m = rec.meta;
       var meta = { id: rec.id, day: rec.day, at: m.at, mode: m.mode, topic: m.topic, cat: m.cat, target: m.target, think: m.think, sec: m.sec, parts: rec.parts.length };
-      return rPutFile('inbox/' + rec.day + '/' + rec.id + '.json.enc', utf8(JSON.stringify(meta)));   // last: it means "complete"
+      var diag = rec.diag ? rPutFile('inbox/diag/' + rec.id + '.json.enc', utf8(JSON.stringify(rec.diag))).catch(function () {}) : Promise.resolve();
+      return diag.then(function () { return rPutFile('inbox/' + rec.day + '/' + rec.id + '.json.enc', utf8(JSON.stringify(meta))); });   // last: it means "complete"
     }).then(function () {
       R.wait[rec.id] = { day: rec.day, meta: rec.meta };
       save(LS_WAIT, R.wait);
@@ -599,16 +632,22 @@
        reads a clean, steady recording better than a boosted one. Noise reduction stays on. */
     var audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 };
     if (pref.device) audio.deviceId = { ideal: pref.device };
+    var asked = Date.now();
     return navigator.mediaDevices.getUserMedia({ audio: audio }).then(function (stream) {
       MIC.stream = stream;
       var tr = stream.getAudioTracks()[0];
-      tr.onended = function () { micLost('The microphone was disconnected.'); };
-      tr.onmute = function () { micNote('The microphone is muted (a button on it, or the system).', true); };
-      tr.onunmute = function () { micNote(S.phase === 'talk' ? 'Recording…' : '', false); };
+      try {
+        var st = tr.getSettings();
+        dlog('mic', { ms: Date.now() - asked, label: (tr.label || '').slice(0, 40), rate: st.sampleRate, ch: st.channelCount, echo: st.echoCancellation, noise: st.noiseSuppression, agc: st.autoGainControl });
+      } catch (e) { dlog('mic', { ms: Date.now() - asked }); }
+      tr.onended = function () { dlog('track', 'ended'); micLost('The microphone was disconnected.'); };
+      tr.onmute = function () { dlog('track', 'muted'); micNote('The microphone is muted (a button on it, or the system).', true); };
+      tr.onunmute = function () { dlog('track', 'unmuted'); micNote(S.phase === 'talk' ? 'Recording…' : '', false); };
       try {
         var A = window.AudioContext || window.webkitAudioContext;
         MIC.ctx = new A();
         if (MIC.ctx.state === 'suspended') MIC.ctx.resume();
+        dlog('audiocontext', MIC.ctx.state);
         MIC.an = MIC.ctx.createAnalyser();
         MIC.an.fftSize = 1024;
         MIC.ctx.createMediaStreamSource(stream).connect(MIC.an);
@@ -628,8 +667,9 @@
       if (navigator.wakeLock && !MIC.lock && micAlive()) {
         navigator.wakeLock.request('screen').then(function (l) {
           MIC.lock = l;
-          l.addEventListener('release', function () { if (MIC.lock === l) MIC.lock = null; });
-        }, function () {});
+          dlog('wakelock', 'held');
+          l.addEventListener('release', function () { dlog('wakelock', 'released'); if (MIC.lock === l) MIC.lock = null; });
+        }, function (e) { dlog('wakelock', 'refused: ' + ((e && e.name) || '')); });
       }
     } catch (e) {}
   }
@@ -676,9 +716,11 @@
     try {
       MIC.rec = MIC.mime ? new MediaRecorder(MIC.stream, { mimeType: MIC.mime, audioBitsPerSecond: 48000 }) : new MediaRecorder(MIC.stream, { audioBitsPerSecond: 48000 });
     } catch (e) { micNote(micMessage(e), true); return false; }
-    MIC.rec.ondataavailable = function (e) { if (e.data && e.data.size) MIC.chunks.push(e.data); };
-    MIC.rec.onerror = function () { micNote('The recorder stopped unexpectedly.', true); };
+    MIC.rec.ondataavailable = function (e) { if (e.data && e.data.size) { MIC.chunks.push(e.data); if (MIC.chunks.length % 5 === 1) dlog('chunk', { n: MIC.chunks.length, bytes: e.data.size }); } };
+    MIC.rec.onerror = function (e) { dlog('recorder-error', String((e && e.error && e.error.name) || 'error')); micNote('The recorder stopped unexpectedly.', true); };
+    MIC.rec.onstart = function () { dlog('recorder', 'started'); };
     MIC.rec.start(1000);   // a piece every second, so a crash loses at most a second
+    dlog('recorder', { mime: MIC.mime || '(default)', state: MIC.rec.state });
     return true;
   }
   function stopRec() {
@@ -811,21 +853,26 @@
   }
 
   var warnedQuiet = false;
+  var LV = { sum: 0, n: 0, max: 0, at: Date.now() };
   function tick() {
     var now = Date.now();
     var clock = $('sclock');
     var lv = level();
+    LV.sum += lv; LV.n++; LV.max = Math.max(LV.max, lv);
+    if (now - LV.at >= 2000) { dlog('level', { avg: Math.round(LV.sum / Math.max(1, LV.n) * 1000) / 1000, max: Math.round(LV.max * 1000) / 1000, phase: S.phase }); LV = { sum: 0, n: 0, max: 0, at: now }; }
     var fill = $('slevelfill');
     if (fill) fill.style.width = Math.min(100, Math.round(lv * 800)) + '%';
     if (lv > 0.006) { MIC.lastSound = now; if (warnedQuiet) { warnedQuiet = false; micNote(S.phase === 'talk' ? 'Recording…' : 'The microphone is on.', false); } }
     else if (!S.lost && micAlive() && now - MIC.lastSound > 6000 && !warnedQuiet) {
       warnedQuiet = true;
+      dlog('warning', 'no sound for 6 s');
       micNote('I cannot hear anything. Is the microphone muted, or is the wrong one chosen? Pick another below.', true);
       var sel = $('sdev');
       if (sel) { fillDevSelect(sel); sel.hidden = false; }
     }
     /* the recorder can be stopped by the system (a tablet short of memory, a call): keep what it had and start again */
     if (S.phase === 'talk' && !S.lost && micAlive() && MIC.rec && MIC.rec.state === 'inactive') {
+      dlog('recorder', 'stopped by the system');
       var kept = MIC.chunks.length ? new Blob(MIC.chunks, { type: (MIC.mime || 'audio/webm').split(';')[0] }) : null;
       MIC.chunks = [];
       if (kept && kept.size) S.parts.push(kept);
@@ -846,23 +893,21 @@
     }
   }
 
-  /* a short soft tone to say "go": never required */
-  function beep() {
-    try {
-      var A = window.AudioContext || window.webkitAudioContext;
-      if (!A) return;
-      var c = new A(), o = c.createOscillator(), g = c.createGain();
-      o.frequency.value = 660; g.gain.value = 0.06;
-      o.connect(g); g.connect(c.destination);
-      o.start(); o.stop(c.currentTime + 0.18);
-      setTimeout(function () { try { c.close(); } catch (e) {} }, 400);
-    } catch (e) {}
+  /* "Go": a short buzz and a flash, NOT a tone. A sound out of the speaker at the moment the microphone
+     opens changes the tablet's audio route and can glitch the very start of the recording (and the
+     recording can pick up the beep). */
+  function goSignal() {
+    try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) {}
+    var c = $('sclock');
+    if (c) { c.classList.add('go'); setTimeout(function () { c.classList.remove('go'); }, 700); }
   }
 
   /* ---------- the phases ---------- */
   /* the tap opens the microphone (a tap is what lets the browser do that); nothing later
      depends on another tap, so the timer can start the recording by itself */
   function begin(free) {
+    LOG = []; LOG0 = Date.now();
+    dlog('begin', { free: !!free, think: pref.think, target: pref.target, mode: MODE });
     S.free = !!free;
     S.err = '';
     S.lost = false;
@@ -884,6 +929,7 @@
       var rb = $('sreconnect'); if (rb) rb.hidden = false;
       return;
     }
+    dlog('phase', 'talk');
     S.phase = 'talk';
     S.talk0 = Date.now();
     S.day = dayKey(S.talk0);
@@ -891,7 +937,7 @@
     warnedQuiet = false;
     draw();
     if (!startRec()) { micNote('The recorder could not start. Tap Reconnect.', true); var b = $('sreconnect'); if (b) b.hidden = false; return; }
-    beep();
+    goSignal();
   }
   function reconnect() {
     S.err = '';
@@ -907,6 +953,7 @@
     if (S.phase !== 'talk') return;
     S.sec = Math.round((Date.now() - S.talk0) / 1000);
     if (!S.free) S.sec = Math.min(S.sec, pref.target);
+    dlog('phase', { finish: S.sec, parts: S.parts.length });
     clearInterval(S.timer);
     stopRec().then(function (blob) {
       if (blob && blob.size) S.parts.push(blob);
@@ -917,8 +964,9 @@
         draw();
         return;
       }
+      dlog('saved', { parts: S.parts.map(function (b) { return b.size; }) });
       var rec = {
-        id: S.takeId, day: S.day, parts: S.parts,
+        id: S.takeId, day: S.day, parts: S.parts, diag: diagDoc(S.takeId),
         meta: { at: S.talk0, mode: S.free ? 'free' : 'topic', topic: S.free ? '' : S.topic[1], cat: S.free ? '' : S.topic[0], target: S.free ? 0 : pref.target, think: S.free ? 0 : pref.think, sec: S.sec }
       };
       PEND.push(rec);
@@ -953,7 +1001,8 @@
       + chip('first word after', pa.first == null ? '–' : pa.first + ' s', '')
       + (st.openers ? chip('"So" / "And" starters', st.openers.count, 'of ' + st.openers.sentences + (st.openers.sentences === 1 ? ' sentence' : ' sentences'), st.openers.count > st.openers.sentences * 0.25 ? 'warn' : '') : '')
       + '</div>'
-      + (st.restarts ? '<p class="small muted">' + st.restarts + ' restart' + (st.restarts > 1 ? 's' : '') + ' (a phrase said twice).</p>' : '');
+      + (st.restarts ? '<p class="small muted">' + st.restarts + ' restart' + (st.restarts > 1 ? 's' : '') + ' (a phrase said twice).</p>' : '')
+      + audioNotes(t.audio).map(function (n) { return '<p class="small audionote">' + esc(n) + '</p>'; }).join('');
   }
   function transcriptHtml(t, st) {
     if (!t.words || !t.words.length) return '<p class="stx">' + esc(t.text) + '</p>';

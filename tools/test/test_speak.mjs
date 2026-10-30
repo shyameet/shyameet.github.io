@@ -220,5 +220,19 @@ eq('openers: capitals and commas do not matter', A.openersOf(W2('Fine. SO, we we
 eq('openers: none', A.openersOf([]), { sentences: 0, count: 0, so: 0, and: 0 });
 eq('openers: riding along in the facts', A.factsOf({ words: W2('Fine. So we went. And ate.'), sec: 10, mode: 'free' }).openers.count, 2);
 
+
+/* ---- notes about the recording itself ---- */
+const rec = (o) => Object.assign({ sec: 60, peak: 0.5, rms: 0.05, clipped_pct: 0, floor: 0.003, speech_s: 40 }, o);
+eq('audio notes: nothing measured', A.audioNotes(null), []);
+eq('audio notes: empty list', A.audioNotes([]), []);
+eq('audio notes: a healthy recording', A.audioNotes([rec({})]), []);
+ok('audio notes: too loud and clipping', /too loud/.test(A.audioNotes([rec({ peak: 0.99, clipped_pct: 0.5, rms: 0.09 })])[0]));
+eq('audio notes: one touch of the ceiling is not clipping', A.audioNotes([rec({ peak: 0.99, clipped_pct: 0.01 })]), []);
+ok('audio notes: very quiet', /very quiet/.test(A.audioNotes([rec({ rms: 0.004 })])[0]));
+ok('audio notes: noisy pauses', /background noise/.test(A.audioNotes([rec({ floor: 0.03 })])[0]));
+eq('audio notes: several problems, several notes', A.audioNotes([rec({ peak: 1, clipped_pct: 2, floor: 0.05 })]).length, 2);
+ok('audio notes: the worst part counts', A.audioNotes([rec({}), rec({ rms: 0.002 })]).length === 1);
+ok('audio notes: a note is plain words about the recording, not a score', A.audioNotes([rec({ peak: 0.99, clipped_pct: 0.5 })]).every((n) => !/\d/.test(n)));
+
 console.log(passes + ' checks passed' + (fails ? ', ' + fails + ' FAILED' : ''));
 process.exit(fails ? 1 : 0);

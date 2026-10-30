@@ -521,13 +521,24 @@ loud as the voice: the tablet's automatic volume was pumping everything up. The 
 with a wake lock (taken again when the page comes back to the front), and restarts the recorder if the
 system stops it, keeping what it had.
 
+**Diagnostics, so a glitch can be read without asking (30 Oct).** Each take carries a small log of what its
+recorder did (microphone settings the browser really gave, audio-context state, recorder start/stop and chunk
+sizes, track mute/unmute/ended, page visibility, the screen lock, sound levels every 2 s, errors; levels,
+settings and timings only, never the words). It goes to `<data>/diag/<id>.json` on the PC (straight to the
+helper, or locked through the drop box from a tablet). The PC also measures each recording (peak, average
+level, share of samples at the ceiling, noise floor, seconds of voice) into the take's `audio`, and the page
+says in plain words when a recording is too loud, very quiet or noisy. A "go" is a short buzz and a flash, not
+a sound: a beep out of the speaker as the microphone opens can glitch the start on Android. The helper checks
+the drop box every 20 s (8 s while it has work). **Results from a tablet appear only while the PC is on and
+awake**; with the PC off they wait in the branch.
+
 **Honest limits.** Whisper is not perfect on Hindi/English mixing, accents or a noisy room; it can
 miss a quiet "um". Medium on this CPU takes about as long as the talk to write out. Tablets and phones
 need the drop box (above) and a PC that is on to write the words out. The helper must be running; the page says when it
 is not, and if Chrome asks to let the site reach devices on your network, choose **Allow**.
 
 Code: `src/speak.js` (page; the pure analysis is tested in `tools/test/test_speak.mjs`),
-`tools/speakd/` (helper, tested in `test_speakd.py`, 81 tests). The topics are embedded in the
+`tools/speakd/` (helper, tested in `test_speakd.py`, 93 tests). The topics are embedded in the
 page and are public on purpose, they are only prompts.
 
 ## Installing as an app

@@ -237,6 +237,17 @@ class Store:
         os.replace(tmp, p)
         return p
 
+    def save_diag(self, tid, doc):
+        """What a page's recorder did during a take (events, levels, the device's settings): small, kept in diag/
+        so a glitch on a tablet can be read here without asking anyone. Only ever written under a safe name."""
+        d = self.root / 'diag'
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / (tid + '.json')
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+        os.replace(tmp, path)
+        return path
+
     def coaching(self):
         names = sorted(p.name for p in (self.root / 'coaching').glob('*.md') if DAY_RE.match(p.stem))
         if not names:
@@ -279,14 +290,35 @@ class Whisper:
         from faster_whisper.vad import VadOptions, get_speech_timestamps
         return sum(t['end'] - t['start'] for t in get_speech_timestamps(audio, VadOptions(**VAD))) / 16000.0
 
+    @staticmethod
+    def audio_stats(audio, speech_s):
+        """How the recording sounded, in numbers (levels are 0..1): peak, average level (rms), the share of
+        samples at the ceiling (clipping), the noise floor (the quietest tenth of the recording) and seconds
+        of voice. Seen on the page as a plain note when something is wrong with the recording itself."""
+        import numpy as np
+        x = np.asarray(audio, dtype=np.float32)
+        if x.size == 0:
+            return {'sec': 0.0, 'peak': 0.0, 'rms': 0.0, 'clipped_pct': 0.0, 'floor': 0.0, 'speech_s': 0.0}
+        win = 1600
+        n = x.size // win
+        floor = float(np.percentile(np.sqrt((x[:n * win].reshape(n, win) ** 2).mean(axis=1)), 10)) if n else 0.0
+        return {'sec': round(x.size / 16000.0, 1), 'peak': round(float(np.abs(x).max()), 3),
+                'rms': round(float(np.sqrt((x ** 2).mean())), 4), 'clipped_pct': round(float((np.abs(x) >= 0.98).mean() * 100), 2),
+                'floor': round(floor, 4), 'speech_s': round(float(speech_s), 1)}
+
     def transcribe(self, paths):
-        """-> {'text', 'words': [{w, s, e}], 'lang'}; the parts of a take are joined in order,
+        """-> {'text', 'words': [{w, s, e}], 'lang', 'audio': stats}; the parts of a take are joined in order,
         each part's times shifted by the length of the parts before it."""
         self.load()
-        words, offset, lang = [], 0.0, ''
+        words, offset, lang, stats = [], 0.0, '', []
         for p in paths:
             audio = self._audio(p)
-            if self._speech_seconds(audio) >= MIN_SPEECH:
+            speech_s = self._speech_seconds(audio)
+            try:
+                stats.append(self.audio_stats(audio, speech_s))
+            except Exception:
+                pass
+            if speech_s >= MIN_SPEECH:
                 segs, info = self.model.transcribe(
                     audio, language='en', task='transcribe', beam_size=5, temperature=TEMPS,
                     word_timestamps=True, vad_filter=False, condition_on_previous_text=False,
@@ -300,7 +332,7 @@ class Whisper:
                         part.append({'w': w.word.strip(), 's': round(offset + w.start, 2), 'e': round(offset + w.end, 2)})
                 words.extend(collapse_runs([w for w in part if w['w']]))
             offset += len(audio) / 16000.0
-        return {'text': ' '.join(w['w'] for w in words), 'words': words, 'lang': lang}
+        return {'text': ' '.join(w['w'] for w in words), 'words': words, 'lang': lang, 'audio': stats}
 
 
 class FakeWhisper:
@@ -363,6 +395,8 @@ class Worker(threading.Thread):
         self.log('take %s transcribed in %.0f s (%d words)' % (tid, time.time() - began, len(res['words'])))
         # the dictated words (if any) are kept next to Whisper's; Whisper's are the take's words
         fields = dict(status='done', text=res['text'], words=res['words'], lang=res['lang'], error='')
+        if res.get('audio'):
+            fields['audio'] = res['audio']
         if t.get('text') and not t.get('dictated'):
             fields['dictated'] = t['text']
         self.store.update(tid, **fields)
@@ -441,7 +475,7 @@ class Inbox(threading.Thread):
     All of it goes through plain `git` with the login this PC already has. Nothing here needs a token.
     """
 
-    def __init__(self, store, worker, log, remote, workdir, interval=45, crypt=None, branch='speech-drop', keep=150):
+    def __init__(self, store, worker, log, remote, workdir, interval=20, crypt=None, branch='speech-drop', keep=150):
         super().__init__(daemon=True)
         self.store, self.worker, self.log = store, worker, log
         self.remote, self.dir, self.interval = remote, Path(workdir), interval
@@ -526,8 +560,18 @@ class Inbox(threading.Thread):
             if ID_RE.match(tid):
                 self.store.delete(tid)
             f.unlink()
+        # a device's diagnostics for a take: unlocked into diag/, then removed from the branch
+        for f in sorted((base / 'diag').glob('*.json.enc')):
+            tid = f.name[:-9]
+            raw = self._read(f)
+            if raw is not None and ID_RE.match(tid):
+                try:
+                    self.store.save_diag(tid, json.loads(raw.decode('utf-8')))
+                except Exception:
+                    self.log('drop box: could not read the diagnostics %s' % f.name)
+            f.unlink()
         for meta_path in sorted(base.glob('*/*.json.enc')):
-            if meta_path.parent.name == 'delete':
+            if meta_path.parent.name in ('delete', 'diag'):
                 continue
             raw = self._read(meta_path)
             if raw is None:
@@ -667,7 +711,7 @@ class Inbox(threading.Thread):
 
     def run(self):
         while not self.stop.is_set():
-            wait = 15 if self.worker.pending() else self.interval
+            wait = 8 if self.worker.pending() else self.interval
             try:
                 self.cycle()
             except Exception as e:
@@ -845,6 +889,12 @@ def make_handler(store, worker, engine, log, upstream=UPSTREAM, inbox=None, cryp
                     if inbox:
                         inbox.status['has_key'] = True
                     return self._send(200, {'ok': True, 'changed': changed})
+                if p == '/diag':
+                    tid = (q.get('id') or [''])[0]
+                    if not ID_RE.match(tid):
+                        return self._send(400, {'error': 'bad id'})
+                    store.save_diag(tid, self._json_body(300 * 1024))
+                    return self._send(200, {'ok': True})
                 if p == '/audio':
                     tid = (q.get('id') or [''])[0]
                     day = (q.get('day') or [''])[0]
@@ -918,7 +968,7 @@ def main(argv=None):
     ap.add_argument('--upstream', default=os.environ.get('SPEAK_UPSTREAM', UPSTREAM), help="where the site's pages come from")
     ap.add_argument('--inbox-remote', default=os.environ.get('SPEAK_INBOX_REMOTE'), help='the git repo whose speech-drop branch carries (encrypted) recordings from other devices')
     ap.add_argument('--inbox-dir', default=None, help='where this PC keeps its clone of it (default <data>/dropbox)')
-    ap.add_argument('--inbox-interval', type=int, default=45)
+    ap.add_argument('--inbox-interval', type=int, default=20)
     ap.add_argument('--no-inbox', action='store_true', help='do not use the drop box')
     a = ap.parse_args(argv)
 

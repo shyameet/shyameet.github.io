@@ -122,6 +122,13 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   there is a voice; Whisper reads the whole recording; `keep_segment`/`collapse_runs` drop echoes and loops.
   README → *Whisper makes things up…*. Re-check with a tone and a take after any change to the settings.
 - The tablet recorder had automatic volume on (peak 0.99, loud noise in pauses); it is off now.
+- "The mic/recording glitches on the tablet" (30 Oct; he reports glitches right at the start, wrong or
+  missing words, a slow or absent result): the page now sends a log of what its recorder did with each take
+  (`SpeechJournal\diag\<take id>.json`: read it first), the PC measures each recording (`audio` in the
+  take) and the page says when it was too loud/quiet/noisy, the "go" beep is gone (sound out while the mic
+  opens can glitch Android), the screen is kept awake, a stopped recorder restarts. Results from a tablet
+  need the PC on and awake (the 24 Oct take waited from 20:55 to 10:53 next morning); an always-on
+  transcriber (the VPS, which needs the owner's OK) or in-browser Whisper (less accurate) would remove that.
 - faster-whisper 1.2.1 needs `av==16.0.1` (av 19 breaks decoding); see `tools/speakd/requirements.txt`.
 - "I saved a take but it is not in the folder": read `C:\Users\shyam\SpeechJournal\speakd.log` (every
   write and every failed request is logged) and the saved screen (it now says why a send failed).

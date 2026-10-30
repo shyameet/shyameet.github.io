@@ -508,7 +508,8 @@ class TWhisperGuard(unittest.TestCase):
         w, calls = self.make_whisper(0.4)
         res = w.transcribe(['a.webm'])
         self.assertEqual(calls, [])
-        self.assertEqual(res, {'text': '', 'words': [], 'lang': ''})
+        self.assertEqual((res['text'], res['words'], res['lang']), ('', [], ''))
+        self.assertEqual(res['audio'][0]['speech_s'], 0.4)   # but what the recording was like is still measured
 
     def test_a_silent_part_still_moves_the_clock_for_the_next_one(self):
         w, calls = self.make_whisper(5.0)
@@ -1005,6 +1006,142 @@ class TInbox(unittest.TestCase):
         finally:
             srv.shutdown()
             srv.server_close()
+
+
+    # ---- a page's diagnostics, from a tablet
+    def test_a_tablets_diagnostics_arrive_unlocked_and_leave_the_branch(self):
+        self.put_locked('inbox/diag/tab50001.json.enc', json.dumps({'v': 1, 'id': 'tab50001', 'events': [[0, 'begin', None]]}).encode('utf-8'))
+        self.tablet_push('diag')
+        self.inbox.cycle()
+        saved = json.loads((self.store.root / 'diag' / 'tab50001.json').read_text(encoding='utf-8'))
+        self.assertEqual(saved['id'], 'tab50001')
+        self.assertFalse((self.fresh_clone() / 'inbox' / 'diag' / 'tab50001.json.enc').exists())
+        self.assertEqual(self.store.takes(), [])   # a log is not a take
+
+    def test_diagnostics_locked_with_another_key_are_dropped_not_kept(self):
+        other = speakd.Crypt(self.root / 'other2.key')
+        other.set_key('77' * 32)
+        self.put_locked('inbox/diag/tab50002.json.enc', b'{"v": 1}', other)
+        self.tablet_push('diag from elsewhere')
+        self.inbox.cycle()
+        self.assertFalse((self.store.root / 'diag' / 'tab50002.json').exists())
+        self.assertFalse((self.fresh_clone() / 'inbox' / 'diag' / 'tab50002.json.enc').exists())
+
+    def test_a_take_still_arrives_when_a_log_comes_with_it(self):
+        self.put_locked('inbox/diag/tab50003.json.enc', b'{"v": 1}')
+        self.upload('tab50003')
+        self.inbox.cycle()
+        self.assertIsNotNone(self.store.get('tab50003'))
+        self.assertTrue((self.store.root / 'diag' / 'tab50003.json').exists())
+
+
+class TRecordingFacts(unittest.TestCase):
+    """What the PC measures about a recording, and the diagnostics a page sends with it."""
+
+    def setUp(self):
+        try:
+            import numpy
+            self.np = numpy
+        except ImportError:
+            self.skipTest('numpy is not installed here (it is in the helper\'s own environment)')
+        self.dir = Path(tempfile.mkdtemp(prefix='speakd-facts-'))
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_silence(self):
+        st = speakd.Whisper.audio_stats(self.np.zeros(16000 * 5), 0.0)
+        self.assertEqual((st['peak'], st['rms'], st['clipped_pct'], st['floor'], st['sec']), (0.0, 0.0, 0.0, 0.0, 5.0))
+
+    def test_a_loud_square_wave_clips(self):
+        x = self.np.where(self.np.arange(16000 * 3) % 100 < 50, 1.0, -1.0)
+        st = speakd.Whisper.audio_stats(x, 3.0)
+        self.assertEqual((st['peak'], st['clipped_pct']), (1.0, 100.0))
+        self.assertAlmostEqual(st['rms'], 1.0, places=3)
+
+    def test_a_steady_tone_has_its_rms_and_no_clipping(self):
+        t = self.np.arange(16000 * 4) / 16000.0
+        x = 0.3 * self.np.sin(2 * self.np.pi * 220 * t)
+        st = speakd.Whisper.audio_stats(x, 4.0)
+        self.assertAlmostEqual(st['peak'], 0.3, places=2)
+        self.assertAlmostEqual(st['rms'], 0.3 / 2 ** 0.5, places=2)
+        self.assertEqual(st['clipped_pct'], 0.0)
+
+    def test_the_noise_floor_is_the_quietest_tenth(self):
+        loud = self.np.full(16000 * 8, 0.2)
+        quiet = self.np.full(16000 * 2, 0.001)   # two seconds in ten are nearly silent
+        st = speakd.Whisper.audio_stats(self.np.concatenate([loud, quiet]), 8.0)
+        self.assertLess(st['floor'], 0.01)
+        st2 = speakd.Whisper.audio_stats(self.np.full(16000 * 5, 0.05), 5.0)
+        self.assertAlmostEqual(st2['floor'], 0.05, places=3)   # noise everywhere: the floor is high
+
+    def test_nothing_at_all(self):
+        self.assertEqual(speakd.Whisper.audio_stats([], 0)['sec'], 0.0)
+
+    def test_the_measurements_are_stored_with_the_take(self):
+        from types import SimpleNamespace as NS
+        store = speakd.Store(self.dir / 'data')
+
+        class Eng:
+            state = 'ready'
+
+            def available(self):
+                return True
+
+            def transcribe(self, paths):
+                return {'text': 'hi', 'words': [{'w': 'hi', 's': 0.1, 'e': 0.3}], 'lang': 'en', 'audio': [{'peak': 0.5, 'rms': 0.05}]}
+
+        worker = speakd.Worker(store, Eng(), lambda m: None)
+        store.save_audio('2026-10-30', 'rec00001', 0, b'WEBM')
+        store.put({'id': 'rec00001', 'day': '2026-10-30', 'at': 1, 'mod': 1, 'parts': 1, 'text': '', 'status': 'queued'})
+        worker.one('rec00001')
+        self.assertEqual(store.get('rec00001')['audio'], [{'peak': 0.5, 'rms': 0.05}])
+
+
+class TDiagnostics(unittest.TestCase):
+    """A page's log of what its recorder did arrives with the take, and is kept where it can be read."""
+
+    DAY = '2026-10-30'
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix='speakd-diag-'))
+        self.store = speakd.Store(self.dir / 'data')
+        self.worker = speakd.Worker(self.store, speakd.FakeWhisper(), lambda m: None)
+        self.srv = speakd.ThreadingHTTPServer(('127.0.0.1', 0), speakd.make_handler(self.store, self.worker, speakd.FakeWhisper(), lambda m: None, 'http://127.0.0.1:1'))
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def post(self, path, body, origin='https://shyameet.github.io'):
+        c = http.client.HTTPConnection('127.0.0.1', self.srv.server_address[1], timeout=5)
+        raw = json.dumps(body).encode('utf-8') if not isinstance(body, bytes) else body
+        c.request('POST', path, body=raw, headers={'Origin': origin, 'Content-Type': 'application/json'})
+        r = c.getresponse()
+        r.read()
+        c.close()
+        return r.status
+
+    def test_a_diagnostics_log_is_kept_in_diag(self):
+        doc = {'v': 1, 'id': 'diag0001', 'ua': 'Android tablet', 'events': [[0, 'begin', None], [1200, 'mic', {'agc': False}]]}
+        self.assertEqual(self.post('/diag?id=diag0001', doc), 200)
+        saved = json.loads((self.store.root / 'diag' / 'diag0001.json').read_text(encoding='utf-8'))
+        self.assertEqual(saved['events'][1][2], {'agc': False})
+
+    def test_only_safe_names_and_sizes_and_the_sites_own_pages(self):
+        self.assertEqual(self.post('/diag?id=../evil', {'v': 1}), 400)
+        self.assertEqual(self.post('/diag?id=', {'v': 1}), 400)
+        self.assertEqual(self.post('/diag?id=diag0002', b'{ nope'), 400)
+        self.assertEqual(self.post('/diag?id=diag0003', {'pad': 'x' * (400 * 1024)}), 400)
+        self.assertEqual(self.post('/diag?id=diag0004', {'v': 1}, origin='https://evil.example'), 403)
+        self.assertEqual(list((self.store.root / 'diag').glob('*')) if (self.store.root / 'diag').exists() else [], [])
+
+    def test_a_second_log_for_the_same_take_replaces_the_first(self):
+        self.post('/diag?id=diag0005', {'v': 1, 'n': 1})
+        self.post('/diag?id=diag0005', {'v': 1, 'n': 2})
+        self.assertEqual(json.loads((self.store.root / 'diag' / 'diag0005.json').read_text(encoding='utf-8'))['n'], 2)
 
 
 if __name__ == '__main__':

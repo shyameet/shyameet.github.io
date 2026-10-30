@@ -1177,3 +1177,8 @@ footer.site .builtat { margin: 8px 0 0; font-size: 12px; opacity: .8; }
 /* the "not signed in" banner */
 .signbanner { display: block; margin: 6px 0 14px; padding: 11px 14px; border-radius: 14px; background: var(--miss-soft); border: 1px solid color-mix(in srgb, var(--miss) 35%, var(--line)); color: var(--ink); font-size: 14px; line-height: 1.45; text-decoration: none; }
 .signbanner u { color: var(--accent); font-weight: 700; text-underline-offset: 3px; }
+
+/* Speak: the "go" flash (no sound), and notes about the recording itself */
+.sclock.go { animation: goflash .7s ease-out; }
+@keyframes goflash { 0% { transform: scale(1.12); color: var(--done); } 100% { transform: scale(1); } }
+.audionote { color: var(--miss); margin: 6px 0; }
