@@ -494,6 +494,22 @@ helper's Node read each other's files, and a full loop (the tablet page uploadin
 GitHub, the PC code unlocking them with the key a signed-in page hands over, answering, and the page showing
 the words, facts, streak, coaching and a delete).
 
+**Words written on the tablet itself (30 Oct).** The owner works mostly from the tablet and the PC is often off, so the
+tablet also writes a first **draft** of the words in the browser (`src/whisperworker.js`, a module worker running
+transformers.js 3.8.1 from jsDelivr, pinned, with `onnx-community/whisper-base_timestamped`, 8-bit weights, plain
+WebAssembly: about 77 MB, downloaded from Hugging Face the first time only and kept by the browser; the model must be
+a `_timestamped` export or word times are impossible). The recording is always uploaded first; then the tablet decodes
+it to 16 kHz, measures it (`pcmStats`), writes nothing at all if it holds under a second of voice (a model invents
+words over silence), runs the model, cleans the result (`wordsFromChunks`: loops cut, stock phrases over little voice
+dropped) and puts the finished take in the drop box as `done/<day>_<id>.json.enc` marked `draft: true`, unless the PC
+has already written it. The PC replaces the draft with the Whisper medium version when it next takes the recording in
+(same path, the page sees the new file), and the "first draft" note disappears. A switch on the start screen turns the
+drafts off (`speak_local_v1`). A draft is much less accurate than the PC's (small model, no hint for "um", Hindi weak),
+and on a tablet it can take a minute or several; the page shows progress. Single-thread WASM only: GitHub Pages cannot
+send the cross-origin headers threads need. The test copy takes `?localmodel=onnx-community/whisper-tiny_timestamped`
+(smaller) and `?mic=clip` (a spoken clip played into the microphone, `dist/_t_clip.webm`); the whole loop (tablet
+draft, then the PC's version replacing it) was run that way on 30 Oct.
+
 **Set-up (done 21 Oct on SUMEET-PC):** make a venv at `C:\Users\shyam\SpeechJournal\venv`, then
 `pip install -r tools/speakd/requirements.txt` (the `av==16.0.1` pin matters: faster-whisper 1.2.1
 fails with av 19), and put the model `Systran/faster-whisper-medium` in `SpeechJournal\models\medium`

@@ -286,12 +286,59 @@
     return out;
   }
 
+  /* ---- words written on the device itself: the pure parts (the rest is further down) ---- */
+  /* How the recording sounded, from its samples (levels 0..1), and how much of it is a voice: windows of 30 ms that
+     are clearly louder than the quiet of the recording itself. */
+  function pcmStats(pcm, rate) {
+    rate = rate || 16000;
+    var n = pcm.length, peak = 0, sum = 0, clipped = 0;
+    for (var i = 0; i < n; i++) { var v = Math.abs(pcm[i]); if (v > peak) peak = v; sum += v * v; if (v >= 0.98) clipped++; }
+    var win = Math.max(1, Math.round(rate * 0.03)), rms = [];
+    for (var s = 0; s + win <= n; s += win) {
+      var a = 0;
+      for (var j = s; j < s + win; j++) a += pcm[j] * pcm[j];
+      rms.push(Math.sqrt(a / win));
+    }
+    var sorted = rms.slice().sort(function (x, y) { return x - y; });
+    var floor = sorted.length ? sorted[Math.floor(sorted.length * 0.1)] : 0;
+    var gate = Math.max(0.01, floor * 3);
+    var voice = rms.filter(function (r) { return r > gate; }).length * win / rate;
+    function r3(x) { return Math.round(x * 1000) / 1000; }
+    return { sec: Math.round(n / rate * 10) / 10, peak: r3(peak), rms: Math.round(Math.sqrt(n ? sum / n : 0) * 10000) / 10000,
+      clipped_pct: Math.round(n ? clipped / n * 10000 : 0) / 100, floor: Math.round(floor * 10000) / 10000, speech_s: Math.round(voice * 10) / 10 };
+  }
+  /* the model's word chunks -> [{w, s, e}] with this part's start added; never more than a few of the same word in a row
+     (a model that loops says "hello" a hundred times) and none of the phrases it makes up over a stretch of noise */
+  function wordsFromChunks(chunks, offset, voiceSeconds) {
+    var out = [];
+    (chunks || []).forEach(function (c) {
+      var w = String(c.text || '').trim();
+      if (!w) return;
+      var ts = c.timestamp || [0, 0];
+      var s = +ts[0] || 0, e = ts[1] == null ? s + 0.3 : +ts[1];
+      out.push({ w: w, s: Math.round((offset + s) * 100) / 100, e: Math.round((offset + e) * 100) / 100 });
+    });
+    var key = function (w) { return w.w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''); };
+    var cut = [], i = 0;
+    while (i < out.length) {
+      var j = i;
+      while (j < out.length && key(out[j]) === key(out[i])) j++;
+      var run = out.slice(i, j);
+      Array.prototype.push.apply(cut, run.length <= 4 ? run : run.slice(0, 2));
+      i = j;
+    }
+    var flat = ' ' + cut.map(function (w) { return key(w); }).join(' ') + ' ';
+    if ((voiceSeconds || 0) < 3 && /thanks for watching|thank you for watching|thank you very much|subscribe/.test(flat) && cut.length <= 6) return [];
+    return cut;
+  }
+
+
   /* a hook for the tests, nothing else */
   if (typeof window.__speakTest === 'function') {
     window.__speakTest({
       tokenize: tokenize, analyze: analyze, analyzeWords: analyzeWords, pausesOf: pausesOf, factsOf: factsOf, openersOf: openersOf,
       segmentsOf: segmentsOf, streakOf: streakOf, pickTopic: pickTopic, dayKey: dayKey, addDays: addDays,
-      average: average, noteHtml: noteHtml, audioNotes: audioNotes
+      average: average, noteHtml: noteHtml, audioNotes: audioNotes, pcmStats: pcmStats, wordsFromChunks: wordsFromChunks
     });
   }
 
@@ -544,7 +591,7 @@
       PEND = PEND.filter(function (p) { return p.id !== rec.id; });
       MEMPEND = MEMPEND.filter(function (p) { return p.id !== rec.id; });
       return idbDel(rec.id);
-    }).then(function () { delete sending[rec.id]; rec.lastError = ''; }, function (e) {
+    }).then(function () { delete sending[rec.id]; rec.lastError = ''; localTranscribe(rec); }, function (e) {
       delete sending[rec.id];
       rec.lastError = (e && e.message) || String(e);
       R.state = rState(e);
@@ -608,6 +655,123 @@
       save(LS_DEL, R.del);
     });
   }
+
+  /* ---------- words written on THIS device (the tablet) ----------
+     A tablet cannot count on the PC being on, so it writes a first DRAFT of the words itself, with a small
+     Whisper that runs in the browser (src/whisperworker.js; the model comes from Hugging Face once and is kept).
+     The draft goes back in the drop box like any finished take, marked `draft`, and the PC replaces it with the
+     accurate version (Whisper medium) the next time it is on. The recording itself is always uploaded first. */
+  var LOCAL_MODEL = window.__localModel || 'onnx-community/whisper-base_timestamped';
+  var LS_LOCAL = 'speak_local_v1';       // false when he turned the drafts off
+  var LOCAL = { worker: null, p: null, ready: false, device: '', wait: {}, queue: Promise.resolve(), state: '', pct: 0, startedAt: 0 };
+  var localOn = function () { return load(LS_LOCAL, true) !== false; };
+
+  /* ---- the worker ---- */
+  function localWorker() {
+    if (LOCAL.worker) return LOCAL.worker;
+    var w = new Worker('/whisperworker.js', { type: 'module' });
+    w.onmessage = function (e) {
+      var m = e.data || {};
+      if (m.type === 'progress' && m.p) {
+        if (m.p.status === 'progress' && m.p.total) LOCAL.pct = Math.max(LOCAL.pct, Math.round(m.p.loaded / m.p.total * 100));
+        LOCAL.state = m.p.status === 'ready' ? 'ready' : 'downloading';
+        if (m.p.status === 'ready') LOCAL.ready = true;   // the model is loaded: what follows is the writing itself
+        paintLocalState();
+      } else if (m.type === 'ready') {
+        LOCAL.ready = true; LOCAL.device = m.device || ''; LOCAL.state = 'ready'; paintLocalState();
+      } else if (m.type === 'result' || m.type === 'error') {
+        if (m.type === 'result') LOCAL.ready = true;
+        var cb = LOCAL.wait[m.id];
+        if (cb) { delete LOCAL.wait[m.id]; cb(m); }
+      }
+    };
+    w.onerror = function (e) {
+      dlog('local-worker-error', String((e && e.message) || 'error'));
+      Object.keys(LOCAL.wait).forEach(function (id) { var cb = LOCAL.wait[id]; delete LOCAL.wait[id]; cb({ type: 'error', message: 'the word-writer could not start' }); });
+      LOCAL.worker = null; LOCAL.state = '';
+    };
+    LOCAL.worker = w;
+    return w;
+  }
+  function runLocal(pcm) {
+    return new Promise(function (resolve, reject) {
+      var id = uid();
+      LOCAL.wait[id] = function (m) { if (m.type === 'result') resolve(m); else reject(new Error(m.message || 'failed')); };
+      localWorker().postMessage({ type: 'run', id: id, model: LOCAL_MODEL, audio: pcm }, [pcm.buffer]);
+    });
+  }
+  /* a recording's blob -> 16 kHz mono samples (the browser decodes and resamples it) */
+  function decodePcm(blob) {
+    var A = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    return blob.arrayBuffer().then(function (ab) {
+      var ctx = new A(1, 1, 16000);
+      return new Promise(function (res, rej) { var p = ctx.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
+    }).then(function (buf) {
+      var ch = buf.getChannelData(0);
+      return new Float32Array(ch);   // a copy: the worker takes ownership of it
+    });
+  }
+  function paintLocalState() {
+    var el = $('sstateline');
+    if (el && S.phase === 'saved' && LOCAL.active === S.takeId) el.textContent = localLine();
+  }
+  function localLine() {
+    var secs = Math.round((Date.now() - LOCAL.startedAt) / 1000);
+    if (LOCAL.state === 'downloading' && !LOCAL.ready) return 'Getting the word-writer ready on this tablet, once only (' + LOCAL.pct + '%). Your recording is already safe.';
+    return 'Writing out your words on this tablet (' + secs + ' s)… a first draft: your PC writes a more accurate version when it is on.';
+  }
+
+  /* the take as a finished document, the shape the PC writes too */
+  function draftTake(rec, words, stats) {
+    var m = rec.meta;
+    return { id: rec.id, day: rec.day, at: m.at, mod: Date.now(), mode: m.mode, topic: m.topic, cat: m.cat, target: m.target, think: m.think,
+      sec: m.sec, delay: null, parts: rec.parts.length, text: words.map(function (x) { return x.w; }).join(' '), words: words, lang: 'en',
+      status: 'done', origin: 'tablet', draft: true, audio: stats, error: '' };
+  }
+  /* all the parts of a recording -> the draft take (not saved anywhere yet) */
+  function localDraft(rec) {
+    var words = [], stats = [], offset = 0, chain = Promise.resolve();
+    rec.parts.forEach(function (blob) {
+      chain = chain.then(function () { return decodePcm(blob); }).then(function (pcm) {
+        var st = pcmStats(pcm);
+        stats.push(st);
+        var len = pcm.length / 16000;
+        var start = offset;
+        offset += len;
+        dlog('local', { part: stats.length, sec: st.sec, voice: st.speech_s, peak: st.peak });
+        if (st.speech_s < 1) return null;   // no voice in it: nothing is written (a model invents words over silence)
+        return runLocal(pcm).then(function (res) { words = words.concat(wordsFromChunks(res.chunks, start, st.speech_s)); dlog('local-done', { n: words.length, device: res.device }); });
+      });
+    });
+    return chain.then(function () { return draftTake(rec, words, stats); });
+  }
+  /* write the draft into the drop box, unless the PC got there first */
+  function putDraft(rec, take) {
+    var rel = 'done/' + rec.day + '_' + rec.id + '.json.enc';
+    return rapi('GET', '/contents/' + rel + '?ref=' + BRANCH).then(function () { return false; }, function (e) {
+      if (e.status !== 404) throw e;
+      return rPutFile(rel, utf8(JSON.stringify(take))).then(function () { return true; });
+    });
+  }
+  /* after a recording is safely uploaded: write the draft on this device, one at a time */
+  function localTranscribe(rec) {
+    if (!localOn() || MODE !== 'repo' || typeof Worker === 'undefined') return Promise.resolve();
+    LOCAL.queue = LOCAL.queue.then(function () {
+      LOCAL.active = rec.id; LOCAL.startedAt = Date.now(); LOCAL.state = LOCAL.ready ? 'ready' : 'downloading'; LOCAL.pct = 0;
+      var tick = setInterval(paintLocalState, 1000);
+      paintLocalState();
+      return localDraft(rec).then(function (take) { return putDraft(rec, take).then(function (wrote) {
+        dlog('draft', { wrote: wrote, words: take.words.length });
+        if (wrote) { H.takes = [take].concat(H.takes.filter(function (t) { return t.id !== take.id; })); delete R.wait[take.id]; save(LS_WAIT, R.wait); }
+      }); }).catch(function (e) {
+        dlog('local-failed', String((e && e.message) || e).slice(0, 160));
+        LOCAL.error = (e && e.message) || String(e);
+        LOCAL.errorFor = rec.id;
+      }).then(function () { clearInterval(tick); LOCAL.active = ''; paintAll(); });
+    });
+    return LOCAL.queue;
+  }
+  window.__speakLocal = function (blob) { return localDraft({ id: 'test', day: '2026-01-01', meta: { at: 0, mode: 'free', topic: '', cat: '', target: 0, think: 0, sec: 0 }, parts: [blob] }); };
 
   /* ---------- the microphone ---------- */
   var MIC = { stream: null, ctx: null, an: null, data: null, rec: null, chunks: [], mime: '', lastSound: 0, lock: null, level: 0 };
@@ -792,6 +956,12 @@
   }
   var meter = function () { return '<div class="slevel" aria-hidden="true"><i id="slevelfill"></i></div>'; };
 
+  /* "write a first draft on this device": only offered where the words would otherwise wait for the PC */
+  function localSwitch() {
+    if (MODE !== 'repo') return '';
+    return '<p class="slocal"><label><input type="checkbox" id="slocal"' + (localOn() ? ' checked' : '') + '> Write a first draft of the words on this tablet</label>'
+      + '<span class="muted small"> The first time it downloads about 77 MB, once. Your PC replaces the draft with a more accurate version when it is on.</span></p>';
+  }
   function draw() {
     clearInterval(S.timer);
     S.timer = 0;
@@ -812,10 +982,10 @@
           + '<label class="slen">Think for <select id="sthink">' + [[0, 'no time'], [30, '30 s'], [60, '1 min']].map(function (o) {
             return '<option value="' + o[0] + '"' + (pref.think === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
           }).join('') + '</select></label></div>'
-          + '<button type="button" class="btn primary big sgo" data-a="begin">' + (pref.think ? 'Start thinking' : 'Start talking') + '</button>';
+          + '<button type="button" class="btn primary big sgo" data-a="begin">' + (pref.think ? 'Start thinking' : 'Start talking') + '</button>' + localSwitch();
       } else {
         h += '<p class="stopic">Say anything: an idea, a worry, the day, a plan. No timer. Press stop when you are done.</p>' + shapeHtml('free')
-          + '<button type="button" class="btn primary big sgo" data-a="free">Start talking</button>';
+          + '<button type="button" class="btn primary big sgo" data-a="free">Start talking</button>' + localSwitch();
       }
       h += '<p class="muted small' + (S.err ? ' bad' : '') + '" id="smic">' + esc(S.err) + '</p>'
         + '<select id="sdev" class="sdev" aria-label="Microphone" hidden></select>';
@@ -1004,9 +1174,12 @@
       + (st.restarts ? '<p class="small muted">' + st.restarts + ' restart' + (st.restarts > 1 ? 's' : '') + ' (a phrase said twice).</p>' : '')
       + audioNotes(t.audio).map(function (n) { return '<p class="small audionote">' + esc(n) + '</p>'; }).join('');
   }
+  function draftNote(t) {
+    return t && t.draft ? '<p class="small muted draftnote">A first draft, written on this tablet. Your PC writes a more accurate version when it is on.</p>' : '';
+  }
   function transcriptHtml(t, st) {
-    if (!t.words || !t.words.length) return '<p class="stx">' + esc(t.text) + '</p>';
-    return '<p class="stx">' + segmentsOf(t.words, st).map(function (s) {
+    if (!t.words || !t.words.length) return '<p class="stx">' + esc(t.text || 'No words were found in this recording.') + '</p>' + draftNote(t);
+    return draftNote(t) + '<p class="stx">' + segmentsOf(t.words, st).map(function (s) {
       var h = '';
       if (s.gap) h += '<span class="wp' + (s.gap >= 1.5 ? ' long' : '') + '">' + s.gap.toFixed(1) + ' s</span> ';
       h += s.filler ? '<span class="wf">' + esc(s.w) + '</span>' : esc(s.w);
@@ -1024,6 +1197,8 @@
       return H.up ? 'Sending your recording to the helper…'
         : 'Your recording is safe in this browser. The helper is not running, so it will be written out as soon as it is.';
     }
+    if (!t && up && LOCAL.active && LOCAL.active === S.takeId) return localLine();
+    if (!t && up && LOCAL.error && LOCAL.errorFor === S.takeId) return 'The tablet could not write a draft (' + LOCAL.error + '). Your PC will write the words when it is on. The recording is safe.';
     if (!t && up) return 'Uploaded. Your PC writes out the words when it is on, usually a minute or two after it sees the recording. The recording is safe.';
     if (!t) return 'Waiting…';
     if (t.status === 'queued') return 'In line to be written out…';
@@ -1174,7 +1349,9 @@
       var fresh = R.state === 'ok' && Date.now() - (R.checkedAt || 0) < 600000;
       return (fresh ? Promise.resolve(true) : rCheck().then(function (ok) { if (ok) R.checkedAt = Date.now(); return ok; })).then(function (ok) {
         if (!ok) { MODE = 'none'; return null; }
+        var was = MODE;
         MODE = 'repo';
+        if (was !== MODE && S.phase === 'idle') draw();
         return sendAllPending().then(rRefresh);
       });
     }).then(function () { busy = false; paintAll(); }, function () { busy = false; paintAll(); });
@@ -1222,6 +1399,7 @@
   app.addEventListener('change', function (e) {
     if (e.target.id === 'slen') { pref.target = +e.target.value || 60; save(LS_PREF, pref); }
     if (e.target.id === 'sthink') { pref.think = +e.target.value; save(LS_PREF, pref); draw(); }
+    if (e.target.id === 'slocal') { save(LS_LOCAL, !!e.target.checked); return; }
     if (e.target.id === 'sdev') {
       pref.device = e.target.value; save(LS_PREF, pref);
       // switch the live microphone to the chosen one

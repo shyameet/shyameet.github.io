@@ -1441,7 +1441,7 @@ write('admin/config.json', JSON.stringify({
   }).filter(Boolean),
 }));
 
-for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'dropcrypto.js', 'sw.js']) {
+for (const f of ['style.css', 'app.js', 'focus.js', 'todo.js', 'speak.js', 'dropcrypto.js', 'whisperworker.js', 'sw.js']) {
   fs.copyFileSync(path.join(ROOT, 'src', f), path.join(OUT, f));
 }
 

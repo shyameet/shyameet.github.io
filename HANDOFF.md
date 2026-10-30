@@ -68,6 +68,11 @@ Written when the work moved from the laptop to the desktop (19 Oct), updated 21 
   was re-tested with two signed-in devices and works both ways. Added a banner "This device is not signed
   in" on every page (not Write, not the helper's own address). He forgot the password he set on 11 Oct: use
   Write → ⚙ → *Copy connect link* on a signed-in device, open it on the tablet, then set a new password.
+- **Words on the tablet (30 Oct, he chose this over keeping the PC awake):** the tablet writes a first draft in
+  the browser (base model, about 77 MB the first time, slow-ish) and the PC replaces it when it is on. NOT yet run
+  on the real tablet: the speed of base in WebAssembly there, and the first-time download, are unknown. README →
+  *Words written on the tablet itself*. If drafts are too slow or too poor, the options are the always-on server
+  (needs his OK) or keeping the PC awake.
 - **Speak, ideas and tasks by voice:** the one-button capture that files a spoken idea or task for
   him (instead of choosing a section) is not built; Free talk stores a talk like any other.
 - **Scheduled tasks on this PC** (they run while the Claude app is open): `speech-nightly-review`

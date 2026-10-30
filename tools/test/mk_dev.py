@@ -64,11 +64,14 @@ STUB = r"""<script>
        mic=deny       the browser refuses (NotAllowedError)
        mic=none       there is no microphone (NotFoundError)
        mic=busy       another app has it (NotReadableError)
+       mic=clip       a real spoken clip, dist/_t_clip.webm, plays into the microphone (and ?localmodel=<id> picks a
+                      smaller model for the tablet's word-writer, e.g. onnx-community/whisper-tiny)
        lostms=3000    the microphone is unplugged this long after it was opened
        devices=2      two microphones to choose from */
   if (q.get('mic') && navigator.mediaDevices) {
     var micMode = q.get('mic');
     window.__gum = 0;
+    if (q.get('localmodel')) window.__localModel = q.get('localmodel');   // a smaller model to test the tablet's word-writer quickly
     navigator.mediaDevices.getUserMedia = function (c) {
       window.__gum++;
       window.__lastConstraints = c;
@@ -77,6 +80,16 @@ STUB = r"""<script>
       if (micMode === 'busy') return Promise.reject(new DOMException('busy', 'NotReadableError'));
       var ctx = new (window.AudioContext || window.webkitAudioContext)();
       var dst = ctx.createMediaStreamDestination();
+      if (micMode === 'clip') {   // a real spoken clip (dist/_t_clip.webm) plays into the "microphone", from the audio thread
+        return fetch('/_t_clip.webm').then(function (r) { return r.arrayBuffer(); }).then(function (ab) { return ctx.decodeAudioData(ab); }).then(function (buf) {
+          var src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(dst);
+          src.start();
+          window.__fakeTrack = dst.stream.getAudioTracks()[0];
+          return dst.stream;
+        });
+      }
       var o = ctx.createOscillator(), g = ctx.createGain();
       g.gain.value = micMode === 'silent' ? 0 : 0.3;
       o.frequency.value = 220; o.connect(g); g.connect(dst); o.start();

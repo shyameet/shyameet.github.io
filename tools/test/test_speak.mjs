@@ -234,5 +234,37 @@ eq('audio notes: several problems, several notes', A.audioNotes([rec({ peak: 1, 
 ok('audio notes: the worst part counts', A.audioNotes([rec({}), rec({ rms: 0.002 })]).length === 1);
 ok('audio notes: a note is plain words about the recording, not a score', A.audioNotes([rec({ peak: 0.99, clipped_pct: 0.5 })]).every((n) => !/\d/.test(n)));
 
+
+/* ---- words written on the device itself: the pure parts ---- */
+const tone = (sec, amp, hz = 220, rate = 16000) => Float32Array.from({ length: sec * rate }, (_, i) => amp * Math.sin(2 * Math.PI * hz * i / rate));
+const hiss = (sec, amp, rate = 16000) => { let x = 12345; return Float32Array.from({ length: sec * rate }, () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return amp * ((x / 0x7fffffff) * 2 - 1); }); };
+const cat = (...a) => { const o = new Float32Array(a.reduce((n, x) => n + x.length, 0)); let k = 0; for (const x of a) { o.set(x, k); k += x.length; } return o; };
+const near = (name, got, want, tol) => ok(name + ' (' + got + ' vs ' + want + ')', Math.abs(got - want) <= tol);
+
+const sil = A.pcmStats(new Float32Array(16000 * 3));
+eq('pcm: silence has no peak, level or voice', [sil.peak, sil.rms, sil.speech_s, sil.sec], [0, 0, 0, 3]);
+const pcmTone = A.pcmStats(tone(2, 0.3));
+near('pcm: a steady tone has its rms', pcmTone.rms, 0.3 / Math.SQRT2, 0.005);
+near('pcm: and its peak', pcmTone.peak, 0.3, 0.001);
+eq('pcm: and no clipping', pcmTone.clipped_pct, 0);
+const sq = A.pcmStats(Float32Array.from({ length: 16000 }, (_, i) => (i % 100 < 50 ? 1 : -1)));
+eq('pcm: a full-scale square wave clips everywhere', sq.clipped_pct, 100);
+const burst = A.pcmStats(cat(hiss(3, 0.004), tone(1, 0.2), hiss(3, 0.004)));
+near('pcm: a one-second burst in quiet is about one second of voice', burst.speech_s, 1, 0.15);
+const noisy = A.pcmStats(hiss(5, 0.05));
+eq('pcm: steady noise everywhere is not a voice', noisy.speech_s, 0);
+ok('pcm: the noise floor reflects steady noise', noisy.floor > 0.02);
+eq('pcm: an empty recording', A.pcmStats(new Float32Array(0)).sec, 0);
+
+const ch = (text, s, e) => ({ text, timestamp: [s, e] });
+eq('chunks: words with this part\'s start added', A.wordsFromChunks([ch(' Hello', 0.5, 0.9), ch(' world.', 1, 1.4)], 10, 5).map((w) => [w.w, w.s, w.e]), [['Hello', 10.5, 10.9], ['world.', 11, 11.4]]);
+eq('chunks: no end time is allowed', A.wordsFromChunks([ch('hi', 2, null)], 0, 5)[0].e, 2.3);
+eq('chunks: blank words are dropped', A.wordsFromChunks([ch('  ', 0, 1), ch('ok', 1, 2)], 0, 5).length, 1);
+eq('chunks: nothing', A.wordsFromChunks([], 0, 5), []);
+eq('chunks: a looping word is cut to two', A.wordsFromChunks(Array.from({ length: 100 }, (_, i) => ch(' hello', i * 0.3, i * 0.3 + 0.2)), 0, 30).length, 2);
+eq('chunks: four of the same in a row is still a person', A.wordsFromChunks(Array.from({ length: 4 }, (_, i) => ch(' no', i, i + 0.5)), 0, 5).length, 4);
+eq('chunks: a stock phrase over little voice is dropped', A.wordsFromChunks([ch(' Thanks', 0, 1), ch(' for', 1, 1.2), ch(' watching!', 1.2, 2)], 0, 1.5), []);
+eq('chunks: the same words in a real talk are kept', A.wordsFromChunks([ch(' Thanks', 0, 1), ch(' for', 1, 1.2), ch(' watching!', 1.2, 2)], 0, 20).length, 3);
+
 console.log(passes + ' checks passed' + (fails ? ', ' + fails + ' FAILED' : ''));
 process.exit(fails ? 1 : 0);
