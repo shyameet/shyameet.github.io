@@ -992,7 +992,7 @@
    Install page opens the steps. Pages opened from the home screen hide the footer link. */
 (function () {
   var deferred = null;
-  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) || window.navigator.standalone === true;
   var ua = navigator.userAgent || '';
   var os = /SamsungBrowser/i.test(ua) ? 'samsung'
     : /Android/i.test(ua) ? 'android'
@@ -1046,4 +1046,17 @@
   bar.href = '/admin/#signin';
   bar.innerHTML = '<b>This device is not signed in.</b> The timer, tasks and ticks do not sync with your other devices. <u>Sign in</u>';
   main.insertBefore(bar, main.firstChild);
+})();
+
+/* Fullscreen on the tablet (owner 30/10/2026: the status bar should go while the app is open). The
+   manifest asks for fullscreen; an app installed before that keeps its status bar until Chrome updates
+   it, so inside such an install the first tap goes fullscreen (browsers allow it only on a tap). Android
+   hides the bottom bar with it; leaving the page, switching apps or swiping out ends it and the next tap
+   brings it back. Touch screens only: a desktop install is left as it was. */
+(function () {
+  if (!window.matchMedia || !matchMedia('(display-mode: standalone)').matches) return;
+  if (!matchMedia('(pointer: coarse)').matches || !document.documentElement.requestFullscreen) return;
+  window.addEventListener('pointerup', function () {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(function () {});
+  }, true);
 })();

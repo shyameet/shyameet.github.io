@@ -115,7 +115,7 @@
           : /Windows/.test(ua) ? 'Windows PC'
             : /Macintosh/.test(ua) ? 'Mac'
               : /Linux|X11/.test(ua) ? 'Linux PC' : 'another device';
-    var app = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    var app = (window.matchMedia && matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) || navigator.standalone;
     return kind + (app ? ' app' : '');
   })();
 

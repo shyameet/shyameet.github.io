@@ -329,7 +329,7 @@
     return {
       v: 1, id: id, at: Date.now(), ua: navigator.userAgent,
       screen: { w: innerWidth, h: innerHeight, dpr: window.devicePixelRatio || 1 },
-      standalone: !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches),
+      standalone: !!(window.matchMedia && window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches),
       online: navigator.onLine, events: LOG.slice()
     };
   }
